@@ -1,0 +1,9 @@
+{
+  "name": "mobile-app",
+  "private": true,
+  "dependencies": {
+    "@fixture/ui": "workspace:*",
+    "react": "^19.0.0",
+    "react-native": "^0.82.0"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "fixture-monorepo-yarn",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "packageManager": "yarn@4.1.1"
+}

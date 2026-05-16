@@ -1,0 +1,11 @@
+{
+  "name": "expo-router-basic",
+  "private": true,
+  "dependencies": {
+    "expo": "^54.0.0",
+    "expo-router": "^4.0.0",
+    "react": "^19.0.0",
+    "react-native": "^0.82.0"
+  },
+  "packageManager": "pnpm@11.1.2"
+}

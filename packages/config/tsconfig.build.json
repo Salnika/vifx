@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@vifx/errors": ["../errors/dist/index.d.mts"],
+      "@vifx/types": ["../types/dist/index.d.mts"]
+    }
+  }
+}

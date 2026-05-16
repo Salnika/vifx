@@ -1,0 +1,9 @@
+{
+  "version": 3,
+  "file": "main.js",
+  "sourceRoot": "./",
+  "sources": ["src/main.ts"],
+  "names": ["main"],
+  "mappings": "AAAAA",
+  "sourcesContent": ["export function main() {\n  return 'ok';\n}\n"]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vitepress build",
+    "check": "vp check && tsc --noEmit",
+    "dev": "vitepress dev",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "esbuild": "latest",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitepress": "next"
+  }
+}

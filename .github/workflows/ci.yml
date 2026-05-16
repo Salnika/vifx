@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          cache: true
+
+      - name: Install
+        run: vp install
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Compatibility
+        run: |
+          pnpm compat:metro
+          pnpm compat:vifx
+
+      - name: Build
+        run: pnpm build
+
+      - name: Docs Build
+        run: pnpm docs:build
+
+      - name: Smoke CLI
+        run: |
+          pnpm --filter @vifx/cli vifx doctor --help
+          pnpm --filter @vifx/cli vifx metro inspect ./fixtures/rn-bare-basic --platform ios
+          pnpm --filter @vifx/cli vifx metro inspect ./fixtures/expo-basic --platform android --json
+          pnpm --filter @vifx/cli vifx migrate expo ./fixtures/expo-basic --dry-run
+          pnpm --filter @vifx/cli vifx hermes compile --help

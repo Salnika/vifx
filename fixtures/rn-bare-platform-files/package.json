@@ -1,0 +1,10 @@
+{
+  "name": "rn-bare-platform-files",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "react": "19.1.0",
+    "react-native": "0.81.0"
+  },
+  "packageManager": "pnpm@11.1.2"
+}

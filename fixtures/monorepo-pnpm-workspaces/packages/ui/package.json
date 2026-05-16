@@ -1,0 +1,6 @@
+{
+  "name": "@fixture/ui",
+  "private": true,
+  "main": "./src/Button.tsx",
+  "react-native": "./src/Button"
+}
