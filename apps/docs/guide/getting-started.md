@@ -22,6 +22,8 @@ vifx init
 vifx doctor
 vifx inspect
 vifx compat run --adapter vifx
+vifx build --platform ios
+vifx run --platform ios
 ```
 
 ## Config Contract Draft
@@ -29,40 +31,42 @@ vifx compat run --adapter vifx
 The current docs describe the intended config surface, not a promise that every downstream capability is fully production-ready.
 
 ```ts
-import { defineVifxConfig } from "@vifx/core";
+import { defineVifxConfig } from "@vifx/config";
 
 export default defineVifxConfig({
   projectRoot: process.cwd(),
-  targets: [
-    {
-      platform: "ios",
-      entry: "./index.js",
-      hermes: true,
-    },
-    {
-      platform: "android",
-      entry: "./index.js",
-      hermes: true,
-    },
-  ],
-  expo: {
-    enabled: true,
-    router: false,
-    updates: {
-      inspectOnly: true,
-    },
+  projectType: "expo",
+  platforms: ["ios", "android"],
+  expo: true,
+  reactNative: true,
+  vite: {
+    mode: "expo",
+    targets: [
+      {
+        platform: "ios",
+        entry: "./index.js",
+        hermes: false,
+        outDir: "dist/vite/ios",
+      },
+      {
+        platform: "android",
+        entry: "./index.js",
+        hermes: false,
+        outDir: "dist/vite/android",
+      },
+    ],
+  },
+  expoOptions: {
+    publicEnvPrefix: "EXPO_PUBLIC_",
   },
   resolver: {
     conditions: ["react-native", "import", "require", "default"],
   },
-  assets: {
-    extensions: ["png", "jpg", "jpeg", "webp", "gif", "svg", "ttf", "otf"],
-  },
-  experimental: {
-    vite: true,
-  },
 });
 ```
+
+- Add `reactNativeCompat: "web"` on a target when you want `vifx run` to serve a browser preview.
+- If you want the bounded Expo Router preview path, switch a target entry to `expo-router/entry` manually after `vifx init`.
 
 ## Report Shape
 
@@ -72,13 +76,16 @@ Compatibility is reported as evidence with context, not as a single green or red
 Compatibility report
 
 Adapter: vifx
-Platform: ios
 
-resolver.platformExtensions       PASS  12/12
-assets.scaleGroups                PASS   8/8
-sourcemaps.validity               WARN   2/3
-expo.exportShape                  TODO   0/5
+doctor.projectDetection           PASS   2/2
+resolver.platformExtensions       PASS   4/4
+assets.scaleGroups                PASS   1/1
+bundler.bundleArtifacts           PASS   1/1
+bundler.sourceMapValidity         PASS   1/1
+monorepo.workspaceResolution      PASS   2/2
 ```
+
+Warn and todo states remain part of the reporting design as the suite grows. The current shared suite is simply earlier and smaller than the long-term contract.
 
 ## Read Next
 

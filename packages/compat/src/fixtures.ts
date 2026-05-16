@@ -11,6 +11,14 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     features: ["expo-project", "metro-config", "migration-target"],
   },
   {
+    id: "expo-export-basic",
+    title: "Expo Export Basic",
+    relativePath: "fixtures/expo-export-basic",
+    projectType: "expo",
+    packageManager: "pnpm",
+    features: ["expo-export", "inspection-fixture"],
+  },
+  {
     id: "rn-bare-basic",
     title: "React Native Bare Basic",
     relativePath: "fixtures/rn-bare-basic",

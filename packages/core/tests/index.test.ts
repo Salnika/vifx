@@ -48,7 +48,7 @@ describe("@vifx/core", () => {
       [
         "export default {",
         `  projectRoot: ${JSON.stringify(projectRoot)},`,
-        "  targets: [{ platform: 'ios', entry: './index.js' }],",
+        "  vite: { mode: 'expo', targets: [{ platform: 'ios', entry: './index.js', hermes: false }] },",
         "};",
       ].join("\n"),
       "utf8",
@@ -56,10 +56,9 @@ describe("@vifx/core", () => {
 
     const inspection = await inspectProject(projectRoot);
     const context = await loadProjectContext(projectRoot);
-    const config = context.config as { targets?: Array<{ platform: string }> };
 
     expect(inspection.kind).toBe("expo");
-    expect(config.targets?.[0]?.platform).toBe("ios");
+    expect(context.config.vite.targets[0]?.platform).toBe("ios");
     expect(context.inspection.packageManager).toBe("pnpm");
   });
 });

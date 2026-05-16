@@ -3,8 +3,8 @@
 ## Snapshot
 
 - Date: `2026-05-16`
-- Current phase: `Milestone 4 source maps and Hermes complete`
-- Summary: Milestones 0 through 4 are implemented in this repository: foundations, compatibility and inspection, resolver and assets, migration codemods, Metro inspection, source-map tooling, and Hermes bytecode workflows. The next major work starts at the Vite plugins and Expo export milestones.
+- Current phase: `Milestone 7 Expo export inspection landed`
+- Summary: Milestones 0 through 7 are implemented first pass in this repository: foundations, compatibility and inspection, resolver and assets, migration codemods, source-map tooling, Hermes bytecode workflows, `vifx build`, `vifx run`, experimental React Native and Expo Vite plugins, a bounded `expo-router/entry` browser preview path, and inspect-first Expo export analysis. The proof remains bounded to controlled builds and fixture-backed evidence, especially `fixtures/rn-bare-basic`.
 
 ## Milestones
 
@@ -66,32 +66,39 @@ Source-map validation and Hermes compile workflows.
 
 ### Milestone 5 - Vite RN Experimental Plugin
 
-Status: Experimental horizon.
+Status: Implemented first pass.
 
-A Vite plugin shell for React Native experiments after the primitives exist.
+A bounded React Native Vite bundle path for controlled experiments after the primitives exist.
 
 - `@vifx/vite-plugin-react-native`
-- Playground React Native app
-- Resolver integration
-- Basic asset integration
+- `buildReactNativeBundle`
+- `vifx build`
+- browser runtime preview artifacts for targets with `reactNativeCompat: "web"`
+- `fixtures/rn-bare-basic` smoke fixture
+- Resolver and asset integration
+- Valid source maps and optional Hermes compile on the controlled build path
 
 ### Milestone 6 - Expo Experimental Plugin
 
-Status: Experimental horizon.
+Status: Implemented first pass.
 
 An Expo-specific layer that stays honest about support boundaries.
 
 - `@vifx/vite-plugin-expo`
+- `vifx run`
 - Expo fixture integration
-- Expo config detection
-- Env support
+- Expo app config detection
+- `EXPO_PUBLIC_*` env support
+- Safe `expo` and `registerRootComponent` shim
+- bounded browser-preview support for `expo-router/entry`
 
 ### Milestone 7 - Expo Export Inspection
 
-Status: Queued.
+Status: Implemented inspect first.
 
 Inspect Expo export output and compare it to Vifx understanding.
 
 - `@vifx/expo-export`
-- Inspect Expo export output
-- Compare against Vifx understanding
+- `fixtures/expo-export-basic`
+- Inspect existing Expo export output
+- Normalize bundles, source maps, manifests, and assets

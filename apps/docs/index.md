@@ -28,8 +28,8 @@ features:
 ## Snapshot
 
 - Date: `2026-05-16`
-- Current phase: `Milestone 4 source maps and Hermes complete`
-- Current note: Milestones 0 through 4 are implemented in this repository: shared packages, captured Metro inspection, resolver and asset primitives, compatibility reports, codemods, source-map tooling, Hermes compile support, fixtures, the CLI, and the docs site. Vite plugins and Expo export analysis remain future work.
+- Current phase: `Milestone 7 Expo export inspection landed`
+- Current note: Milestones 0 through 7 are implemented here as bounded first-pass surfaces: shared packages, captured Metro inspection, resolver and asset primitives, compatibility reports, codemods, source-map tooling, Hermes compile support, `vifx build`, `vifx run`, `vifx vite init`, experimental React Native and Expo Vite plugins, a bounded `expo-router/entry` browser preview path, and inspect-only Expo export analysis. The controlled bundle smoke target remains `fixtures/rn-bare-basic`.
 
 ## Start Here
 
@@ -40,7 +40,7 @@ features:
 ## Current Focus
 
 ::: info Repository posture
-Vifx is not presented here as a production Metro replacement. The current repository focuses on shared contracts, inspection, compatibility reporting, and conservative migration surfaces.
+Vifx is not presented here as a production Metro replacement. The current repository ships controlled bundle builds, a browser runtime preview for targets that opt into `reactNativeCompat: "web"`, and inspect-first Expo export understanding. Fast Refresh, HMR, Expo Go, device runtime parity, full Expo Router parity, Updates generation, and EAS remain out of scope.
 :::
 
 ## Key Surfaces

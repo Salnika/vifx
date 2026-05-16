@@ -17,6 +17,15 @@
     "dev": "vp pack --watch",
     "test": "vp test run"
   },
+  "dependencies": {
+    "@vifx/asset-registry": "workspace:*",
+    "@vifx/errors": "workspace:*",
+    "@vifx/hermes-tools": "workspace:*",
+    "@vifx/platform-resolver": "workspace:*",
+    "@vifx/source-map-tools": "workspace:*",
+    "@vifx/types": "workspace:*",
+    "vite": "catalog:"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",

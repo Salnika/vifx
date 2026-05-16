@@ -114,6 +114,41 @@ export const compatCases: CompatCase[] = [
     docsPath: "/compat/assets#scale-groups",
   },
   {
+    id: "bundler.bundle-artifacts.rn-bare-basic-ios",
+    title:
+      "Vite and Metro expose the same first-pass bundle artifact shape for the RN smoke fixture",
+    category: "bundler.bundleArtifacts",
+    fixtureId: "rn-bare-basic",
+    operation: {
+      kind: "bundle-artifacts",
+      platform: "ios",
+    },
+    expected: {
+      assetCount: 1,
+      assetTypes: ["svg"],
+      bundleFile: "index.bundle",
+      entry: "index.js",
+      platform: "ios",
+    },
+    docsPath: "/compat/bundler#bundle-artifacts",
+  },
+  {
+    id: "bundler.source-map-validity.rn-bare-basic-ios",
+    title: "Vite and Metro both produce valid source maps for the RN smoke fixture",
+    category: "bundler.sourceMapValidity",
+    fixtureId: "rn-bare-basic",
+    operation: {
+      kind: "source-map-validity",
+      platform: "ios",
+    },
+    expected: {
+      platform: "ios",
+      sourceMapPresent: true,
+      valid: true,
+    },
+    docsPath: "/compat/bundler#source-maps",
+  },
+  {
     id: "monorepo.workspace-resolution.pnpm-root",
     title: "Workspace roots are discovered from pnpm workspaces",
     category: "monorepo.workspaceResolution",

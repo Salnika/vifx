@@ -1,12 +1,12 @@
 # CLI
 
-The CLI is the main user-facing surface for inspection, compatibility, and experimental migration flows.
+The CLI is the main user-facing surface for inspection, compatibility, and bounded build or runtime experiments.
 
 ## `vifx init`
 
 Status: Current.
 
-Bootstrap a `vifx.config.*` file and point the project toward the documented workflow.
+Bootstrap a conservative `vifx.config.*` file and point the project toward the documented workflow.
 
 - Use it when no Vifx config exists yet.
 - Use it after doctor reports a missing config.
@@ -16,14 +16,15 @@ vifx init
 vifx init --help
 ```
 
-- The current first pass generates a conservative config template.
-- It should never overwrite user files silently.
+- The current first pass writes `vifx.config.ts` and should never overwrite user files silently.
+- For Expo projects, generated targets still default to `entry: "./index.js"` and do not enable `reactNativeCompat: "web"`.
+- That means `vifx init` is a starting point, not a runtime-ready setup for browser previews or Expo Router previews.
 
 ## `vifx doctor`
 
 Status: Current.
 
-Inspect readiness, versions, config presence, and experimental support boundaries.
+Inspect readiness, versions, config presence, detected Vite plugin mode, and experimental support boundaries.
 
 - Use it before migration or plugin experiments.
 - Use it after changing config or adding experimental packages.
@@ -35,6 +36,7 @@ vifx doctor --json
 
 - JSON mode should emit valid JSON with no extra logs.
 - Doctor is the safest first command in the flow.
+- It reports `none`, `react-native`, or `expo` when a Vifx Vite plugin import is detected in `vite.config.*`.
 
 ## `vifx inspect`
 
@@ -50,8 +52,47 @@ vifx inspect
 vifx inspect --help
 ```
 
-- The current first pass reports project primitives, platform files, asset groups, and diagnostics.
+- The current first pass reports project primitives, Vite mode, platform files, asset groups, and diagnostics.
 - Use `vifx metro inspect` for dedicated captured Metro reference inspection.
+
+## `vifx build`
+
+Status: Current.
+
+Build the configured Vifx bundle targets from `vifx.config.*`.
+
+- Use it once `vite.mode` and `vite.targets` are defined.
+- Use it before browser runtime previews or artifact comparisons.
+
+```sh
+vifx build
+vifx build --platform ios
+vifx build --platform all --json
+```
+
+- `--platform` supports `ios`, `android`, or `all`.
+- Targets with `reactNativeCompat: "web"` emit runtime HTML and JS alongside the bundle artifacts.
+- This is still a controlled build path, not a Metro replacement or native runtime claim.
+
+## `vifx run`
+
+Status: Current.
+
+Serve one configured target as a local browser runtime preview.
+
+- Use it after a target is configured for browser preview.
+- Use it to validate the bounded runtime path without replacing native workflows.
+
+```sh
+vifx run --platform ios
+vifx run --platform ios --no-build
+vifx run --platform android --json
+```
+
+- `vifx run` requires `vite.targets[].reactNativeCompat = "web"`.
+- If multiple targets exist, pass `--platform`.
+- `--no-build` reuses the existing runtime artifacts instead of rebuilding first.
+- Bounded `expo-router/entry` previews work on this path, but only as browser previews. Expo Go, device runtime parity, Fast Refresh, and HMR remain out of scope.
 
 ## `vifx compat run`
 
@@ -69,7 +110,7 @@ vifx compat run --adapter all --report markdown
 ```
 
 - `metro`, `vifx`, and `all` are supported.
-- Warn and todo states are part of the design.
+- The current shared suite covers `11` cases across `6` categories and passes for both adapters today.
 - Failures should carry fixture and docs context.
 
 ## `vifx metro inspect`
@@ -101,7 +142,9 @@ Umbrella migration command that points to the Expo and bare React Native flows.
 ```sh
 vifx migrate --help
 vifx migrate expo --dry-run
+vifx migrate expo --dry-run --with-vite
 vifx migrate react-native --dry-run
+vifx migrate react-native --dry-run --with-vite
 ```
 
 - Dry-run should be the default mental model.
@@ -119,9 +162,12 @@ Prepare an Expo project for experiments without breaking existing workflows.
 ```sh
 vifx migrate expo --dry-run
 vifx migrate expo --write
+vifx migrate expo --dry-run --with-vite
 ```
 
 - Never replace `expo start` automatically.
+- `--with-vite` reuses the same minimal plugin-backed Vite init plan as `vifx vite init`.
+- Browser-preview or Expo Router entries still require manual target edits after migration.
 - Rollback instructions should always be printed.
 
 ## `vifx migrate react-native`
@@ -136,16 +182,19 @@ Prepare a bare React Native project for bounded experiments.
 ```sh
 vifx migrate react-native --dry-run
 vifx migrate react-native --write
+vifx migrate react-native --dry-run --with-vite
 ```
 
 - Preserve Metro config and scripts.
+- `--with-vite` adds the bounded Vite config without claiming runtime parity.
+- Browser previews still require manual `reactNativeCompat: "web"` target edits.
 - Keep rollback guidance prominent.
 
 ## `vifx vite init`
 
 Status: Experimental workflow.
 
-Scaffold experimental Vite-facing setup once the team intentionally enters plugin experimentation.
+Scaffold a plugin-backed `vite.config.ts` once the team intentionally enters bounded Vite experimentation.
 
 - Use it after config and primitive work exist.
 - Use it when you want a bounded Vite experiment rather than a replacement claim.
@@ -153,10 +202,13 @@ Scaffold experimental Vite-facing setup once the team intentionally enters plugi
 ```sh
 vifx vite init
 vifx vite init --help
+vifx vite init --write
+vifx vite init --force --write
 ```
 
-- Exact flags remain TBD.
-- Generated output should keep experimental status obvious.
+- The current command supports `--write` and `--force`.
+- Generated output imports the real Vifx plugin and keeps experimental status obvious.
+- It still scaffolds `entry: "./index.js"` and does not automatically enable `reactNativeCompat: "web"` or `expo-router/entry`.
 
 ## `vifx hermes compile`
 
@@ -181,10 +233,11 @@ vifx hermes compile --help
 Compatibility report
 
 Adapter: vifx
-Platform: ios
 
-resolver.platformExtensions       PASS  12/12
-assets.scaleGroups                PASS   8/8
-sourcemaps.validity               WARN   2/3
-expo.exportShape                  TODO   0/5
+doctor.projectDetection           PASS   2/2
+resolver.platformExtensions       PASS   4/4
+assets.scaleGroups                PASS   1/1
+bundler.bundleArtifacts           PASS   1/1
+bundler.sourceMapValidity         PASS   1/1
+monorepo.workspaceResolution      PASS   2/2
 ```

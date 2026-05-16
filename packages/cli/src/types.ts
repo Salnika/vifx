@@ -4,6 +4,7 @@ export interface CliResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  waitUntilExit?: Promise<number | void>;
 }
 
 export interface ExecuteCliOptions {

@@ -26,10 +26,14 @@ test("defineVifxConfig preserves typed config input", () => {
   const config = defineVifxConfig({
     platforms: ["ios", "android"],
     expo: true,
+    vite: {
+      mode: "expo",
+    },
   });
 
   expect(config.platforms).toEqual(["ios", "android"]);
   expect(config.expo).toBe(true);
+  expect(config.vite?.mode).toBe("expo");
 });
 
 test("normalizeVifxConfig applies defaults and deduplicates lists", () => {
@@ -40,11 +44,45 @@ test("normalizeVifxConfig applies defaults and deduplicates lists", () => {
       extensions: ["tsx", ".tsx", "ts"],
       conditions: ["react-native", "react-native"],
     },
+    vite: {
+      mode: "react-native",
+      targets: [
+        {
+          aliases: {
+            "@": ".",
+          },
+          babelInPackages: ["react-native", "react-native"],
+          entry: "expo-router/entry",
+          hermes: false,
+          jsxInPackages: ["expo-router", "expo-router"],
+          platform: "ios",
+          reactNativeCompat: "web",
+          shimJsxRuntime: false,
+          shimReact: false,
+          shimReactNative: false,
+        },
+      ],
+    },
   });
 
   expect(normalized.platforms).toEqual(["ios", "android"]);
   expect(normalized.resolver.extensions).toEqual(["tsx", "ts"]);
   expect(normalized.resolver.conditions).toEqual(["react-native"]);
+  expect(normalized.vite.mode).toBe("react-native");
+  expect(normalized.vite.targets).toHaveLength(1);
+  expect(normalized.vite.targets[0]).toMatchObject({
+    aliases: {
+      "@": ".",
+    },
+    babelInPackages: ["react-native"],
+    entry: "expo-router/entry",
+    jsxInPackages: ["expo-router"],
+    platform: "ios",
+    reactNativeCompat: "web",
+    shimJsxRuntime: false,
+    shimReact: false,
+    shimReactNative: false,
+  });
   expect(normalized.logger.level).toBe("info");
 });
 
@@ -59,6 +97,12 @@ test("loadVifxConfig loads and validates a TypeScript config file", async () => 
       '  projectRoot: "/fixture",',
       '  platforms: ["ios", "android"],',
       "  expo: true,",
+      "  expoOptions: {",
+      '    publicEnvPrefix: "EXPO_PUBLIC_",',
+      "  },",
+      "  vite: {",
+      '    mode: "expo",',
+      "  },",
       "  resolver: {",
       '    extensions: ["tsx", "ts", "js"],',
       "  },",
@@ -75,6 +119,8 @@ test("loadVifxConfig loads and validates a TypeScript config file", async () => 
   expect(loaded.filePath).toBe(join(directory, "vifx.config.ts"));
   expect(loaded.config.projectRoot).toBe("/fixture");
   expect(loaded.config.expo).toBe(true);
+  expect(loaded.config.expoOptions.publicEnvPrefix).toBe("EXPO_PUBLIC_");
+  expect(loaded.config.vite.mode).toBe("expo");
   expect(loaded.config.resolver.extensions).toEqual(["tsx", "ts", "js"]);
 });
 

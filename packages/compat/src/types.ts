@@ -1,5 +1,6 @@
 export const FIXTURE_IDS = [
   "expo-basic",
+  "expo-export-basic",
   "rn-bare-basic",
   "rn-bare-platform-files",
   "rn-bare-assets",
@@ -13,11 +14,14 @@ export const COMPAT_CATEGORIES = [
   "doctor.projectDetection",
   "resolver.platformExtensions",
   "assets.scaleGroups",
+  "bundler.bundleArtifacts",
+  "bundler.sourceMapValidity",
   "monorepo.workspaceResolution",
 ] as const;
 
 export type CompatCategory = (typeof COMPAT_CATEGORIES)[number];
 export type Platform = "ios" | "android" | "native" | "web";
+export type BuildPlatform = Extract<Platform, "ios" | "android">;
 export type PackageManager = "pnpm" | "yarn" | "npm" | "bun" | "unknown";
 export type ProjectType = "expo" | "react-native" | "unknown";
 export type FixtureProjectType = ProjectType | "monorepo";
@@ -54,11 +58,25 @@ export interface WorkspaceRootOperation {
   cwd: string;
 }
 
+export interface BundleArtifactsOperation {
+  kind: "bundle-artifacts";
+  entry?: string;
+  platform: BuildPlatform;
+}
+
+export interface SourceMapValidityOperation {
+  kind: "source-map-validity";
+  entry?: string;
+  platform: BuildPlatform;
+}
+
 export type CompatOperation =
   | ProjectInfoOperation
   | ResolveFileOperation
   | AssetScalesOperation
-  | WorkspaceRootOperation;
+  | WorkspaceRootOperation
+  | BundleArtifactsOperation
+  | SourceMapValidityOperation;
 
 export interface ProjectInfoExpectation {
   projectType: ProjectType;
@@ -82,11 +100,27 @@ export interface WorkspaceRootExpectation {
   packageManager: PackageManager;
 }
 
+export interface BundleArtifactsExpectation {
+  assetCount: number;
+  assetTypes: string[];
+  bundleFile: string;
+  entry: string;
+  platform: BuildPlatform;
+}
+
+export interface SourceMapValidityExpectation {
+  platform: BuildPlatform;
+  sourceMapPresent: boolean;
+  valid: boolean;
+}
+
 export type CompatExpectation =
   | ProjectInfoExpectation
   | ResolveFileExpectation
   | AssetScalesExpectation
-  | WorkspaceRootExpectation;
+  | WorkspaceRootExpectation
+  | BundleArtifactsExpectation
+  | SourceMapValidityExpectation;
 
 export interface CompatCase<
   TOperation extends CompatOperation = CompatOperation,

@@ -117,29 +117,19 @@ test("loads vifx.config.ts and wires injected primitive adapters", async () => {
     ].join("\n"),
   });
 
-  const configLoader = async () => ({
-    normalizeVifxConfig(input: unknown) {
-      const config = input as Record<string, unknown>;
-      return {
-        ...config,
-        normalized: true,
-      };
-    },
-  });
   const loaded = await loadVifxConfig({
     cwd: projectRoot,
-    imports: {
-      config: configLoader,
-    },
   });
 
   expect(loaded.configFilePath).toBe(path.join(projectRoot, "vifx.config.ts"));
   expect(loaded.config).toMatchObject({
-    normalized: true,
     platforms: ["ios"],
     projectRoot,
     resolver: {
       extensions: ["tsx", "ts"],
+    },
+    vite: {
+      mode: "none",
     },
   });
 
@@ -151,7 +141,6 @@ test("loads vifx.config.ts and wires injected primitive adapters", async () => {
           return input;
         },
       }),
-      config: configLoader,
       platformResolver: async () => ({
         async resolveReactNativeModule(input) {
           return input;

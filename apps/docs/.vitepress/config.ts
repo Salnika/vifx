@@ -32,6 +32,7 @@ export default defineConfig({
         {
           text: "Reference",
           items: [
+            { text: "Features", link: "/reference/features" },
             { text: "Packages", link: "/reference/packages" },
             { text: "CLI", link: "/reference/cli" },
             { text: "Config", link: "/reference/config" },

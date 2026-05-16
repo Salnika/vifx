@@ -82,7 +82,7 @@ export async function runDoctorCommand(argv: string[], cwd: string): Promise<Cli
       formatValue("React Native", inspection.reactNativeVersion),
       formatValue("Expo", inspection.expoVersion),
       formatValue("Metro config", inspection.metroConfigPath ? "found" : "missing"),
-      formatValue("Vite config", inspection.viteConfigPath ? "found" : "missing"),
+      formatValue("Vite mode", inspection.vitePluginMode),
       formatValue("Vifx config", inspection.vifxConfigPath ? "found" : "missing"),
       formatValue("Workspace root", workspaceRoot),
       formatValue("Hermes compiler", inspection.hermesCompilerPath ?? "unavailable"),

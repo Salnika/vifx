@@ -28,9 +28,12 @@
     "@vifx/codemods": "workspace:*",
     "@vifx/compat": "workspace:*",
     "@vifx/compat-runner": "workspace:*",
+    "@vifx/config": "workspace:*",
     "@vifx/errors": "workspace:*",
     "@vifx/hermes-tools": "workspace:*",
-    "@vifx/metro-inspect": "workspace:*"
+    "@vifx/metro-inspect": "workspace:*",
+    "@vifx/types": "workspace:*",
+    "@vifx/vite-plugin-react-native": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

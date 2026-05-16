@@ -3,13 +3,19 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { VifxError, toVifxError } from "@vifx/errors";
 import type {
+  VifxBundlePlatform,
+  VifxBundleTargetConfig,
   VifxConfig,
   VifxConfigInput,
+  VifxExpoOptions,
   VifxLogLevel,
   VifxLoggerConfig,
   VifxPlatform,
   VifxProjectType,
+  VifxReactNativeCompatMode,
   VifxResolverConfig,
+  VifxViteConfig,
+  VifxVitePluginMode,
 } from "@vifx/types";
 
 export const VIFX_CONFIG_FILENAMES = [
@@ -25,6 +31,8 @@ export const VIFX_DEFAULT_RESOLVER_CONDITIONS: readonly string[] = [];
 export const VIFX_DEFAULT_RESOLVER_MAIN_FIELDS = ["react-native", "module", "main"] as const;
 export const VIFX_DEFAULT_LOG_LEVEL: VifxLogLevel = "info";
 export const VIFX_DEFAULT_DOCS_BASE_URL = "https://vifx.dev";
+export const VIFX_DEFAULT_EXPO_PUBLIC_ENV_PREFIX = "EXPO_PUBLIC_";
+export const VIFX_DEFAULT_VITE_ENTRY = "./index.js";
 
 export interface LoadVifxConfigOptions {
   cwd?: string;
@@ -38,6 +46,7 @@ export interface LoadVifxConfigResult {
 }
 
 const VALID_PLATFORMS = new Set<VifxPlatform>(["ios", "android", "native", "web"]);
+const VALID_BUNDLE_PLATFORMS = new Set<VifxBundlePlatform>(["ios", "android"]);
 const VALID_PROJECT_TYPES = new Set<VifxProjectType>([
   "expo",
   "react-native",
@@ -45,13 +54,17 @@ const VALID_PROJECT_TYPES = new Set<VifxProjectType>([
   "unknown",
 ]);
 const VALID_LOG_LEVELS = new Set<VifxLogLevel>(["error", "warn", "info", "debug"]);
+const VALID_VITE_PLUGIN_MODES = new Set<VifxVitePluginMode>(["none", "react-native", "expo"]);
+const VALID_REACT_NATIVE_COMPAT_MODES = new Set<VifxReactNativeCompatMode>(["none", "web"]);
 
 const TOP_LEVEL_KEYS = new Set([
   "projectRoot",
   "platforms",
   "projectType",
   "expo",
+  "expoOptions",
   "reactNative",
+  "vite",
   "resolver",
   "logger",
   "docsBaseUrl",
@@ -59,6 +72,21 @@ const TOP_LEVEL_KEYS = new Set([
 
 const RESOLVER_KEYS = new Set(["extensions", "conditions", "mainFields"]);
 const LOGGER_KEYS = new Set(["level", "json"]);
+const EXPO_OPTIONS_KEYS = new Set(["appConfigPath", "inspectExportPath", "publicEnvPrefix"]);
+const VITE_KEYS = new Set(["mode", "targets"]);
+const VITE_TARGET_KEYS = new Set([
+  "aliases",
+  "babelInPackages",
+  "entry",
+  "hermes",
+  "jsxInPackages",
+  "outDir",
+  "platform",
+  "reactNativeCompat",
+  "shimJsxRuntime",
+  "shimReact",
+  "shimReactNative",
+]);
 
 export function defineVifxConfig<T extends VifxConfigInput>(config: T) {
   return config;
@@ -87,13 +115,21 @@ export function normalizeVifxConfig(input: VifxConfigInput = {}): VifxConfig {
   const reactNative =
     input.reactNative ??
     (expo || projectType === "react-native" || platforms.some((platform) => platform !== "web"));
+  const expoOptions = normalizeExpoOptions(input.expoOptions);
+  const vite = normalizeViteConfig(input.vite, {
+    expo,
+    platforms,
+    reactNative,
+  });
 
   return {
     projectRoot,
     platforms,
     projectType,
     expo,
+    expoOptions,
     reactNative,
+    vite,
     resolver,
     logger,
     docsBaseUrl,
@@ -118,10 +154,13 @@ export function validateVifxConfig(value: unknown, source = "inline config") {
         ? undefined
         : expectProjectType(config.projectType, source, "projectType"),
     expo: config.expo === undefined ? undefined : expectBoolean(config.expo, source, "expo"),
+    expoOptions:
+      config.expoOptions === undefined ? undefined : parseExpoOptions(config.expoOptions, source),
     reactNative:
       config.reactNative === undefined
         ? undefined
         : expectBoolean(config.reactNative, source, "reactNative"),
+    vite: config.vite === undefined ? undefined : parseViteConfig(config.vite, source),
     resolver:
       config.resolver === undefined ? undefined : parseResolverConfig(config.resolver, source),
     logger: config.logger === undefined ? undefined : parseLoggerConfig(config.logger, source),
@@ -166,9 +205,18 @@ export async function loadVifxConfig(
   try {
     const moduleExports = await import(`${pathToFileURL(filePath).href}?t=${Date.now()}`);
     const exportedConfig = resolveConfigExport(moduleExports, filePath);
+    const configValue =
+      typeof exportedConfig === "object" &&
+      exportedConfig !== null &&
+      !Array.isArray(exportedConfig)
+        ? {
+            projectRoot: cwd,
+            ...exportedConfig,
+          }
+        : exportedConfig;
 
     return {
-      config: validateVifxConfig(exportedConfig, filePath),
+      config: validateVifxConfig(configValue, filePath),
       filePath,
     };
   } catch (error) {
@@ -218,6 +266,48 @@ function parseLoggerConfig(value: unknown, source: string) {
   } satisfies Partial<VifxLoggerConfig>;
 }
 
+function parseExpoOptions(value: unknown, source: string) {
+  const expoOptions = expectObject(value, `${source} expoOptions`);
+  assertAllowedKeys(expoOptions, EXPO_OPTIONS_KEYS, `${source} expoOptions`);
+
+  return {
+    appConfigPath:
+      expoOptions.appConfigPath === undefined
+        ? undefined
+        : normalizePathLikeString(expoOptions.appConfigPath, source, "expoOptions.appConfigPath"),
+    inspectExportPath:
+      expoOptions.inspectExportPath === undefined
+        ? undefined
+        : normalizePathLikeString(
+            expoOptions.inspectExportPath,
+            source,
+            "expoOptions.inspectExportPath",
+          ),
+    publicEnvPrefix:
+      expoOptions.publicEnvPrefix === undefined
+        ? undefined
+        : normalizePathLikeString(
+            expoOptions.publicEnvPrefix,
+            source,
+            "expoOptions.publicEnvPrefix",
+          ),
+  } satisfies Partial<VifxExpoOptions>;
+}
+
+function parseViteConfig(value: unknown, source: string) {
+  const vite = expectObject(value, `${source} vite`);
+  assertAllowedKeys(vite, VITE_KEYS, `${source} vite`);
+
+  return {
+    mode:
+      vite.mode === undefined ? undefined : expectVitePluginMode(vite.mode, source, "vite.mode"),
+    targets:
+      vite.targets === undefined
+        ? undefined
+        : normalizeBundleTargets(vite.targets, "vite.targets", source),
+  } satisfies Partial<VifxViteConfig>;
+}
+
 function normalizeResolverConfig(resolver: VifxConfigInput["resolver"]): VifxResolverConfig {
   return {
     extensions: normalizeStringList(
@@ -242,6 +332,156 @@ function normalizeLoggerConfig(logger: VifxConfigInput["logger"]): VifxLoggerCon
     level: expectLogLevel(logger?.level ?? VIFX_DEFAULT_LOG_LEVEL, "config", "logger.level"),
     json: logger?.json ?? false,
   };
+}
+
+function normalizeExpoOptions(expoOptions: VifxConfigInput["expoOptions"]): VifxExpoOptions {
+  return {
+    appConfigPath: expoOptions?.appConfigPath,
+    inspectExportPath: expoOptions?.inspectExportPath,
+    publicEnvPrefix: expoOptions?.publicEnvPrefix ?? VIFX_DEFAULT_EXPO_PUBLIC_ENV_PREFIX,
+  };
+}
+
+function normalizeViteConfig(
+  vite: VifxConfigInput["vite"],
+  context: {
+    expo: boolean;
+    platforms: VifxPlatform[];
+    reactNative: boolean;
+  },
+): VifxViteConfig {
+  const requestedTargets = vite?.targets
+    ? normalizeBundleTargets(vite.targets, "vite.targets")
+    : undefined;
+  const inferredMode =
+    vite?.mode ??
+    (requestedTargets
+      ? context.expo
+        ? "expo"
+        : context.reactNative
+          ? "react-native"
+          : "none"
+      : "none");
+  const mode = expectVitePluginMode(inferredMode, "config", "vite.mode");
+
+  if (mode === "none") {
+    return {
+      mode,
+      targets: [],
+    };
+  }
+
+  const targetPlatforms = context.platforms.filter(
+    (platform): platform is VifxBundlePlatform => platform === "ios" || platform === "android",
+  );
+
+  return {
+    mode,
+    targets:
+      requestedTargets ??
+      targetPlatforms.map((platform) => ({
+        entry: VIFX_DEFAULT_VITE_ENTRY,
+        hermes: false,
+        outDir: `dist/vite/${platform}`,
+        platform,
+      })),
+  };
+}
+
+function normalizeBundleTargets(value: unknown, fieldName: string, source = "config") {
+  if (!Array.isArray(value)) {
+    throw invalidConfig(source, fieldName, "Expected an array of Vite bundle targets.");
+  }
+
+  if (value.length === 0) {
+    throw invalidConfig(source, fieldName, "Expected at least one Vite bundle target.");
+  }
+
+  return dedupeByKey(
+    value.map((target, index) => {
+      const parsedTarget = expectObject(target, `${source} ${fieldName}[${index}]`);
+      assertAllowedKeys(parsedTarget, VITE_TARGET_KEYS, `${source} ${fieldName}[${index}]`);
+
+      return {
+        aliases:
+          parsedTarget.aliases === undefined
+            ? undefined
+            : normalizeStringRecord(parsedTarget.aliases, source, `${fieldName}[${index}].aliases`),
+        babelInPackages:
+          parsedTarget.babelInPackages === undefined
+            ? undefined
+            : normalizeStringList(
+                parsedTarget.babelInPackages,
+                `${fieldName}[${index}].babelInPackages`,
+                source,
+              ),
+        entry: normalizePathLikeString(parsedTarget.entry, source, `${fieldName}[${index}].entry`),
+        hermes:
+          parsedTarget.hermes === undefined
+            ? false
+            : expectBoolean(parsedTarget.hermes, source, `${fieldName}[${index}].hermes`),
+        jsxInPackages:
+          parsedTarget.jsxInPackages === undefined
+            ? undefined
+            : normalizeStringList(
+                parsedTarget.jsxInPackages,
+                `${fieldName}[${index}].jsxInPackages`,
+                source,
+              ),
+        outDir:
+          parsedTarget.outDir === undefined
+            ? undefined
+            : normalizePathLikeString(parsedTarget.outDir, source, `${fieldName}[${index}].outDir`),
+        platform: expectBundlePlatform(
+          parsedTarget.platform,
+          source,
+          `${fieldName}[${index}].platform`,
+        ),
+        reactNativeCompat:
+          parsedTarget.reactNativeCompat === undefined
+            ? undefined
+            : expectReactNativeCompatMode(
+                parsedTarget.reactNativeCompat,
+                source,
+                `${fieldName}[${index}].reactNativeCompat`,
+              ),
+        shimJsxRuntime:
+          parsedTarget.shimJsxRuntime === undefined
+            ? undefined
+            : expectBoolean(
+                parsedTarget.shimJsxRuntime,
+                source,
+                `${fieldName}[${index}].shimJsxRuntime`,
+              ),
+        shimReact:
+          parsedTarget.shimReact === undefined
+            ? undefined
+            : expectBoolean(parsedTarget.shimReact, source, `${fieldName}[${index}].shimReact`),
+        shimReactNative:
+          parsedTarget.shimReactNative === undefined
+            ? undefined
+            : expectBoolean(
+                parsedTarget.shimReactNative,
+                source,
+                `${fieldName}[${index}].shimReactNative`,
+              ),
+      } satisfies VifxBundleTargetConfig;
+    }),
+    (target) =>
+      [
+        target.platform,
+        target.entry,
+        target.outDir ?? "",
+        target.hermes ? "1" : "0",
+        target.reactNativeCompat ?? "",
+        JSON.stringify(target.aliases ?? {}),
+        (target.babelInPackages ?? []).join(","),
+        (target.jsxInPackages ?? []).join(","),
+        target.shimReact === undefined ? "" : target.shimReact ? "1" : "0",
+        target.shimReactNative === undefined ? "" : target.shimReactNative ? "1" : "0",
+        target.shimJsxRuntime === undefined ? "" : target.shimJsxRuntime ? "1" : "0",
+      ].join(":"),
+  );
 }
 
 function normalizePlatforms(value: unknown, fieldName: string, source = "config") {
@@ -291,6 +531,27 @@ function normalizeString(value: unknown, source: string, fieldName: string) {
   return normalized;
 }
 
+function normalizePathLikeString(value: unknown, source: string, fieldName: string) {
+  const normalized = expectString(value, source, fieldName).trim();
+
+  if (normalized.length === 0) {
+    throw invalidConfig(source, fieldName, "Expected a non-empty string.");
+  }
+
+  return normalized;
+}
+
+function normalizeStringRecord(value: unknown, source: string, fieldName: string) {
+  const record = expectObject(value, `${source} ${fieldName}`);
+
+  return Object.fromEntries(
+    Object.entries(record).map(([key, entryValue]) => [
+      key,
+      normalizePathLikeString(entryValue, source, `${fieldName}.${key}`),
+    ]),
+  );
+}
+
 function normalizeDocsBaseUrl(value: string) {
   try {
     const url = new URL(value);
@@ -306,11 +567,11 @@ function normalizeDocsBaseUrl(value: string) {
 }
 
 function inferProjectType(input: VifxConfigInput): VifxProjectType {
-  if (input.expo) {
+  if (input.vite?.mode === "expo" || input.expo) {
     return "expo";
   }
 
-  if (input.reactNative) {
+  if (input.vite?.mode === "react-native" || input.reactNative) {
     return "react-native";
   }
 
@@ -380,6 +641,18 @@ function expectPlatform(value: unknown, source: string, fieldName: string) {
   return value as VifxPlatform;
 }
 
+function expectBundlePlatform(value: unknown, source: string, fieldName: string) {
+  if (typeof value !== "string" || !VALID_BUNDLE_PLATFORMS.has(value as VifxBundlePlatform)) {
+    throw invalidConfig(
+      source,
+      fieldName,
+      `Expected one of: ${Array.from(VALID_BUNDLE_PLATFORMS).join(", ")}.`,
+    );
+  }
+
+  return value as VifxBundlePlatform;
+}
+
 function expectProjectType(value: unknown, source: string, fieldName: string) {
   if (typeof value !== "string" || !VALID_PROJECT_TYPES.has(value as VifxProjectType)) {
     throw invalidConfig(
@@ -402,6 +675,33 @@ function expectLogLevel(value: unknown, source: string, fieldName: string) {
   }
 
   return value as VifxLogLevel;
+}
+
+function expectVitePluginMode(value: unknown, source: string, fieldName: string) {
+  if (typeof value !== "string" || !VALID_VITE_PLUGIN_MODES.has(value as VifxVitePluginMode)) {
+    throw invalidConfig(
+      source,
+      fieldName,
+      `Expected one of: ${Array.from(VALID_VITE_PLUGIN_MODES).join(", ")}.`,
+    );
+  }
+
+  return value as VifxVitePluginMode;
+}
+
+function expectReactNativeCompatMode(value: unknown, source: string, fieldName: string) {
+  if (
+    typeof value !== "string" ||
+    !VALID_REACT_NATIVE_COMPAT_MODES.has(value as VifxReactNativeCompatMode)
+  ) {
+    throw invalidConfig(
+      source,
+      fieldName,
+      `Expected one of: ${Array.from(VALID_REACT_NATIVE_COMPAT_MODES).join(", ")}.`,
+    );
+  }
+
+  return value as VifxReactNativeCompatMode;
 }
 
 function resolveConfigExport(moduleExports: Record<string, unknown>, filePath: string) {
@@ -448,6 +748,19 @@ function invalidConfig(source: string, fieldName: string, message: string) {
 
 function dedupe<T>(value: T[]) {
   return [...new Set(value)];
+}
+
+function dedupeByKey<T>(value: T[], keySelector: (item: T) => string) {
+  const seen = new Set<string>();
+  return value.filter((item) => {
+    const key = keySelector(item);
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 async function fileExists(filePath: string) {

@@ -1,6 +1,11 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import {
+  defineVifxConfig as defineSharedVifxConfig,
+  loadVifxConfig as loadSharedVifxConfig,
+  type LoadVifxConfigOptions as SharedLoadVifxConfigOptions,
+} from "@vifx/config";
+import type { VifxConfig as SharedVifxConfig } from "@vifx/types";
 
 export const VIFX_CONFIG_FILE_NAMES = [
   "vifx.config.ts",
@@ -9,16 +14,7 @@ export const VIFX_CONFIG_FILE_NAMES = [
   "vifx.config.mjs",
 ] as const;
 
-export interface VifxConfig {
-  expo?: boolean;
-  platforms?: string[];
-  projectRoot?: string;
-  resolver?: {
-    extensions?: string[];
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
+export interface VifxConfig extends SharedVifxConfig {}
 
 export interface CreateVifxContextOptions extends LoadVifxConfigOptions {
   imports?: PrimitiveModuleLoaders;
@@ -28,7 +24,7 @@ export interface DetectProjectOptions {
   cwd: string;
 }
 
-export interface LoadVifxConfigOptions {
+export interface LoadVifxConfigOptions extends SharedLoadVifxConfigOptions {
   configFile?: string;
   cwd?: string;
   imports?: PrimitiveModuleLoaders;
@@ -43,7 +39,6 @@ export interface LoadedVifxConfig {
 
 export interface PrimitiveModuleLoaders {
   assetRegistry?: () => Promise<AssetRegistryModule | undefined>;
-  config?: () => Promise<ConfigModule | undefined>;
   platformResolver?: () => Promise<PlatformResolverModule | undefined>;
 }
 
@@ -87,17 +82,6 @@ interface AssetRegistryModule extends Record<string, unknown> {
   collectAssetGroup?: (options: Record<string, unknown>) => Awaitable<unknown>;
 }
 
-interface ConfigModule extends Record<string, unknown> {
-  normalizeVifxConfig?: (
-    input: unknown,
-    context: {
-      projectRoot: string;
-      projectType: VifxProjectInfo["projectType"];
-    },
-  ) => Awaitable<VifxConfig>;
-  parseVifxConfig?: (input: unknown) => Awaitable<VifxConfig>;
-}
-
 interface PackageJsonShape {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -134,7 +118,7 @@ class LocalVifxError extends Error {
 }
 
 export function defineVifxConfig<const TConfig extends VifxConfig>(config: TConfig): TConfig {
-  return config;
+  return defineSharedVifxConfig(config);
 }
 
 export async function createVifxContext(
@@ -346,15 +330,15 @@ export async function loadVifxConfig(
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const project = await detectProject(cwd);
   const workspace = await detectWorkspaceRoot(project.projectRoot);
-  const configFilePath = options.configFile
-    ? path.resolve(options.configFile)
-    : await findVifxConfig(project.projectRoot);
-  const rawConfig = configFilePath ? await importConfigFile(configFilePath) : {};
-  const config = await normalizeConfig(rawConfig, project, options.imports?.config);
+  const loaded = await loadSharedVifxConfig({
+    configFile: options.configFile,
+    cwd: project.projectRoot,
+    optional: options.optional ?? true,
+  });
 
   return {
-    config,
-    configFilePath,
+    config: loaded.config as VifxConfig,
+    configFilePath: loaded.filePath,
     project,
     workspace,
   };
@@ -462,15 +446,6 @@ function hasDependency(packageJson: PackageJsonShape | undefined, dependencyName
   );
 }
 
-async function importConfigFile(filePath: string): Promise<unknown> {
-  const fileUrl = pathToFileURL(filePath);
-  const fileStat = await stat(filePath);
-  fileUrl.searchParams.set("vifx", String(fileStat.mtimeMs));
-  const imported = (await import(fileUrl.href)) as Record<string, unknown>;
-  const exported = "default" in imported ? imported.default : imported;
-  return typeof exported === "function" ? (exported as () => unknown)() : exported;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -537,85 +512,6 @@ async function loadRequiredPrimitiveModule<TModule extends Record<string, unknow
     hint: `Install ${moduleName}, or inject it through createVifxContext({ imports: ... }).`,
     message: `Unable to load ${moduleName} while preparing ${exportName}().`,
   });
-}
-
-async function normalizeConfig(
-  rawConfig: unknown,
-  project: VifxProjectInfo,
-  externalConfigLoader: PrimitiveModuleLoaders["config"],
-): Promise<VifxConfig> {
-  const externalConfig = await loadOptionalModule(externalConfigLoader, "@vifx/config");
-  const rawConfigRecord = isRecord(rawConfig) ? rawConfig : {};
-
-  if (externalConfig?.normalizeVifxConfig) {
-    const normalized = await externalConfig.normalizeVifxConfig(rawConfig, {
-      projectRoot: project.projectRoot,
-      projectType: project.projectType,
-    });
-    return applyLocalConfigDefaults(mergeConfigLikeValues(rawConfigRecord, normalized), project);
-  }
-
-  if (externalConfig?.parseVifxConfig) {
-    const normalized = await externalConfig.parseVifxConfig(rawConfig);
-    return applyLocalConfigDefaults(mergeConfigLikeValues(rawConfigRecord, normalized), project);
-  }
-
-  return applyLocalConfigDefaults(rawConfig, project);
-}
-
-function mergeConfigLikeValues(
-  baseConfig: Record<string, unknown>,
-  normalizedConfig: unknown,
-): Record<string, unknown> {
-  if (!isRecord(normalizedConfig)) {
-    return { ...baseConfig };
-  }
-
-  const mergedResolver =
-    isRecord(baseConfig.resolver) || isRecord(normalizedConfig.resolver)
-      ? {
-          ...(isRecord(baseConfig.resolver) ? baseConfig.resolver : {}),
-          ...(isRecord(normalizedConfig.resolver) ? normalizedConfig.resolver : {}),
-        }
-      : undefined;
-
-  return {
-    ...baseConfig,
-    ...normalizedConfig,
-    ...(mergedResolver ? { resolver: mergedResolver } : {}),
-  };
-}
-
-function applyLocalConfigDefaults(rawConfig: unknown, project: VifxProjectInfo): VifxConfig {
-  const config = isRecord(rawConfig) ? rawConfig : {};
-  const rawResolver = isRecord(config.resolver) ? config.resolver : undefined;
-  const resolverExtensions = Array.isArray(rawResolver?.extensions)
-    ? rawResolver.extensions.filter((value): value is string => typeof value === "string")
-    : undefined;
-  const platforms = Array.isArray(config.platforms)
-    ? config.platforms.filter((value): value is string => typeof value === "string")
-    : undefined;
-  const normalizedProjectRoot =
-    typeof config.projectRoot === "string" ? path.resolve(config.projectRoot) : project.projectRoot;
-
-  return {
-    ...config,
-    expo: typeof config.expo === "boolean" ? config.expo : project.projectType === "expo",
-    platforms:
-      platforms && platforms.length > 0
-        ? platforms
-        : project.projectType === "expo" || project.projectType === "react-native"
-          ? ["ios", "android"]
-          : undefined,
-    projectRoot: normalizedProjectRoot,
-    resolver:
-      rawResolver || resolverExtensions
-        ? {
-            ...rawResolver,
-            ...(resolverExtensions ? { extensions: resolverExtensions } : {}),
-          }
-        : undefined,
-  };
 }
 
 async function readPackageJson(packageJsonPath: string): Promise<PackageJsonShape> {

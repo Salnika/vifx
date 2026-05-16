@@ -1,6 +1,19 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@vifx/asset-registry": fileURLToPath(
+        new URL("../asset-registry/src/index.ts", import.meta.url),
+      ),
+      "@vifx/errors": fileURLToPath(new URL("../errors/src/index.ts", import.meta.url)),
+      "@vifx/source-map-tools": fileURLToPath(
+        new URL("../source-map-tools/src/index.ts", import.meta.url),
+      ),
+      "@vifx/types": fileURLToPath(new URL("../types/src/index.ts", import.meta.url)),
+    },
+  },
   fmt: {},
   lint: {
     options: {

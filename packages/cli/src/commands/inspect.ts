@@ -74,6 +74,7 @@ export async function runInspectCommand(argv: string[], cwd: string): Promise<Cl
       `Project root: ${targetPath}`,
       `Project type: ${inspection.projectType}`,
       `Package manager: ${inspection.packageManager}`,
+      `Vite mode: ${inspection.vitePluginMode}`,
       `Workspace root: ${path.relative(targetPath, inspection.workspaceRoot) || "."}`,
       formatList("Platform files", inspection.platformFiles),
       assetLines,

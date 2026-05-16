@@ -43,6 +43,28 @@ test("shared contracts compose resolver, asset, project, and config data", () =>
     projectRoot: "/repo",
     platforms: ["ios", "android"],
     expo: true,
+    expoOptions: {
+      publicEnvPrefix: "EXPO_PUBLIC_",
+    },
+    vite: {
+      mode: "expo",
+      targets: [
+        {
+          aliases: {
+            "@": ".",
+          },
+          babelInPackages: ["react-native"],
+          entry: "expo-router/entry",
+          hermes: false,
+          jsxInPackages: ["expo-router"],
+          platform: "ios",
+          reactNativeCompat: "web",
+          shimJsxRuntime: false,
+          shimReact: false,
+          shimReactNative: false,
+        },
+      ],
+    },
     resolver: {
       extensions: ["tsx", "ts", "js"],
     },
@@ -63,5 +85,7 @@ test("shared contracts compose resolver, asset, project, and config data", () =>
   expect(asset.scales).toEqual([1, 2, 3]);
   expect(project.platforms).toContain("web");
   expect(config.logger?.json).toBe(true);
+  expect(config.vite?.mode).toBe("expo");
+  expect(config.vite?.targets?.[0]?.reactNativeCompat).toBe("web");
   expect(result.status).toBe("pass");
 });

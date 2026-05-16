@@ -8,7 +8,7 @@ test("runCompatSuite executes the vifx adapter against the first-pass cases", as
   });
 
   expect(report.status).toBe("PASS");
-  expect(report.totalCases).toBe(9);
+  expect(report.totalCases).toBe(11);
   expect(report.failedCases).toBe(0);
 });
 
@@ -18,7 +18,7 @@ test("runCompatSuite executes the Metro reference adapter against the first-pass
   });
 
   expect(report.status).toBe("PASS");
-  expect(report.totalCases).toBe(9);
+  expect(report.totalCases).toBe(11);
   expect(report.failedCases).toBe(0);
 });
 
@@ -28,6 +28,7 @@ test("inspectProject returns doctor-friendly metadata", async () => {
   expect(inspection.projectType).toBe("expo");
   expect(inspection.packageManager).toBe("pnpm");
   expect(inspection.metroConfigPath).toBe("metro.config.js");
+  expect(inspection.vitePluginMode).toBe("none");
   expect(inspection.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
     "VIFX_CONFIG_MISSING",
   );

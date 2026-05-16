@@ -14,4 +14,9 @@ if (result.stderr) {
   process.stderr.write(result.stderr.endsWith("\n") ? result.stderr : `${result.stderr}\n`);
 }
 
+if (result.waitUntilExit) {
+  const waitExitCode = await result.waitUntilExit;
+  process.exit(typeof waitExitCode === "number" ? waitExitCode : result.exitCode);
+}
+
 process.exit(result.exitCode);

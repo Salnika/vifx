@@ -10,15 +10,40 @@ React Native bundling is more than JavaScript bundling. Platform file resolution
 
 ## Current status
 
-The current repository pass focuses on the first useful foundation:
+The current repository pass now covers the first full experimental slice through Expo export inspection:
 
-- monorepo package scaffolds for Vifx primitives and CLI
+- monorepo packages for Vifx primitives, compatibility tooling, and the CLI
 - a documentation app in `apps/docs`
-- fixtures for Expo, bare React Native, assets, workspace resolution, and captured Metro artifacts
+- fixtures for Expo, bare React Native, assets, workspace resolution, captured Metro artifacts, and Expo export output
 - compatibility runners and reference inspection for Metro and Vifx
-- codemods, source-map tools, and Hermes workflows for the first four milestones
+- codemods, source-map tools, and Hermes workflows
+- an experimental React Native Vite plugin with a controlled bundle build path
+- dedicated `vifx build` and `vifx run` commands for configured Vifx targets
+- a browser runtime preview for Vifx targets that opt into `reactNativeCompat: "web"`
+- a bounded Expo Router browser preview for `expo-router/entry` on that web runtime path
+- an experimental Expo Vite layer with app config detection and `EXPO_PUBLIC_*` injection
+- an inspect-only Expo export package for normalizing bundles, source maps, manifests, and assets
 
-Metro replacement, Expo replacement, and advanced runtime parity remain out of scope for this pass.
+Still out of scope for this pass:
+
+- Metro replacement or Expo CLI replacement
+- Fast Refresh, HMR, Expo Go, or device runtime parity
+- full Expo Router parity, Updates generation, and EAS integration
+
+Known gaps in the current first pass:
+
+- `vifx init` still writes a conservative `vifx.config.ts` and does not enable `reactNativeCompat: "web"` for runtime previews
+- `vifx vite init` still scaffolds `entry: "./index.js"` and requires manual edits for Expo Router previews
+- `loadVifxConfig()` imports the target config directly, so external projects need Vifx packages installed where the config resolves them
+
+Common validation entrypoints in this repository:
+
+```bash
+vp install
+vp check
+pnpm test
+pnpm build
+```
 
 ## Packages
 
@@ -36,6 +61,9 @@ Metro replacement, Expo replacement, and advanced runtime parity remain out of s
 - `@vifx/source-map-tools`: source map validation and symbolication
 - `@vifx/hermes-tools`: Hermes compiler detection and bytecode orchestration
 - `@vifx/cli`: `vifx` command surface
+- `@vifx/expo-export`: inspect-only Expo export normalization
+- `@vifx/vite-plugin-react-native`: experimental controlled React Native Vite builds
+- `@vifx/vite-plugin-expo`: experimental Expo layer on top of the RN Vite plugin
 
 ## Quick start
 
@@ -51,6 +79,13 @@ vp run docs#dev
 ```bash
 pnpm --filter @vifx/cli vifx doctor ./fixtures/expo-basic
 pnpm --filter @vifx/cli vifx inspect ./fixtures/rn-bare-basic
+```
+
+## Run a built target in the browser
+
+```bash
+pnpm --filter @vifx/cli vifx build ./fixtures/rn-bare-basic --platform ios
+pnpm --filter @vifx/cli vifx run ./fixtures/rn-bare-basic --platform ios
 ```
 
 ## Run compatibility tests

@@ -293,7 +293,12 @@ async function findPackageLocation(options: {
   startDir: string;
   trace: ResolutionTraceEntry[];
 }): Promise<{ root: string } | undefined> {
-  for (const directory of iterateAncestorDirectories(options.startDir)) {
+  const candidateDirectories = dedupe([
+    ...iterateAncestorDirectories(options.startDir),
+    ...iterateAncestorDirectories(options.projectRoot),
+  ]);
+
+  for (const directory of candidateDirectories) {
     const candidate = path.join(directory, "node_modules", options.packageName);
     const exists = await isDirectoryLike(candidate);
     pushTrace(options.trace, "package", `Checked node_modules package candidate "${candidate}".`, {

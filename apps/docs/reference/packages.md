@@ -4,25 +4,25 @@ This page replaces the previous custom package directory with VitePress markdown
 
 ## Package Snapshot
 
-| Package                          | Status                 | Milestone                                | Summary                                                                                                     |
-| -------------------------------- | ---------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `@vifx/types`                    | Implemented first pass | Milestone 0 foundation                   | Shared public TypeScript contracts for platforms, assets, configs, diagnostics, and compatibility reports.  |
-| `@vifx/errors`                   | Implemented first pass | Milestone 0 foundation                   | Structured Vifx errors with stable codes, hints, and docs-link-friendly metadata.                           |
-| `@vifx/logger`                   | Implemented first pass | Milestone 0 foundation                   | Compact terminal and JSON logging helpers for CLI flows and automation.                                     |
-| `@vifx/config`                   | Implemented first pass | Milestone 0 foundation                   | Config definition, defaults, discovery, and loading for `vifx.config.*` files.                              |
-| `@vifx/core`                     | Implemented first pass | Milestone 0-2 foundation                 | Project discovery, config loading, and orchestration glue for higher-level workflows.                       |
-| `@vifx/platform-resolver`        | Implemented first pass | Milestone 2 resolver and assets          | React Native style platform resolution with structured traces and Metro-oriented proof points.              |
-| `@vifx/asset-registry`           | Implemented first pass | Milestone 2 resolver and assets          | Asset grouping, scale detection, dimensions, hashes, and normalized descriptors for React Native and Expo.  |
-| `@vifx/source-map-tools`         | Implemented first pass | Milestone 4 source maps and Hermes       | Validation, normalization, comparison, and symbolication helpers for Metro and Vite-based experiments.      |
-| `@vifx/hermes-tools`             | Implemented first pass | Milestone 4 source maps and Hermes       | Hermes compiler detection, orchestration, and useful failure modes without vendoring Hermes.                |
-| `@vifx/expo-export`              | Inspect-first package  | Milestone 7 Expo export inspection       | Expo export artifact inspection, manifest normalization, and report generation before output generation.    |
-| `@vifx/compat`                   | Implemented first pass | Milestone 1 compatibility and inspection | Fixture manifests, implementation-agnostic compatibility cases, and reusable assertions.                    |
-| `@vifx/compat-runner`            | Implemented first pass | Milestone 1 compatibility and inspection | Compatibility execution and report generation for Metro, Vifx, and future adapters.                         |
-| `@vifx/metro-inspect`            | Implemented first pass | Milestone 1 compatibility and inspection | Metro reference inspection for captured bundle output, assets, source maps, and deterministic JSON reports. |
-| `@vifx/codemods`                 | Implemented first pass | Milestone 3 migration assistant          | Conservative file planning and patch helpers for init and migration workflows.                              |
-| `@vifx/cli`                      | Implemented first pass | Milestone 3 migration assistant          | User-facing CLI for doctor, inspect, compatibility, migration, and Hermes flows.                            |
-| `@vifx/vite-plugin-react-native` | Experimental           | Milestone 5 Vite RN experimental plugin  | Experimental Vite plugin shell for React Native bundles built on Vifx primitives.                           |
-| `@vifx/vite-plugin-expo`         | Experimental           | Milestone 6 Expo experimental plugin     | Experimental Expo-specific layer on top of the React Native Vite plugin.                                    |
+| Package                          | Status                    | Milestone                                                | Summary                                                                                                         |
+| -------------------------------- | ------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `@vifx/types`                    | Implemented first pass    | Milestone 0 foundation                                   | Shared public TypeScript contracts for platforms, assets, configs, diagnostics, and compatibility reports.      |
+| `@vifx/errors`                   | Implemented first pass    | Milestone 0 foundation                                   | Structured Vifx errors with stable codes, hints, and docs-link-friendly metadata.                               |
+| `@vifx/logger`                   | Implemented first pass    | Milestone 0 foundation                                   | Compact terminal and JSON logging helpers for CLI flows and automation.                                         |
+| `@vifx/config`                   | Implemented first pass    | Milestone 0 foundation plus Milestone 5 contracts        | Config definition, defaults, discovery, loading, and normalized Vite or Expo options for `vifx.config.*` files. |
+| `@vifx/core`                     | Implemented first pass    | Milestone 0-2 foundation                                 | Project discovery, compatibility config re-exports, and orchestration glue for higher-level workflows.          |
+| `@vifx/platform-resolver`        | Implemented first pass    | Milestone 2 resolver and assets                          | React Native style platform resolution with structured traces and Metro-oriented proof points.                  |
+| `@vifx/asset-registry`           | Implemented first pass    | Milestone 2 resolver and assets                          | Asset grouping, scale detection, dimensions, hashes, and normalized descriptors for React Native and Expo.      |
+| `@vifx/source-map-tools`         | Implemented first pass    | Milestone 4 source maps and Hermes                       | Validation, normalization, comparison, and symbolication helpers for Metro and Vite-based experiments.          |
+| `@vifx/hermes-tools`             | Implemented first pass    | Milestone 4 source maps and Hermes                       | Hermes compiler detection, orchestration, and useful failure modes without vendoring Hermes.                    |
+| `@vifx/expo-export`              | Implemented inspect-first | Milestone 7 Expo export inspection                       | Inspect-only Expo export artifact normalization for bundles, source maps, manifests, and assets.                |
+| `@vifx/compat`                   | Implemented first pass    | Milestone 1 compatibility and inspection                 | Fixture manifests, implementation-agnostic compatibility cases, and reusable assertions.                        |
+| `@vifx/compat-runner`            | Implemented first pass    | Milestone 1 compatibility and inspection                 | Compatibility execution and report generation for Metro, Vifx, and future adapters.                             |
+| `@vifx/metro-inspect`            | Implemented first pass    | Milestone 1 compatibility and inspection                 | Metro reference inspection for captured bundle output, assets, source maps, and deterministic JSON reports.     |
+| `@vifx/codemods`                 | Implemented first pass    | Milestone 3 migration assistant                          | Conservative file planning and patch helpers for init and migration workflows.                                  |
+| `@vifx/cli`                      | Implemented first pass    | Milestone 3 migration assistant plus Milestone 5 support | User-facing CLI for doctor, inspect, build, run, compatibility, migration, Hermes, and `vite init`.             |
+| `@vifx/vite-plugin-react-native` | Experimental first pass   | Milestone 5 Vite RN experimental plugin                  | Experimental controlled React Native Vite bundle builds plus browser runtime previews built on Vifx primitives. |
+| `@vifx/vite-plugin-expo`         | Experimental first pass   | Milestone 6 Expo experimental plugin                     | Experimental Expo layer with app config detection, public env injection, and bounded preview support.           |
 
 ## `@vifx/types`
 
@@ -181,13 +181,13 @@ Config definition, defaults, discovery, and loading for `vifx.config.*` files.
 
 ### Current State
 
-Implemented with config templates, defaults, filesystem discovery, and load-time normalization for the first pass.
+Implemented with config templates, defaults, filesystem discovery, load-time normalization, and explicit `vite.mode` plus `vite.targets` support for the current first pass.
 
 ### Purpose
 
 - Expose `defineVifxConfig` as the shared config entrypoint.
 - Find and load `vifx.config.ts`, `.mts`, `.js`, or `.mjs` files.
-- Apply conservative defaults for targets, resolver options, and experimental flags.
+- Apply conservative defaults for platforms, resolver options, logging, Vite targets, and Expo public env handling.
 
 ### Installation
 
@@ -200,12 +200,22 @@ In this repository the package already exists as a workspace dependency. The com
 ### API Sketch
 
 ```ts
-import { defineVifxConfig } from "@vifx/config";
+import { defineVifxConfig, loadVifxConfig } from "@vifx/config";
 
 export default defineVifxConfig({
   projectRoot: process.cwd(),
-  targets: [{ platform: "ios", entry: "./index.js" }],
+  projectType: "expo",
+  vite: {
+    mode: "expo",
+    targets: [{ platform: "ios", entry: "./index.js", hermes: false }],
+  },
+  expoOptions: {
+    publicEnvPrefix: "EXPO_PUBLIC_",
+  },
 });
+
+const loaded = await loadVifxConfig({ cwd: process.cwd() });
+console.log(loaded.config.vite.mode);
 ```
 
 ### Example
@@ -220,6 +230,8 @@ vifx.config.mjs
 ### Limitations
 
 - Validation is intentionally first-pass conservative and does not yet expose a full schema-doc pipeline.
+- `@vifx/core` keeps compatibility re-exports, but `@vifx/config` is the source of truth for config helpers.
+- `loadVifxConfig()` imports the target config directly, so external projects must have the referenced Vifx packages installed where the config resolves them.
 
 ### Roadmap
 
@@ -230,17 +242,18 @@ vifx.config.mjs
 
 Status: Implemented first pass.
 
-Project discovery, config loading, and orchestration glue for every higher-level Vifx workflow.
+Project discovery, compatibility config re-exports, and orchestration glue for every higher-level Vifx workflow.
 
 ### Current State
 
-Implemented with project detection, workspace discovery, config loading, and lazy primitive orchestration for the first-pass CLI workflows.
+Implemented with project detection, workspace discovery, config loading, lazy primitive orchestration, and compatibility re-exports for the first-pass CLI workflows.
 
 ### Purpose
 
 - Detect Expo, bare React Native, workspace, or unknown projects.
 - Load and validate `vifx.config.*` before any inspection or migration flow runs.
 - Coordinate resolver, assets, maps, and reports as shared primitives rather than ad hoc plugin logic.
+- Keep `defineVifxConfig` and `loadVifxConfig` available for compatibility while `@vifx/config` stays the config source of truth.
 
 ### Installation
 
@@ -253,36 +266,34 @@ Shown as the intended public install surface once the package is shipped. Treat 
 ### API Sketch
 
 ```ts
-import { defineVifxConfig } from "@vifx/core";
+import { createVifxContext } from "@vifx/core";
 
-export default defineVifxConfig({
-  projectRoot: process.cwd(),
-  platforms: ["ios", "android"],
-  expo: true,
-  resolver: {
-    extensions: ["tsx", "ts", "jsx", "js", "json"],
-  },
+const context = await createVifxContext({
+  cwd: process.cwd(),
 });
+
+console.log(context.project.projectType);
+console.log(context.config.vite.mode);
 ```
 
 ### Example
 
 ```ts
-import { defineVifxConfig } from "@vifx/core";
+const resolution = await context.resolveModule({
+  fromFile: "src/App.tsx",
+  platform: "ios",
+  specifier: "./Button",
+});
 
-export default defineVifxConfig({
-  projectRoot: process.cwd(),
-  targets: [
-    { platform: "ios", entry: "./index.js", hermes: true },
-    { platform: "android", entry: "./index.js", hermes: true },
-  ],
+const assets = await context.collectAssetGroup({
+  filePath: "src/assets/icon.png",
 });
 ```
 
 ### Limitations
 
 - The exact runtime APIs still depend on the primitive packages settling first.
-- This page is a contract draft, not proof that the package is already feature-complete.
+- New config authors should prefer `@vifx/config` instead of treating `@vifx/core` as the primary config package.
 
 ### Roadmap
 
@@ -528,13 +539,13 @@ vifx hermes compile
 
 ## `@vifx/expo-export`
 
-Status: Inspect-first package.
+Status: Implemented inspect-first.
 
 Expo export artifact inspection, manifest normalization, and report generation before output generation.
 
 ### Current State
 
-This page is intentionally explicit that Expo export understanding comes before any attempt to generate equivalent output.
+Implemented against exported directories so the package can normalize bundles, source maps, manifests, and assets from existing Expo export output before any attempt to generate equivalent output.
 
 ### Purpose
 
@@ -556,26 +567,31 @@ Shown as the intended public install surface once the package is shipped. Treat 
 import { inspectExpoExport } from "@vifx/expo-export";
 
 const report = await inspectExpoExport({
-  projectRoot: "./fixtures/expo-basic",
+  projectRoot: "./fixtures/expo-export-basic",
+  exportRoot: ".",
 });
 ```
 
 ### Example
 
-```text
-Understand assets, bundles, and update manifests from expo export
-before attempting any output generation.
+```json
+{
+  "exportRoot": ".",
+  "bundles": [{ "platform": "ios" }],
+  "manifests": [{ "kind": "metadata" }],
+  "assets": [{ "type": "png" }]
+}
 ```
 
 ### Limitations
 
 - Generation is intentionally out of scope in the first pass.
-- Expo Router and full Updates generation remain separate future work.
+- The package reads existing export output only; it does not replace `expo export`.
 
 ### Roadmap
 
-- Inspect config and export output.
-- Normalize manifests and asset reports.
+- Broaden fixture coverage across more export layouts.
+- Keep manifest normalization deterministic and reviewable.
 - Surface inspect-only gaps clearly in docs and reports.
 
 ## `@vifx/compat`
@@ -624,9 +640,8 @@ resolver.packageMainFields
 resolver.packageExports
 assets.scaleGroups
 assets.metadata
-sourcemaps.validity
-hermes.compile
-expo.exportShape
+bundler.bundleArtifacts
+bundler.sourceMapValidity
 monorepo.workspaceResolution
 ```
 
@@ -679,12 +694,13 @@ vifx compat run --adapter all --report markdown
 Compatibility report
 
 Adapter: vifx
-Platform: ios
 
-resolver.platformExtensions       PASS  12/12
-assets.scaleGroups                PASS   8/8
-sourcemaps.validity               WARN   2/3
-expo.exportShape                  TODO   0/5
+doctor.projectDetection           PASS   2/2
+resolver.platformExtensions       PASS   4/4
+assets.scaleGroups                PASS   1/1
+bundler.bundleArtifacts           PASS   1/1
+bundler.sourceMapValidity         PASS   1/1
+monorepo.workspaceResolution      PASS   2/2
 ```
 
 ### Limitations
@@ -821,15 +837,16 @@ await applyPlannedChanges("./fixtures/expo-basic", plan.changes);
 
 Status: Implemented first pass.
 
-The user-facing CLI surface for doctor, inspect, compatibility, migration, and Hermes flows.
+The user-facing CLI surface for doctor, inspect, build, run, compatibility, migration, `vite init`, and Hermes flows.
 
 ### Current State
 
-Implemented for doctor, init, inspect, compat run, metro inspect, dry-run or write migration workflows, and Hermes compile. `vite init` remains planned.
+Implemented for doctor, init, inspect, build, run, compat run, metro inspect, dry-run or write migration workflows, `vite init`, and Hermes compile. Doctor and inspect also surface the detected Vite plugin mode.
 
 ### Purpose
 
 - Expose a single `vifx` binary for inspection and migration workflows.
+- Build configured targets and serve bounded browser runtime previews.
 - Render structured errors with codes, hints, and docs links.
 - Keep experimental workflows visibly experimental.
 
@@ -847,6 +864,8 @@ Shown as the intended public install surface once the package is shipped. Treat 
 vifx init
 vifx doctor
 vifx inspect
+vifx build
+vifx run
 vifx compat run
 vifx metro inspect
 vifx migrate
@@ -859,9 +878,9 @@ vifx hermes compile
 ### Example
 
 ```text
-WARN  VIFX_CONFIG_MISSING
-  No vifx.config.ts found.
-  Run: vifx init
+WARN  VIFX_CONFIG_NOT_FOUND
+  No Vifx config file was found in "<project>".
+  Hint: Create one of: vifx.config.ts, vifx.config.mts, vifx.config.js, vifx.config.mjs.
 
 INFO  VIFX_EXPERIMENTAL_EXPO
   Expo support is currently experimental.
@@ -869,29 +888,30 @@ INFO  VIFX_EXPERIMENTAL_EXPO
 
 ### Limitations
 
-- `vite init` and broader plugin-facing workflows remain planned.
 - The CLI should preserve existing Metro and Expo workflows instead of masking them.
+- `vifx init` and `vifx vite init` still scaffold conservative entries and require manual edits for browser previews or Expo Router previews.
 
 ### Roadmap
 
-- Doctor and init.
-- Inspect and compatibility flows.
-- Dry-run-first migration plus structured errors.
+- Preserve inspect-first doctor and inspect flows.
+- Keep dry-run-first migration plus structured errors.
+- Expand plugin-facing workflows only when the bundle contract is better proven.
 
 ## `@vifx/vite-plugin-react-native`
 
-Status: Experimental.
+Status: Experimental first pass.
 
-An experimental Vite plugin shell for React Native bundles built on Vifx primitives.
+An experimental Vite plugin for controlled React Native bundle builds on top of Vifx primitives.
 
 ### Current State
 
-This page is intentionally blunt: it is a bounded experiment, not a parity claim.
+Implemented as a real plugin plus a `buildReactNativeBundle()` helper for controlled builds. This page stays intentionally blunt: it is a bounded experiment, not a parity claim.
 
 ### Purpose
 
 - Load as a Vite plugin and use Vifx resolver plus asset primitives.
-- Expose an experimental dev-server surface for React Native bundle experiments.
+- Build bundle, source-map, and asset artifacts through a controlled Vite path.
+- Optionally run Hermes compile after bundle generation.
 - Document unsupported features clearly.
 
 ### Installation
@@ -906,54 +926,63 @@ Planned install surface only. This package must stay clearly labeled experimenta
 
 ```ts
 import { defineConfig } from "vite";
-import { reactNative } from "@vifx/vite-plugin-react-native";
+import { buildReactNativeBundle, reactNative } from "@vifx/vite-plugin-react-native";
 
 export default defineConfig({
   plugins: [
     reactNative({
       platform: "ios",
       entry: "./index.js",
-      hermes: true,
+      hermes: false,
     }),
   ],
 });
+
+const artifacts = await buildReactNativeBundle({
+  platform: "ios",
+  entry: "./index.js",
+});
+
+console.log(artifacts.bundle.path);
 ```
 
 ### Example
 
 ```text
-First-pass goals:
-- plugin shell loads
+Controlled build path:
 - platform files resolve through Vifx
-- assets expose basic metadata
-- docs explain limits in plain language
+- assets are normalized through @vifx/asset-registry
+- source maps are validated
+- fixtures/rn-bare-basic is the smoke target
 ```
 
 ### Limitations
 
+- Controlled build only. No Fast Refresh, HMR, or device runtime parity.
 - Fast Refresh parity is not a first-pass goal.
-- Expo Router, Updates output, and production builds stay out of scope.
+- Full Expo Router parity, Updates output, and production builds stay out of scope.
+- A bounded `expo-router/entry` browser preview exists, but it is not an Expo Go or native runtime claim.
 
 ### Roadmap
 
-- Plugin shell and platform option support.
-- Resolver plus asset integration.
-- At least one playground command and honest limitation docs.
+- Broaden fixture-backed evidence beyond the smoke target.
+- Keep runtime claims narrower than build-artifact claims.
+- Expand only when the support matrix has real proof to support it.
 
 ## `@vifx/vite-plugin-expo`
 
-Status: Experimental.
+Status: Experimental first pass.
 
 An experimental Expo-specific layer on top of the React Native Vite plugin.
 
 ### Current State
 
-The page documents a careful Expo layer that must not pretend to replace `expo start`.
+Implemented as a careful Expo layer on top of the RN plugin. It must not pretend to replace `expo start`.
 
 ### Purpose
 
 - Detect Expo config and inject `EXPO_PUBLIC_*` variables where safe.
-- Prepare aliases and scaffolding for bounded Expo experiments.
+- Layer the RN plugin behind Expo-specific config detection and safe shims.
 - State exactly what is inspect-only, unsupported, or still planned.
 
 ### Installation
@@ -968,30 +997,35 @@ Planned install surface only. It stays experimental by design.
 
 ```ts
 import { defineConfig } from "vite";
-import { expo } from "@vifx/vite-plugin-expo";
+import { expo, findExpoAppConfig } from "@vifx/vite-plugin-expo";
 
 export default defineConfig({
-  plugins: [expo()],
+  plugins: [expo({ platform: "ios", entry: "./index.js" })],
 });
+
+const appConfigPath = await findExpoAppConfig(process.cwd());
+console.log(appConfigPath);
 ```
 
 ### Example
 
 ```text
-First-pass scope:
+Implemented first-pass scope:
 - Expo config detection
 - EXPO_PUBLIC_* env injection
-- migration scaffolding
-- explicit documentation for Router and EAS gaps
+- safe expo/registerRootComponent shim
+- explicit documentation for Router, Updates, and EAS gaps
 ```
 
 ### Limitations
 
-- Expo Router is not a first-pass goal.
+- Full Expo Router parity is not a first-pass goal.
+- A bounded `expo-router/entry` browser preview exists on the web runtime path, but it is not native or Expo Go support.
 - Expo Updates generation and EAS integration remain future work.
+- This package does not replace `expo start` or `expo export`.
 
 ### Roadmap
 
-- Config detection and env handling.
-- Safe aliases and scaffolding.
-- Docs that stay explicit about support boundaries.
+- Broaden fixture-backed proof for Expo config edge cases.
+- Keep safe shims minimal and explicit.
+- Expand only with support-matrix evidence for each new claim.

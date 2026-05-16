@@ -8,7 +8,7 @@ import {
 } from "../src/index.ts";
 
 test("fixture manifests expose the first-pass fixtures", () => {
-  expect(getFixtureManifests()).toHaveLength(6);
+  expect(getFixtureManifests()).toHaveLength(7);
   expect(getFixtureManifest("expo-basic").projectType).toBe("expo");
   expect(resolveFixturePath("expo-basic")).toContain("fixtures/expo-basic");
 });
@@ -20,6 +20,8 @@ test("compat cases cover doctor, resolver, assets, and monorepo categories", () 
     "doctor.projectDetection",
     "resolver.platformExtensions",
     "assets.scaleGroups",
+    "bundler.bundleArtifacts",
+    "bundler.sourceMapValidity",
     "monorepo.workspaceResolution",
   ]);
 });

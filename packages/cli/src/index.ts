@@ -1,4 +1,5 @@
 import { formatVifxError, serializeVifxError, toVifxError } from "@vifx/errors";
+import { runBuildCommand } from "./commands/build.ts";
 import { runCompatRunCommand } from "./commands/compat-run.ts";
 import { runDoctorCommand } from "./commands/doctor.ts";
 import { runHermesCompileCommand } from "./commands/hermes-compile.ts";
@@ -6,7 +7,9 @@ import { runInitCommand } from "./commands/init.ts";
 import { runInspectCommand } from "./commands/inspect.ts";
 import { runMetroInspectCommand } from "./commands/metro-inspect.ts";
 import { runMigrateCommand } from "./commands/migrate.ts";
+import { runRunCommand } from "./commands/run.ts";
 import type { CliResult, ExecuteCliOptions } from "./types.ts";
+import { runViteInitCommand } from "./commands/vite-init.ts";
 
 const ROOT_HELP = `vifx
 
@@ -14,11 +17,14 @@ Usage:
   vifx <command> [options]
 
 Commands:
+  build [path]                  Build Vifx bundle targets from vifx.config.*.
+  run [path]                    Serve a built Vifx runtime locally.
   doctor [path]                 Check project readiness.
   init [path]                   Generate a first-pass vifx.config.ts.
   inspect [path]                Inspect first-pass project primitives.
   compat run [options]          Run compatibility cases with the vifx adapter.
   metro inspect [path]          Inspect captured Metro reference artifacts.
+  vite init [path]              Generate a first-pass vite.config.ts for RN or Expo.
   migrate expo <path>           Prepare an Expo project for Vifx experiments.
   migrate react-native <path>   Prepare a React Native project for Vifx experiments.
   hermes compile [options]      Compile a bundle to Hermes bytecode.
@@ -68,6 +74,14 @@ export async function executeCli(
       return await runDoctorCommand(argv.slice(1), cwd);
     }
 
+    if (argv[0] === "build") {
+      return await runBuildCommand(argv.slice(1), cwd);
+    }
+
+    if (argv[0] === "run") {
+      return await runRunCommand(argv.slice(1), cwd);
+    }
+
     if (argv[0] === "init") {
       return await runInitCommand(argv.slice(1), cwd);
     }
@@ -90,6 +104,14 @@ export async function executeCli(
       }
 
       return fail(`Unknown metro subcommand.\n\n${ROOT_HELP}`);
+    }
+
+    if (argv[0] === "vite") {
+      if (argv[1] === "init") {
+        return await runViteInitCommand(argv.slice(2), cwd);
+      }
+
+      return fail(`Unknown vite subcommand.\n\n${ROOT_HELP}`);
     }
 
     if (argv[0] === "migrate") {

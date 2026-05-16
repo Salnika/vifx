@@ -17,6 +17,12 @@
     "dev": "vp pack --watch",
     "test": "vp test run"
   },
+  "dependencies": {
+    "@vifx/errors": "workspace:*",
+    "@vifx/types": "workspace:*",
+    "@vifx/vite-plugin-react-native": "workspace:*",
+    "vite": "catalog:"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",

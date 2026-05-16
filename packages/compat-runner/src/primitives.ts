@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { PackageManager, ProjectType } from "@vifx/compat";
+import type { VifxVitePluginMode } from "@vifx/types";
 import type { AssetGroup, Diagnostic, ProjectInspection } from "./types.ts";
 
 interface PackageJson {
@@ -252,6 +253,24 @@ async function findConfigFile(projectRoot: string, names: string[]) {
   return null;
 }
 
+async function detectVitePluginMode(viteConfigPath: string | null): Promise<VifxVitePluginMode> {
+  if (!viteConfigPath) {
+    return "none";
+  }
+
+  const contents = await fs.readFile(viteConfigPath, "utf8");
+
+  if (contents.includes("@vifx/vite-plugin-expo")) {
+    return "expo";
+  }
+
+  if (contents.includes("@vifx/vite-plugin-react-native")) {
+    return "react-native";
+  }
+
+  return "none";
+}
+
 function detectProjectType(
   projectRoot: string,
   packageJson: PackageJson | null,
@@ -407,6 +426,7 @@ export async function inspectProject(projectRoot: string): Promise<ProjectInspec
     "vite.config.cjs",
     "vite.config.js",
   ]);
+  const vitePluginMode = await detectVitePluginMode(viteConfigPath);
   const vifxConfigPath = await findConfigFile(resolvedProjectRoot, [
     "vifx.config.ts",
     "vifx.config.mjs",
@@ -430,6 +450,7 @@ export async function inspectProject(projectRoot: string): Promise<ProjectInspec
     reactNativeVersion: getDependencyVersion(packageJson, "react-native"),
     metroConfigPath: metroConfigPath ? relativeFrom(resolvedProjectRoot, metroConfigPath) : null,
     viteConfigPath: viteConfigPath ? relativeFrom(resolvedProjectRoot, viteConfigPath) : null,
+    vitePluginMode,
     vifxConfigPath: vifxConfigPath ? relativeFrom(resolvedProjectRoot, vifxConfigPath) : null,
     hermesCompilerPath: hermesCompilerPath
       ? relativeFrom(resolvedProjectRoot, hermesCompilerPath)

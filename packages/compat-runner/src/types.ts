@@ -7,6 +7,7 @@ import type {
   PackageManager,
   ProjectType,
 } from "@vifx/compat";
+import type { VifxVitePluginMode } from "@vifx/types";
 
 export type CompatAdapterId = "metro" | "vifx";
 export type CompatReportFormat = "terminal" | "json" | "markdown";
@@ -37,6 +38,7 @@ export interface ProjectInspection {
   reactNativeVersion: string | null;
   metroConfigPath: string | null;
   viteConfigPath: string | null;
+  vitePluginMode: VifxVitePluginMode;
   vifxConfigPath: string | null;
   hermesCompilerPath: string | null;
   platformFiles: string[];

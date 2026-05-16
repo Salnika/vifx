@@ -1,4 +1,5 @@
 import path from "node:path";
+import { inspectMetroProject } from "@vifx/metro-inspect";
 import type { CompatAdapter } from "../../types.ts";
 import {
   collectAssetScaleGroup,
@@ -10,6 +11,24 @@ import {
 
 function toPosixPath(filePath: string) {
   return filePath.split(path.sep).join("/");
+}
+
+const metroInspectionCache = new Map<string, ReturnType<typeof inspectMetroProject>>();
+
+function getMetroInspection(fixturePath: string, platform: "ios" | "android", entry = "index.js") {
+  const cacheKey = `${fixturePath}:${platform}:${entry}`;
+  const cached = metroInspectionCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const inspection = inspectMetroProject({
+    entry,
+    platform,
+    projectRoot: fixturePath,
+  });
+  metroInspectionCache.set(cacheKey, inspection);
+  return inspection;
 }
 
 // First-pass Metro adapter: uses fixture-backed filesystem expectations that mirror
@@ -40,6 +59,34 @@ export const metroAdapter: CompatAdapter = {
         return {
           packageManager: await detectPackageManager(workingDirectory),
           relativeRoot: toPosixPath(path.relative(context.fixturePath, workspaceRoot) || "."),
+        };
+      }
+      case "bundle-artifacts": {
+        const report = await getMetroInspection(
+          context.fixturePath,
+          compatCase.operation.platform,
+          compatCase.operation.entry,
+        );
+
+        return {
+          assetCount: report.assets.length,
+          assetTypes: [...new Set(report.assets.map((asset) => asset.type))].sort(),
+          bundleFile: path.basename(report.bundle?.path ?? ""),
+          entry: report.entry,
+          platform: compatCase.operation.platform,
+        };
+      }
+      case "source-map-validity": {
+        const report = await getMetroInspection(
+          context.fixturePath,
+          compatCase.operation.platform,
+          compatCase.operation.entry,
+        );
+
+        return {
+          platform: compatCase.operation.platform,
+          sourceMapPresent: Boolean(report.sourceMap),
+          valid: report.sourceMap?.valid ?? false,
         };
       }
       default: {
