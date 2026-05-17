@@ -360,8 +360,14 @@ function readJpegDimensions(buffer: Uint8Array): AssetDimensions | undefined {
       return undefined;
     }
 
-    // Markers 0xD0–0xD9 have no length field (RST0–RST7, SOI, EOI)
-    if (marker >= 0xd0 && marker <= 0xd9) {
+    // Markers 0x00 and 0xFF are not actual markers (escaped 0xFF and padding)
+    if (marker === 0x00 || marker === 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    // Markers 0x01 and 0xD0–0xD9 have no length field (TEM, RST0–RST7, SOI, EOI)
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
       offset += 2;
       continue;
     }
