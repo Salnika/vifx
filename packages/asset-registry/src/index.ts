@@ -347,10 +347,9 @@ function readJpegDimensions(buffer: Uint8Array): AssetDimensions | undefined {
   const view = asDataView(buffer);
   let offset = 2;
 
-  while (offset + 9 < buffer.byteLength) {
-    const markerPrefix = buffer[offset];
-
-    if (markerPrefix !== 0xff) {
+  while (offset + 3 < buffer.byteLength) {
+    if (buffer[offset] !== 0xff) {
+      // Skip padding bytes between segments
       offset += 1;
       continue;
     }
@@ -361,13 +360,40 @@ function readJpegDimensions(buffer: Uint8Array): AssetDimensions | undefined {
       return undefined;
     }
 
+    // Markers 0x00 and 0xFF are not actual markers (escaped 0xFF and padding)
+    if (marker === 0x00 || marker === 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    // Markers 0x01 and 0xD0–0xD9 have no length field (TEM, RST0–RST7, SOI, EOI)
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+      offset += 2;
+      continue;
+    }
+
+    // Need at least 4 bytes to read the segment length
+    if (offset + 3 >= buffer.byteLength) {
+      return undefined;
+    }
+
     const segmentLength = view.getUint16(offset + 2);
+
+    // Guard against malformed segment lengths that would cause an infinite loop
+    if (segmentLength < 2) {
+      return undefined;
+    }
 
     if (
       [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(
         marker,
       )
     ) {
+      // SOF segment: need at least 9 bytes after the marker prefix
+      if (offset + 8 >= buffer.byteLength) {
+        return undefined;
+      }
+
       return {
         height: view.getUint16(offset + 5),
         width: view.getUint16(offset + 7),
