@@ -376,7 +376,11 @@ export async function startExpoDevServer(
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
   const entry = options.entry ?? "./index.js";
   const host = options.host ?? "127.0.0.1";
-  const port = options.port ?? 5173;
+  // When no port is provided, pass 0 to let the OS assign a free port.
+  // strictPort must only be true when the caller explicitly requested a specific port;
+  // otherwise Vite throws instead of falling back to the next available port.
+  const port = options.port ?? 0;
+  const strictPort = options.port !== undefined;
   const server = await createServer({
     appType: "custom",
     configFile: false,
@@ -398,14 +402,15 @@ export async function startExpoDevServer(
     server: {
       host,
       port,
-      strictPort: port !== 0,
+      strictPort,
     },
   });
 
-  await server.listen(port);
+  await server.listen();
 
+  // Use the address actually bound by the OS, not the requested port.
   const address = server.httpServer?.address();
-  const actualPort = typeof address === "object" && address ? address.port : port;
+  const actualPort = typeof address === "object" && address !== null ? address.port : port;
   const displayHost = host === "0.0.0.0" ? "127.0.0.1" : host;
 
   return {
