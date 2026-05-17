@@ -22,8 +22,8 @@ import type { CliResult } from "../types.ts";
 export const EXPO_HELP = `Usage:
   vifx expo audit [path] [--export-root <dir>] [--supported-sdk <sdk>] [--json]
   vifx expo dev [path] [--platform ios|android] [--config <file>] [--host <host>] [--port <number>] [--json]
-  vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--updates-url <url>] [--runtime-version <version>] [--json]
-  vifx expo serve [path] [--export-root <dir>] [--host <host>] [--port <number>] [--signing-key <file>] [--signing-key-id <id>] [--json]
+  vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--updates-url <url>] [--runtime-version <version>] [--created-at <timestamp>] [--json]
+  vifx expo serve [path] [--export-root <dir>] [--host <host>] [--port <number>] [--signing-key <file>] [--signing-key-id <id>] [--signing-alg <alg>] [--json]
 
 Audits the explicit Expo without Metro support contract. This is a support matrix and blocker report, not an Expo CLI replacement.
 
@@ -52,7 +52,7 @@ Options:
   --help      Show this message.
 `;
 
-const EXPO_EXPORT_HELP = `Usage: vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--updates-url <url>] [--runtime-version <version>] [--json]
+const EXPO_EXPORT_HELP = `Usage: vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--updates-url <url>] [--runtime-version <version>] [--created-at <timestamp>] [--json]
 
 Builds configured Expo Vifx targets and writes a bounded Expo export directory with bundles, source maps, assets, manifest, metadata, and optional Expo Updates v1 manifests.
 
@@ -67,7 +67,7 @@ Options:
   --help             Show this message.
 `;
 
-const EXPO_SERVE_HELP = `Usage: vifx expo serve [path] [--export-root <dir>] [--host <host>] [--port <number>] [--signing-key <file>] [--signing-key-id <id>] [--json]
+const EXPO_SERVE_HELP = `Usage: vifx expo serve [path] [--export-root <dir>] [--host <host>] [--port <number>] [--signing-key <file>] [--signing-key-id <id>] [--signing-alg <alg>] [--json]
 
 Serves a bounded Vifx-generated Expo export directory using the Expo Updates v1 JSON or multipart manifest request shape.
 
@@ -77,6 +77,7 @@ Options:
   --port            Port to bind the local Updates server to. Default: 8081.
   --signing-key     PEM private key used to sign manifest responses when requested.
   --signing-key-id  Optional key id emitted in the expo-signature header.
+  --signing-alg     Signing algorithm to advertise. Currently only rsa-v1_5-sha256.
   --json            Output machine-readable server details.
   --help            Show this message.
 `;

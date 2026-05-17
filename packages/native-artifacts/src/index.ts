@@ -1,5 +1,6 @@
 import { access, copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { createServer, type Server } from "node:http";
 import path from "node:path";
 import { VifxError } from "@vifx/errors";
 import type {
@@ -27,7 +28,12 @@ export interface VifxPreparedNativeAsset extends VifxPreparedNativeFile {
   name: string;
   scales: number[];
   type: string;
+  variants?: VifxPreparedNativeAssetVariant[];
   width?: number;
+}
+
+export interface VifxPreparedNativeAssetVariant extends VifxPreparedNativeFile {
+  scale: number;
 }
 
 export interface VifxNativeArtifactManifest {
@@ -84,6 +90,7 @@ export interface VifxNativeHost {
   gradleCommand?: string;
   hostRoot: string;
   iosProject?: string;
+  iosWorkspace?: string;
   platform: VifxNativePlatform;
   projectRoot: string;
   scheme?: string;
@@ -128,7 +135,10 @@ export interface NativeCommandExecutionResult {
   plan: VifxNativeCommandPlan;
   steps: Array<{
     command: string;
+    errorCode?: string;
+    errorMessage?: string;
     exitCode: number;
+    signal?: string;
     stderr: string;
     stdout: string;
   }>;
@@ -162,10 +172,32 @@ export interface NativeRuntimeTargetDiagnostics {
   platform: VifxNativePlatform;
 }
 
+export interface StartNativeBundleServerOptions {
+  host?: string;
+  manifestPath?: string;
+  platform: string;
+  port?: number;
+  projectRoot: string;
+}
+
+export interface VifxNativeBundleServer {
+  bundleUrl: string;
+  close: () => Promise<void>;
+  host: string;
+  manifestPath: string;
+  platform: VifxNativePlatform;
+  port: number;
+  projectRoot: string;
+  server: Server;
+  url: string;
+}
+
 const MANIFEST_FILE_NAME = "vifx-native-manifest.json";
 const DEFAULT_IOS_DESTINATION = "generic/platform=iOS Simulator";
 const DEFAULT_IOS_DEVICE = "booted";
 const DEFAULT_ANDROID_VARIANT = "Debug";
+const NATIVE_COMMAND_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
+const NATIVE_COMMAND_OUTPUT_TAIL_CHARS = 4000;
 
 function isNativePlatform(value: string): value is VifxNativePlatform {
   return value === "ios" || value === "android";
@@ -178,6 +210,10 @@ function relativeFrom(basePath: string, targetPath: string) {
 
 function resolveFromProject(projectRoot: string, filePath: string) {
   return path.isAbsolute(filePath) ? filePath : path.resolve(projectRoot, filePath);
+}
+
+function tailCommandOutput(value: string, maxChars = NATIVE_COMMAND_OUTPUT_TAIL_CHARS) {
+  return value.length <= maxChars ? value : value.slice(-maxChars);
 }
 
 async function ensureReadableFile(filePath: string, code: string, hint: string) {
@@ -231,6 +267,53 @@ function validateNativePlatform(value: string): VifxNativePlatform {
     hint: "Use platform ios or android.",
     docsPath: "/reference/native#native-artifacts",
   });
+}
+
+function parseAssetVariantScale(fileName: string) {
+  const extension = path.extname(fileName);
+  const baseName = path.basename(fileName, extension);
+  const match = baseName.match(/^(?<name>.+?)(?:@(?<scale>\d+(?:\.\d+)?)x)?$/u);
+  const name = match?.groups?.name;
+
+  if (!name) {
+    return null;
+  }
+
+  return {
+    name,
+    scale: match?.groups?.scale ? Number(match.groups.scale) : 1,
+  };
+}
+
+async function collectAssetVariants(options: {
+  asset: VifxBuildAssetArtifact;
+  projectRoot: string;
+}): Promise<Array<{ filePath: string; scale: number }>> {
+  const sourcePath = resolveFromProject(options.projectRoot, options.asset.sourceFilePath);
+  const sourceDirectory = path.dirname(sourcePath);
+  const sourceExtension = path.extname(sourcePath);
+  const sourceVariant = parseAssetVariantScale(path.basename(sourcePath));
+
+  if (!sourceVariant) {
+    return [];
+  }
+
+  const entries = await readdir(sourceDirectory, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isFile() && path.extname(entry.name) === sourceExtension)
+    .map((entry) => {
+      const variant = parseAssetVariantScale(entry.name);
+      if (!variant || variant.name !== sourceVariant.name) {
+        return null;
+      }
+
+      return {
+        filePath: path.join(sourceDirectory, entry.name),
+        scale: variant.scale,
+      };
+    })
+    .filter((variant): variant is { filePath: string; scale: number } => variant !== null)
+    .sort((left, right) => left.scale - right.scale || left.filePath.localeCompare(right.filePath));
 }
 
 async function readTextIfExists(filePath: string) {
@@ -331,6 +414,15 @@ async function detectIosHost(projectRoot: string): Promise<VifxNativeHost> {
   }
 
   const iosProject = path.join(iosRoot, xcodeProject);
+  const workspaceCandidates = entries
+    .filter((entry) => entry.isDirectory() && entry.name.endsWith(".xcworkspace"))
+    .map((entry) => entry.name)
+    .sort();
+  const matchingWorkspace =
+    workspaceCandidates.find(
+      (candidate) =>
+        path.basename(candidate, ".xcworkspace") === path.basename(xcodeProject, ".xcodeproj"),
+    ) ?? workspaceCandidates[0];
   const scheme = path.basename(xcodeProject, ".xcodeproj");
   const projectContents = await readTextIfExists(path.join(iosProject, "project.pbxproj"));
 
@@ -338,6 +430,7 @@ async function detectIosHost(projectRoot: string): Promise<VifxNativeHost> {
     bundleId: parseIosBundleId(projectContents),
     hostRoot: iosRoot,
     iosProject,
+    iosWorkspace: matchingWorkspace ? path.join(iosRoot, matchingWorkspace) : undefined,
     platform: "ios",
     projectRoot,
     scheme,
@@ -451,14 +544,32 @@ async function copyPreparedAsset(options: {
   outputRoot: string;
   projectRoot: string;
 }) {
-  const sourcePath = resolveFromProject(options.projectRoot, options.asset.emittedPath);
-  const outputPath = path.join(options.outputRoot, "assets", path.basename(sourcePath));
-  const file = await copyPreparedFile({
-    docsHint: "Run vifx build for the target platform before preparing native artifacts.",
-    outputPath,
+  const variants = await collectAssetVariants({
+    asset: options.asset,
     projectRoot: options.projectRoot,
-    sourcePath,
   });
+  const copiedVariants = await Promise.all(
+    variants.map(async (variant) => ({
+      ...(await copyPreparedFile({
+        docsHint: "Keep the source asset files available before preparing native artifacts.",
+        outputPath: path.join(options.outputRoot, "assets", path.basename(variant.filePath)),
+        projectRoot: options.projectRoot,
+        sourcePath: variant.filePath,
+      })),
+      scale: variant.scale,
+    })),
+  );
+  const emittedSourcePath = resolveFromProject(options.projectRoot, options.asset.emittedPath);
+  const canonicalVariant =
+    copiedVariants.find((variant) => variant.scale === 1) ?? copiedVariants[0];
+  const file =
+    canonicalVariant ??
+    (await copyPreparedFile({
+      docsHint: "Run vifx build for the target platform before preparing native artifacts.",
+      outputPath: path.join(options.outputRoot, "assets", path.basename(emittedSourcePath)),
+      projectRoot: options.projectRoot,
+      sourcePath: emittedSourcePath,
+    }));
 
   return {
     ...file,
@@ -468,6 +579,7 @@ async function copyPreparedAsset(options: {
     name: options.asset.name,
     scales: options.asset.scales,
     type: options.asset.type,
+    variants: copiedVariants,
     width: options.asset.width,
   } satisfies VifxPreparedNativeAsset;
 }
@@ -551,6 +663,228 @@ export async function prepareNativeArtifacts(
   return manifest;
 }
 
+function resolveNativeManifestPath(options: {
+  manifestPath?: string;
+  platform: VifxNativePlatform;
+  projectRoot: string;
+}) {
+  return path.resolve(
+    options.projectRoot,
+    options.manifestPath ?? path.join(".vifx", "native", options.platform, MANIFEST_FILE_NAME),
+  );
+}
+
+async function readPreparedNativeManifest(options: {
+  manifestPath?: string;
+  platform: VifxNativePlatform;
+  projectRoot: string;
+}) {
+  const resolvedManifestPath = resolveNativeManifestPath(options);
+  let manifestJsonSource: string;
+
+  try {
+    manifestJsonSource = await readFile(resolvedManifestPath, "utf8");
+  } catch (error) {
+    throw new VifxError({
+      code: "VIFX_NATIVE_MANIFEST_MISSING",
+      cause: error,
+      details: {
+        manifestPath: resolvedManifestPath,
+        platform: options.platform,
+        projectRoot: options.projectRoot,
+      },
+      docsPath: "/reference/native#native-artifacts",
+      hint: `Run: vifx native prepare --platform ${options.platform}`,
+      message: `Prepared native manifest was not found at "${relativeFrom(options.projectRoot, resolvedManifestPath)}".`,
+    });
+  }
+
+  try {
+    return JSON.parse(manifestJsonSource) as VifxNativeArtifactManifest;
+  } catch (error) {
+    throw new VifxError({
+      code: "VIFX_NATIVE_MANIFEST_INVALID",
+      cause: error,
+      details: {
+        manifestPath: resolvedManifestPath,
+      },
+      docsPath: "/reference/native#native-artifacts",
+      hint: "Re-run vifx native prepare to regenerate the manifest.",
+      message: `Prepared native manifest at "${relativeFrom(options.projectRoot, resolvedManifestPath)}" is not valid JSON.`,
+    });
+  }
+}
+
+function stripTrailingSlash(value: string) {
+  return value.replace(/\/+$/u, "");
+}
+
+function contentTypeForFilePath(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase();
+
+  switch (extension) {
+    case ".bundle":
+    case ".js":
+      return "application/javascript; charset=utf-8";
+    case ".json":
+    case ".map":
+      return "application/json; charset=utf-8";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".gif":
+      return "image/gif";
+    case ".svg":
+      return "image/svg+xml";
+    case ".webp":
+      return "image/webp";
+    case ".ttf":
+      return "font/ttf";
+    case ".otf":
+      return "font/otf";
+    case ".mp4":
+      return "video/mp4";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function createAssetRequestPathMap(manifest: VifxNativeArtifactManifest) {
+  const assetRequestPathMap = new Map<string, string>();
+
+  for (const asset of manifest.assets) {
+    const basePath = stripTrailingSlash(asset.httpServerLocation);
+    const variants = asset.variants && asset.variants.length > 0 ? asset.variants : [asset];
+
+    for (const variant of variants) {
+      assetRequestPathMap.set(
+        `${basePath}/${path.basename(variant.outputPath)}`,
+        variant.outputPath,
+      );
+    }
+
+    assetRequestPathMap.set(`${basePath}/${asset.name}.${asset.type}`, asset.outputPath);
+  }
+
+  return assetRequestPathMap;
+}
+
+export async function startNativeBundleServer(
+  options: StartNativeBundleServerOptions,
+): Promise<VifxNativeBundleServer> {
+  const platform = validateNativePlatform(options.platform);
+  const projectRoot = path.resolve(options.projectRoot);
+  const host = options.host ?? "127.0.0.1";
+  const manifest = await readPreparedNativeManifest({
+    manifestPath: options.manifestPath,
+    platform,
+    projectRoot,
+  });
+  const assetRequestPathMap = createAssetRequestPathMap(manifest);
+
+  const server = createServer(async (request, response) => {
+    const method = request.method ?? "GET";
+    if (method !== "GET" && method !== "HEAD") {
+      response.writeHead(405, {
+        Allow: "GET, HEAD",
+        "Content-Type": "text/plain; charset=utf-8",
+      });
+      response.end("Method Not Allowed");
+      return;
+    }
+
+    const requestUrl = new URL(request.url ?? "/", "http://vifx.local");
+    const pathname = requestUrl.pathname;
+
+    if (pathname === "/status") {
+      response.writeHead(200, {
+        "Cache-Control": "no-store",
+        "Content-Type": "text/plain; charset=utf-8",
+      });
+
+      if (method === "HEAD") {
+        response.end();
+        return;
+      }
+
+      response.end("packager-status:running");
+      return;
+    }
+
+    const relativeFilePath = pathname.endsWith(".bundle")
+      ? manifest.bundle.outputPath
+      : pathname.endsWith(".map")
+        ? manifest.sourceMap?.outputPath
+        : assetRequestPathMap.get(pathname);
+
+    if (!relativeFilePath) {
+      response.writeHead(404, {
+        "Content-Type": "text/plain; charset=utf-8",
+      });
+      response.end("Not Found");
+      return;
+    }
+
+    try {
+      const absoluteFilePath = path.resolve(projectRoot, relativeFilePath);
+      const body = await readFile(absoluteFilePath);
+      response.writeHead(200, {
+        "Cache-Control": "no-store",
+        "Content-Type": contentTypeForFilePath(absoluteFilePath),
+      });
+
+      if (method === "HEAD") {
+        response.end();
+        return;
+      }
+
+      response.end(body);
+    } catch {
+      response.writeHead(404, {
+        "Content-Type": "text/plain; charset=utf-8",
+      });
+      response.end("Not Found");
+    }
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(options.port ?? 8081, host, () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  const port =
+    typeof address === "object" && address !== null ? address.port : (options.port ?? 8081);
+  const displayHost = host === "0.0.0.0" ? "127.0.0.1" : host;
+
+  return {
+    bundleUrl: `http://${displayHost}:${port}/.expo/.virtual-metro-entry.bundle?platform=${platform}&dev=true&minify=false`,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      }),
+    host,
+    manifestPath: manifest.manifestPath,
+    platform,
+    port,
+    projectRoot,
+    server,
+    url: `http://${displayHost}:${port}`,
+  };
+}
+
 export async function detectNativeHost(options: DetectNativeHostOptions): Promise<VifxNativeHost> {
   const projectRoot = path.resolve(options.projectRoot);
   const platform = validateNativePlatform(options.platform);
@@ -564,10 +898,7 @@ function checkPreparedManifest(options: {
   platform: VifxNativePlatform;
   projectRoot: string;
 }) {
-  const manifestPath = path.resolve(
-    options.projectRoot,
-    options.manifestPath ?? path.join(".vifx", "native", options.platform, MANIFEST_FILE_NAME),
-  );
+  const manifestPath = resolveNativeManifestPath(options);
 
   return pathExists(manifestPath).then((exists) => {
     options.checks.push(
@@ -834,13 +1165,14 @@ function createIosCommandPlan(options: {
     label: "iOS project",
     value: options.host.iosProject,
   });
+  const iosWorkspace = options.host.iosWorkspace;
 
   if (options.action === "build") {
     return [
       {
         args: [
-          "-project",
-          iosProject,
+          iosWorkspace ? "-workspace" : "-project",
+          iosWorkspace ?? iosProject,
           "-scheme",
           requiredScheme,
           "-configuration",
@@ -850,6 +1182,7 @@ function createIosCommandPlan(options: {
           "-derivedDataPath",
           path.join(options.host.projectRoot, ".vifx", "native-build", "ios"),
           "build",
+          "-quiet",
         ],
         command: "xcodebuild",
         cwd: options.host.projectRoot,
@@ -1009,22 +1342,38 @@ export function runNativeCommandPlan(plan: VifxNativeCommandPlan): NativeCommand
     const result = spawnSync(step.command, step.args, {
       cwd: step.cwd,
       encoding: "utf8",
+      maxBuffer: NATIVE_COMMAND_MAX_BUFFER_BYTES,
     });
-    const exitCode = result.status ?? 1;
+    const stdout = result.stdout ?? "";
+    const stderr = result.stderr ?? "";
+    const errorCode =
+      result.error && typeof result.error === "object" && "code" in result.error
+        ? String(result.error.code)
+        : undefined;
+    const errorMessage = result.error?.message;
+    const exitCode = result.status ?? (result.error ? 1 : 0);
     steps.push({
       command: [step.command, ...step.args].join(" "),
+      errorCode,
+      errorMessage,
       exitCode,
-      stderr: result.stderr ?? "",
-      stdout: result.stdout ?? "",
+      signal: result.signal ?? undefined,
+      stderr,
+      stdout,
     });
 
-    if (exitCode !== 0) {
+    if (result.error || exitCode !== 0) {
       throw new VifxError({
         code: "VIFX_NATIVE_COMMAND_FAILED",
         details: {
           command: step.command,
           exitCode,
           platform: plan.platform,
+          ...(errorCode ? { errorCode } : {}),
+          ...(errorMessage ? { errorMessage } : {}),
+          ...(result.signal ? { signal: result.signal } : {}),
+          ...(stderr === "" ? {} : { stderrTail: tailCommandOutput(stderr) }),
+          ...(stdout === "" ? {} : { stdoutTail: tailCommandOutput(stdout) }),
         },
         docsPath: "/reference/native#native-commands",
         hint: "Review the native toolchain output, fix the host project issue, and rerun the command.",
@@ -1040,11 +1389,17 @@ export function runNativeCommandPlan(plan: VifxNativeCommandPlan): NativeCommand
 }
 
 function defaultCommandExists(command: string) {
-  const result = spawnSync(command, ["--version"], {
-    stdio: "ignore",
-  });
+  for (const args of [["--version"], ["-version"]]) {
+    const result = spawnSync(command, args, {
+      stdio: "ignore",
+    });
 
-  return result.status === 0;
+    if (result.status === 0) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function defaultRunCommand(command: string, args: string[]): NativeRuntimeCommandResult {

@@ -648,7 +648,7 @@ Implemented against exported directories so the package can normalize bundles, s
 - Generate bounded export output from Vifx bundle artifacts.
 - Generate bounded Expo Updates v1 manifests that reference the exported bundles and assets.
 - Serve bounded Expo Updates v1 JSON or multipart manifest responses and referenced bundle or asset files.
-- Sign bounded JSON manifest responses with `expo-signature` when a client sends `expo-expect-signature` and signing is configured.
+- Sign bounded manifest responses with `expo-signature` when a client sends `expo-expect-signature` and signing is configured.
 - Normalize update manifests and bundle or asset reports.
 - Report Expo without Metro workflow status for dev server, build, export, Router, native iOS, native Android, and Updates.
 - Explain what Vifx understands versus what remains unsupported.

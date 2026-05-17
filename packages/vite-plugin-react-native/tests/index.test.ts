@@ -468,3 +468,88 @@ test("buildReactNativeBundle accepts a package-style entry and transforms JSX in
 
   expect(bundleSource).toContain("package jsx entry");
 });
+
+test("buildReactNativeBundle can opt out of React and React Native shims", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-rn-plugin-real-runtime-"));
+
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify(
+      {
+        dependencies: {
+          react: "19.1.0",
+          "react-native": "0.81.0",
+        },
+        name: "real-runtime-opt-out",
+      },
+      null,
+      2,
+    ),
+  );
+
+  const reactRoot = path.join(projectRoot, "node_modules", "react");
+  const reactNativeRoot = path.join(projectRoot, "node_modules", "react-native");
+  await mkdir(reactRoot, { recursive: true });
+  await mkdir(reactNativeRoot, { recursive: true });
+
+  await writeFile(
+    path.join(reactRoot, "package.json"),
+    JSON.stringify({ name: "react", main: "index.js" }, null, 2),
+  );
+  await writeFile(
+    path.join(reactRoot, "index.js"),
+    [
+      "export function createRef() {",
+      "  return { current: null };",
+      "}",
+      "export class PureComponent {}",
+      "const React = { createRef, PureComponent };",
+      "export default React;",
+      "",
+    ].join("\n"),
+  );
+
+  await writeFile(
+    path.join(reactNativeRoot, "package.json"),
+    JSON.stringify({ name: "react-native", main: "index.js" }, null, 2),
+  );
+  await writeFile(
+    path.join(reactNativeRoot, "index.js"),
+    [
+      'console.log("real react-native runtime active");',
+      'export const NativeModules = { EXDevLauncher: { manifestString: "{}" } };',
+      "export function Text() {",
+      "  return null;",
+      "}",
+      'export const Platform = { OS: "ios", select(value) { return value?.ios ?? value?.default ?? null; } };',
+      "const ReactNative = { NativeModules, Platform, Text };",
+      "export default ReactNative;",
+      "",
+    ].join("\n"),
+  );
+
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import { createRef, PureComponent } from "react";',
+      'import { NativeModules, Platform, Text } from "react-native";',
+      'console.log("runtime exports", createRef(), typeof PureComponent, NativeModules.EXDevLauncher, Platform.OS, Text);',
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    outDir: ".vifx/helper-ios-real-runtime",
+    platform: "ios",
+    projectRoot,
+    shimJsxRuntime: false,
+    shimReact: false,
+    shimReactNative: false,
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+
+  expect(bundleSource).toContain("real react-native runtime active");
+  expect(bundleSource).toContain("runtime exports");
+  expect(bundleSource).not.toContain("\\0vifx:shim:react-native");
+});

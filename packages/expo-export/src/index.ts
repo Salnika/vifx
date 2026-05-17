@@ -424,12 +424,12 @@ function selectManifestResponseFormat(acceptHeader: string | undefined) {
   );
   const acceptsMultipart = acceptedTypes.some((value) => value.startsWith("multipart/mixed"));
 
-  if (acceptsJson || acceptsAny) {
-    return "json";
-  }
-
   if (acceptsMultipart) {
     return "multipart";
+  }
+
+  if (acceptsJson || acceptsAny) {
+    return "json";
   }
 
   return null;
@@ -1080,6 +1080,8 @@ export async function evaluateExpoNoMetroContract(
     warnings.push("React Native dependency was not found in package.json.");
   }
 
+  const hasBoundedExpoNativeIosSupport = Boolean(expoVersion && reactNativeVersion);
+
   const workflows: VifxExpoNoMetroWorkflowReport[] = [
     createWorkflow({
       blockers:
@@ -1152,15 +1154,29 @@ export async function evaluateExpoNoMetroContract(
       title: "Expo Router without Metro",
     }),
     createWorkflow({
-      blockers: [
-        "Expo iOS native integration with Vifx bundles has not executed build, install, or launch gates.",
+      blockers: hasBoundedExpoNativeIosSupport
+        ? [
+            "The current Expo iOS path is bounded to inferred Debug simulator builds with local Expo CLI prebuild, CocoaPods, Xcode, simctl, and a local Vifx bundle server; device, release, and broader parity remain unimplemented.",
+          ]
+        : [
+            "Add Expo, React Native, Vifx, and Vite experiment configs before claiming Expo iOS runtime coverage.",
+          ],
+      evidence: [
+        ...(expoVersion ? [`Expo dependency detected: ${expoVersion}.`] : []),
+        ...(reactNativeVersion ? [`React Native dependency detected: ${reactNativeVersion}.`] : []),
+        ...(hasVifxConfig ? ["Vifx config detected."] : []),
+        ...(hasViteConfig ? ["Vifx-owned Vite config detected."] : []),
+        ...(hasBoundedExpoNativeIosSupport
+          ? [
+              "`vifx native run` can infer Expo iOS bundle targets, generate a prebuild host when needed, build a Debug simulator app, install it with simctl, launch it, and keep a local bundle server alive.",
+            ]
+          : []),
       ],
-      evidence: [],
       id: "native-ios",
       notes: [
-        "Program B native diagnostics exist, but Expo native integration remains separate work.",
+        "This bounded path does not replace Expo Go, dev-client protocol parity, devices, Android, release builds, or wider Expo runtime support.",
       ],
-      status: "blocked",
+      status: hasBoundedExpoNativeIosSupport ? "partial" : "blocked",
       title: "Expo iOS runtime without Metro",
     }),
     createWorkflow({

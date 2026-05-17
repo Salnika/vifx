@@ -257,11 +257,13 @@ vifx expo serve ./path/to/expo-app
 vifx expo serve ./path/to/expo-app --export-root dist/expo
 vifx expo serve ./path/to/expo-app --host 0.0.0.0 --port 8081
 vifx expo serve ./path/to/expo-app --signing-key ./private.pem --signing-key-id root
+vifx expo serve ./path/to/expo-app --signing-key ./private.pem --signing-key-id root --signing-alg rsa-v1_5-sha256
 vifx expo serve ./path/to/expo-app --json
 ```
 
 - Serves `GET /`, `/manifest`, or `/update` as an Updates v1 JSON manifest response, or as a `multipart/mixed` manifest part when requested, with `expo-protocol-version: 1`, `expo-platform`, and `expo-runtime-version`.
-- `--signing-key` enables bounded `expo-signature` response headers for clients that send `expo-expect-signature`; the supported algorithm is `rsa-v1_5-sha256`.
+- `--signing-key` enables bounded `expo-signature` response headers for clients that send `expo-expect-signature`.
+- `--signing-alg` currently supports `rsa-v1_5-sha256` only and defaults to that value when omitted.
 - Serves referenced bundles and assets from the same export root with stable content types and immutable cache headers for asset-like files.
 - Does not implement directive parts, rollback directives, native client execution, or EAS Update parity.
 
@@ -338,7 +340,7 @@ vifx native doctor ./path/to/project --platform ios --manifest .vifx/native/ios/
 
 ## `vifx native build|install|launch`
 
-Status: Program B command planning.
+Status: Program B command planning plus bounded execution.
 
 Detect an iOS or Android host and create deterministic native command plans. Use `--dry-run` to inspect the commands without executing local toolchains.
 
@@ -348,16 +350,16 @@ vifx native install ./path/to/project --platform android --dry-run --json
 vifx native launch ./path/to/project --platform ios --bundle-id dev.vifx.app --dry-run
 ```
 
-- iOS build plans use `xcodebuild` with `-derivedDataPath .vifx/native-build/ios`.
+- iOS build plans use `xcodebuild` with `-derivedDataPath .vifx/native-build/ios`, prefer a matching CocoaPods workspace when present, and append `-quiet`.
 - iOS install and launch plans use `xcrun simctl`.
 - Android build and install plans use `android/gradlew` when available, otherwise `gradle`.
 - Android launch plans use `adb shell monkey -p <applicationId> 1`.
-- Without `--dry-run`, these commands execute the planned host command and fail with `VIFX_NATIVE_COMMAND_FAILED` if the toolchain returns a non-zero exit code.
-- This is not yet full Program B completion because the repo still lacks production-grade native hosts and simulator/emulator/device execution gates.
+- Without `--dry-run`, these commands execute the planned host command and fail with `VIFX_NATIVE_COMMAND_FAILED` if the toolchain returns a non-zero exit code or spawn failure. Error details include the exit code and available output tail metadata.
+- This is not yet full Program B completion because the repo still lacks production-grade Android coverage, device signing proof, and broader simulator, emulator, and device execution gates.
 
 ## `vifx native run`
 
-Status: Program B dry-run orchestration.
+Status: Program B bounded execution orchestration.
 
 Prepare native artifacts, validate host and runtime readiness, and plan build, install, and launch in one command. Use `--dry-run` for the maintained validation path.
 
@@ -371,7 +373,8 @@ vifx native run ./path/to/project --platform ios --no-prepare --dry-run
 - `--no-prepare` skips artifact preparation and validates the existing prepared manifest.
 - The JSON output includes preparation results, host validation, runtime target diagnostics, and build/install/launch plans.
 - Without `--dry-run`, it executes the planned host commands in build, install, launch order.
-- This is orchestration coverage only; real signing, simulator, emulator, and device execution gates remain Program B work.
+- On the current inferred Expo iOS no-Metro path, `native run` can prebuild the host, install CocoaPods, build the simulator app, install it, launch it, and keep the local bundle server alive until the process exits.
+- The current repository proof is bounded to Expo SDK 54 iOS Debug simulator builds; real signing, Android execution, device execution, and broader native parity remain Program B work.
 
 ## Repository Playground Commands
 

@@ -29,14 +29,14 @@ test("evaluateExpoNoMetroContract makes unsupported Expo without Metro workflows
     projectRoot: path.join(FIXTURE_ROOT, "expo-basic"),
   });
 
-  expect(result.decision).toBe("blocked");
+  expect(result.decision).toBe("partial");
   expect(result.expoVersion).toBe("~54.0.0");
   expect(result.workflows.map((workflow) => [workflow.id, workflow.status])).toEqual([
     ["dev-server", "blocked"],
     ["build", "blocked"],
     ["export", "blocked"],
     ["router", "blocked"],
-    ["native-ios", "blocked"],
+    ["native-ios", "partial"],
     ["native-android", "blocked"],
     ["updates", "blocked"],
   ]);
@@ -79,8 +79,19 @@ test("evaluateExpoNoMetroContract records bounded Vifx, router, and export evide
   expect(projectResult.workflows.find((workflow) => workflow.id === "router")?.status).toBe(
     "partial",
   );
+  expect(projectResult.workflows.find((workflow) => workflow.id === "native-ios")?.status).toBe(
+    "partial",
+  );
+  expect(projectResult.workflows.find((workflow) => workflow.id === "native-android")?.status).toBe(
+    "blocked",
+  );
   expect(result.workflows.find((workflow) => workflow.id === "export")?.status).toBe(
     "inspect-only",
+  );
+  expect(
+    projectResult.workflows.find((workflow) => workflow.id === "native-ios")?.evidence,
+  ).toContain(
+    "`vifx native run` can infer Expo iOS bundle targets, generate a prebuild host when needed, build a Debug simulator app, install it with simctl, launch it, and keep a local bundle server alive.",
   );
 });
 
@@ -277,6 +288,20 @@ test("writeExpoExport generates inspectable bundles, manifests, metadata, and as
     expect(multipartSignature).toBeDefined();
     expect(multipartVerifier.verify(publicKey, Buffer.from(multipartSignature!, "base64url"))).toBe(
       true,
+    );
+
+    const preferredMultipartResponse = await fetch(server.url, {
+      headers: {
+        accept: "multipart/mixed, application/expo+json",
+        "expo-platform": "ios",
+        "expo-protocol-version": "1",
+        "expo-runtime-version": "1.0.0",
+      },
+    });
+
+    expect(preferredMultipartResponse.status).toBe(200);
+    expect(preferredMultipartResponse.headers.get("content-type")).toBe(
+      "multipart/mixed; boundary=vifx-expo-updates",
     );
 
     const bundleResponse = await fetch(`${server.url}/ios/index.bundle`);

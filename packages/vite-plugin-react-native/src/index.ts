@@ -882,6 +882,22 @@ function normalizeBabelInPackages(packages?: string[]) {
   return dedupe((packages ?? []).map((value) => value.trim()).filter(Boolean));
 }
 
+function matchesNodeModulePackagePattern(id: string, packagePatterns: string[]) {
+  const normalizedId = toPosixPath(stripQuery(id));
+
+  return packagePatterns.some((packagePattern) => {
+    if (!normalizedId.includes("/node_modules/")) {
+      return false;
+    }
+
+    if (packagePattern.endsWith("-") || packagePattern.endsWith("/")) {
+      return normalizedId.includes(`/node_modules/${packagePattern}`);
+    }
+
+    return normalizedId.includes(`/node_modules/${packagePattern}/`);
+  });
+}
+
 async function pathExists(filePath: string) {
   try {
     await access(filePath);
@@ -929,10 +945,7 @@ function shouldTransformJsxFile(id: string, jsxInPackages: string[]) {
     return false;
   }
 
-  const normalizedId = toPosixPath(stripQuery(id));
-  return jsxInPackages.some((packageName) =>
-    normalizedId.includes(`/node_modules/${packageName}/`),
-  );
+  return matchesNodeModulePackagePattern(id, jsxInPackages);
 }
 
 function shouldTransformExpoPackageSource(
@@ -996,10 +1009,7 @@ function shouldTransformWithProjectBabel(id: string, babelInPackages: string[]) 
     return false;
   }
 
-  const normalizedId = toPosixPath(stripQuery(id));
-  return babelInPackages.some((packageName) =>
-    normalizedId.includes(`/node_modules/${packageName}/`),
-  );
+  return matchesNodeModulePackagePattern(id, babelInPackages);
 }
 
 async function loadProjectBabelRuntime(projectRoot: string): Promise<ProjectBabelRuntime | null> {

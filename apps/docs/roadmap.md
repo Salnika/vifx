@@ -3,8 +3,8 @@
 ## Snapshot
 
 - Date: `2026-05-17`
-- Current phase: `Program C bounded Expo dev and export generation started`
-- Summary: Milestones 0 through 7 are implemented first pass in this repository: foundations, compatibility and inspection, resolver and assets, migration codemods, source-map tooling, Hermes bytecode workflows, `vifx build`, `vifx run`, experimental React Native and Expo Vite plugins, maintained bare React Native and Expo playground validation, native artifact preparation for future hosts, a bounded `expo-router/entry` browser preview path, bounded `vifx expo dev` browser serving with Vite HMR, inspect-first Expo export analysis, bounded Vifx export generation, and bounded Expo Updates v1 manifest/local serving/signing. The proof remains bounded to controlled builds, playground validation, and fixture-backed evidence.
+- Current phase: `Program C bounded Expo dev, export, and iOS simulator execution started`
+- Summary: Milestones 0 through 7 are implemented first pass in this repository: foundations, compatibility and inspection, resolver and assets, migration codemods, source-map tooling, Hermes bytecode workflows, `vifx build`, `vifx run`, experimental React Native and Expo Vite plugins, maintained bare React Native and Expo playground validation, native artifact preparation for future hosts, a bounded `expo-router/entry` browser preview path, bounded `vifx expo dev` browser serving with Vite HMR, inspect-first Expo export analysis, bounded Vifx export generation, bounded Expo Updates v1 manifest/local serving/signing, and a bounded Expo SDK 54 iOS Debug simulator build/install/launch path through `vifx native run`. The proof remains bounded to controlled builds, playground validation, fixture-backed evidence, and one executed simulator path.
 
 ## Milestones
 
@@ -113,9 +113,9 @@ Inspect Expo export output and compare it to Vifx understanding.
 
 ### Program B - Native Support
 
-Status: Started.
+Status: Started with bounded iOS execution.
 
-The first concrete native support slices now prepare native-ready artifacts from Vifx bundle outputs and plan native host lifecycle commands without executing local toolchains unless requested.
+The first concrete native support slices now prepare native-ready artifacts from Vifx bundle outputs, plan native host lifecycle commands, and execute a bounded Expo iOS Debug simulator path when explicitly requested.
 
 - `@vifx/native-artifacts`
 - `vifx native prepare`
@@ -132,19 +132,20 @@ The first concrete native support slices now prepare native-ready artifacts from
 - static signing marker diagnostics
 - provisioning profile and signing material readiness diagnostics
 - dry-run prepare, diagnose, build, install, and launch orchestration
+- bounded Expo SDK 54 iOS Debug simulator build, install, and launch through `vifx native run`
 
-Still missing: executable production-grade iOS and Android host builds, executed native build/install/launch validation, provisioning profile validation, simulator/emulator/device validation, and complete native docs.
+Still missing: production-grade iOS and Android host builds beyond the bounded Expo iOS Debug simulator path, executed Android build/install/launch validation, provisioning profile validation, broader simulator/emulator/device validation, and complete native docs.
 
 ### Program C - Expo Without Metro
 
-Status: Contract audit, bounded dev serving, and bounded generation started.
+Status: Contract audit, bounded dev serving, bounded generation, and bounded iOS simulator execution started.
 
-The project now has an executable contract report and CLI audit for Expo without Metro workflows, plus bounded browser dev serving and export generation slices. It does not yet implement native Expo development parity.
+The project now has an executable contract report and CLI audit for Expo without Metro workflows, plus bounded browser dev serving, export generation, and a bounded iOS simulator execution slice. It does not yet implement native Expo development parity.
 
 - Dev server: partial browser-only Vite HMR via `vifx expo dev`; no Expo Go, native dev-client protocol, device runtime, or Fast Refresh parity
 - Build: partial only for configured Vifx bundle experiments
 - Export: partial bounded generation for Vifx bundle, source-map, asset, manifest, metadata, and optional Updates manifest output
 - Router: partial only for bounded browser preview experiments
-- Native iOS and Android: blocked
-- Updates: partial only for bounded Expo Updates v1 manifests and local JSON/asset serving with optional response signing; multipart directives, EAS parity, and native execution remain blocked
-- CLI: `vifx expo dev` starts a bounded browser dev server, `vifx expo export` generates bounded export output and optional Updates manifests, `vifx expo serve` serves that export locally, and `vifx expo audit` reports the current contract matrix and blockers; `pnpm playground:expo` executes export and audit; it does not replace Expo CLI.
+- Native iOS and Android: partial only for inferred Expo iOS Debug simulator builds with generated prebuild host, local bundle server, and `simctl` install or launch; Android, devices, and broader parity remain blocked
+- Updates: partial only for bounded Expo Updates v1 manifests and local JSON or multipart manifest serving with optional response signing; multipart directives, EAS parity, and native execution remain blocked
+- CLI: `vifx expo dev` starts a bounded browser dev server, `vifx expo export` generates bounded export output and optional Updates manifests, `vifx expo serve` serves that export locally, and `vifx expo audit` reports the current contract matrix and blockers; `pnpm playground:expo` now validates export, local Updates serving, and audit, and it still does not replace Expo CLI.

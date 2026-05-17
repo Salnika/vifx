@@ -7,11 +7,12 @@
     "vifx:doctor": "vifx doctor .",
     "vifx:inspect": "vifx inspect .",
     "vifx:expo:export": "vifx expo export . --out-dir dist/expo --updates-url http://localhost:8081 --runtime-version 1.0.0",
+    "vifx:expo:serve:validate": "node ./scripts/validate-updates-server.mjs",
     "vifx:expo:audit": "vifx expo audit . --export-root dist/expo",
     "vifx:build:ios": "vifx build . --platform ios",
     "vifx:build:android": "vifx build . --platform android",
     "vite:build:ios": "VIFX_PLATFORM=ios vp build --config vite.config.vifx.ts",
-    "validate": "EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:doctor && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:inspect && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:expo:export && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:expo:audit && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:build:ios && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:build:android && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vite:build:ios"
+    "validate": "EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:doctor && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:inspect && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:expo:export && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:expo:serve:validate && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:expo:audit && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:build:ios && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vifx:build:android && EXPO_PUBLIC_VIFX_PLAYGROUND=expo pnpm run vite:build:ios"
   },
   "dependencies": {
     "expo": "file:./vendor/expo",

@@ -63,5 +63,5 @@ console.log(contract.decision);
 ## Boundaries
 
 - Generated exports cover Vifx bundles, source maps, assets, `manifest.json`, `metadata.json`, and optional Expo Updates v1 manifest JSON.
-- The local Updates server serves bounded JSON manifest responses, optional `expo-signature` headers, and referenced files only; it is not a multipart directive server, native execution gate, or EAS replacement.
+- The local Updates server serves bounded JSON or multipart manifest responses, optional `expo-signature` headers, and referenced files only; it is not a multipart directive server, native execution gate, or EAS replacement.
 - Dev server parity, native Expo runtime, and native Updates validation remain out of scope.

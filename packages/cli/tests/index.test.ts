@@ -5,6 +5,7 @@ import { chmod } from "node:fs/promises";
 import { cp } from "node:fs/promises";
 import { expect, test } from "vite-plus/test";
 import { executeCli } from "../src/index.ts";
+import { resolveNativeTargets } from "../src/lib/native-targets.ts";
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "../../../fixtures");
 
@@ -78,7 +79,7 @@ test("expo audit --json returns the no-Metro contract matrix", async () => {
   };
 
   expect(result.exitCode).toBe(0);
-  expect(report.decision).toBe("blocked");
+  expect(report.decision).toBe("partial");
   expect(report.expoVersion).toBe("~54.0.0");
   expect(report.supportedExpoSdk).toBe("54");
   expect(report.workflows.map((workflow) => [workflow.id, workflow.status])).toEqual([
@@ -86,7 +87,7 @@ test("expo audit --json returns the no-Metro contract matrix", async () => {
     ["build", "blocked"],
     ["export", "blocked"],
     ["router", "blocked"],
-    ["native-ios", "blocked"],
+    ["native-ios", "partial"],
     ["native-android", "blocked"],
     ["updates", "blocked"],
   ]);
@@ -421,6 +422,97 @@ test("native prepare --json builds and writes native artifact manifests", async 
   ).toContain("rn ios bundle");
 });
 
+test("native prepare infers Expo targets when vifx.config.ts is missing", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-expo-infer-"));
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify(
+      {
+        dependencies: {
+          expo: "~54.0.0",
+          "react-native": "0.81.0",
+        },
+        name: "native-expo-infer",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(projectRoot, "app.json"),
+    JSON.stringify({ expo: { name: "Native Expo Infer", slug: "native-expo-infer" } }, null, 2),
+  );
+  await writeFile(path.join(projectRoot, "index.js"), "console.log('native expo infer');\n");
+
+  const result = await executeCli([
+    "native",
+    "prepare",
+    projectRoot,
+    "--platform",
+    "ios",
+    "--json",
+  ]);
+  const parsed = JSON.parse(result.stdout) as {
+    configFile: string | null;
+    configKind: string;
+    projectRoot: string;
+    results: Array<{
+      manifest: {
+        bundle: { outputPath: string };
+        platform: string;
+      };
+    }>;
+    viteMode: string;
+  };
+
+  expect(result.exitCode).toBe(0);
+  expect(parsed.configFile).toBeNull();
+  expect(parsed.configKind).toBe("inferred-expo");
+  expect(parsed.viteMode).toBe("expo");
+  expect(parsed.results[0]?.manifest.platform).toBe("ios");
+  expect(parsed.results[0]?.manifest.bundle.outputPath).toBe(".vifx/native/ios/main.jsbundle");
+});
+
+test("resolveNativeTargets disables React shims for inferred Expo native builds", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-expo-targets-"));
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify(
+      {
+        dependencies: {
+          expo: "~54.0.0",
+          "expo-router": "~6.0.0",
+          "react-native": "0.81.0",
+        },
+        name: "native-expo-targets",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(projectRoot, "app.json"),
+    JSON.stringify({ expo: { name: "Native Expo Targets", slug: "native-expo-targets" } }, null, 2),
+  );
+  await mkdir(path.join(projectRoot, "app"), { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "app", "index.tsx"),
+    "export default function App() { return null; }\n",
+  );
+
+  const resolved = await resolveNativeTargets({
+    projectRoot,
+  });
+
+  expect(resolved?.configKind).toBe("inferred-expo");
+  expect(resolved?.targets[0]?.shimJsxRuntime).toBe(false);
+  expect(resolved?.targets[0]?.shimReact).toBe(false);
+  expect(resolved?.targets[0]?.shimReactNative).toBe(false);
+  expect(resolved?.targets[0]?.babelInPackages).toContain("expo-");
+  expect(resolved?.targets[0]?.babelInPackages).toContain("react-native-");
+  expect(resolved?.targets[0]?.babelInPackages).toContain("@react-native");
+});
+
 test("native build --dry-run --json plans an iOS host build without executing xcodebuild", async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-build-ios-"));
   const targetPath = path.join(tempRoot, "rn-bare-basic");
@@ -614,6 +706,164 @@ test("native run --dry-run --json prepares, diagnoses, and plans the full lifecy
   expect(parsed.steps.build.steps[0]?.command).toBe("xcodebuild");
   expect(parsed.steps.install.steps[0]?.command).toBe("xcrun");
   expect(parsed.steps.launch.steps[0]?.command).toBe("xcrun");
+});
+
+test("native run --dry-run uses the Expo iOS debug-server strategy when the host already exists", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-run-expo-"));
+  const targetPath = path.join(tempRoot, "expo-basic");
+
+  await mkdir(targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "package.json"),
+    JSON.stringify(
+      {
+        dependencies: {
+          expo: "~54.0.0",
+          "react-native": "0.81.0",
+        },
+        name: "native-run-expo",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(targetPath, "app.json"),
+    JSON.stringify({ expo: { name: "Native Run Expo", slug: "native-run-expo" } }, null, 2),
+  );
+  await writeFile(path.join(targetPath, "index.js"), "console.log('native run expo');\n");
+  await mkdir(path.join(targetPath, "ios", "ExpoHost.xcodeproj"), { recursive: true });
+  await writeFile(
+    path.join(targetPath, "ios", "ExpoHost.xcodeproj", "project.pbxproj"),
+    [
+      "PRODUCT_BUNDLE_IDENTIFIER = dev.vifx.expo;",
+      "DEVELOPMENT_TEAM = ABC123TEAM;",
+      "CODE_SIGN_STYLE = Automatic;",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(path.join(targetPath, "ios", "Podfile"), "platform :ios, '15.1'\n");
+  await writeFile(path.join(targetPath, "ios", "Podfile.lock"), "PODS:\n- React\n");
+  await mkdir(path.join(targetPath, "ios", "Pods"), { recursive: true });
+  await writeFile(path.join(targetPath, "ios", "Pods", "Manifest.lock"), "PODS:\n- React\n");
+
+  const result = await executeCli([
+    "native",
+    "run",
+    targetPath,
+    "--platform",
+    "ios",
+    "--out-dir",
+    ".vifx/native-run/ios",
+    "--dry-run",
+    "--json",
+  ]);
+  const parsed = JSON.parse(result.stdout) as {
+    bundleServer: { bundleUrl: string; statusUrl: string; url: string };
+    dryRun: boolean;
+    hostBootstrap: Array<{ command: string }>;
+    hostValidation: { status: string } | null;
+    preparation: {
+      configKind: string;
+      results: Array<{
+        manifest: { manifestPath: string; platform: string };
+      }>;
+      viteMode: string;
+    };
+    steps: {
+      build: { steps: Array<{ command: string }> };
+      install: { steps: Array<{ command: string }> };
+      launch: { steps: Array<{ command: string }> };
+    } | null;
+    strategy: string;
+  };
+
+  expect(result.exitCode).toBe(0);
+  expect(parsed.dryRun).toBe(true);
+  expect(parsed.strategy).toBe("expo-ios-debug-server");
+  expect(parsed.preparation.configKind).toBe("inferred-expo");
+  expect(parsed.preparation.viteMode).toBe("expo");
+  expect(parsed.hostBootstrap).toHaveLength(0);
+  expect(parsed.hostValidation?.status).toBe("pass");
+  expect(parsed.bundleServer.url).toBe("http://127.0.0.1:8081");
+  expect(parsed.bundleServer.statusUrl).toBe("http://127.0.0.1:8081/status");
+  expect(parsed.bundleServer.bundleUrl).toContain(".expo/.virtual-metro-entry.bundle");
+  expect(parsed.steps?.build.steps[0]?.command).toBe("xcodebuild");
+  expect(parsed.steps?.install.steps[0]?.command).toBe("xcrun");
+  expect(parsed.steps?.launch.steps[0]?.command).toBe("xcrun");
+});
+
+test("native run --dry-run defers host planning until Expo prebuild creates the iOS host", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-run-expo-bootstrap-"));
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify(
+      {
+        dependencies: {
+          "@expo/cli": "54.0.0",
+          expo: "~54.0.0",
+          "react-native": "0.81.0",
+        },
+        name: "native-run-expo-bootstrap",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(projectRoot, "app.json"),
+    JSON.stringify(
+      { expo: { name: "Native Run Expo Bootstrap", slug: "native-run-expo-bootstrap" } },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    "console.log('native run expo bootstrap');\n",
+  );
+  await mkdir(path.join(projectRoot, "node_modules", "@expo", "cli", "build", "bin"), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(projectRoot, "node_modules", "@expo", "cli", "package.json"),
+    JSON.stringify({ name: "@expo/cli", version: "54.0.0" }, null, 2),
+  );
+  await writeFile(
+    path.join(projectRoot, "node_modules", "@expo", "cli", "build", "bin", "cli.js"),
+    "console.log('fake expo cli');\n",
+  );
+
+  const result = await executeCli([
+    "native",
+    "run",
+    projectRoot,
+    "--platform",
+    "ios",
+    "--out-dir",
+    ".vifx/native-run/ios",
+    "--dry-run",
+    "--json",
+  ]);
+  const parsed = JSON.parse(result.stdout) as {
+    dryRun: boolean;
+    hostBootstrap: Array<{ command: string; label: string }>;
+    hostValidation: null | { status: string };
+    steps: null | {
+      build: { steps: Array<{ command: string }> };
+    };
+    strategy: string;
+  };
+
+  expect(result.exitCode).toBe(0);
+  expect(parsed.dryRun).toBe(true);
+  expect(parsed.strategy).toBe("expo-ios-debug-server");
+  expect(parsed.hostBootstrap.map((step) => step.label)).toEqual([
+    "Generate iOS host with Expo prebuild",
+    "Install CocoaPods dependencies",
+  ]);
+  expect(parsed.hostValidation).toBeNull();
+  expect(parsed.steps).toBeNull();
 });
 
 test("run --help prints runtime usage", async () => {

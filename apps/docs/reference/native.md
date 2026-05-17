@@ -1,8 +1,8 @@
 # Native Artifacts And Lifecycle
 
-Status: Program B started.
+Status: Program B partial.
 
-Vifx native support starts with a concrete artifact contract, host diagnostics, runtime target diagnostics, and a command planning surface. `vifx native prepare` builds configured Vifx targets, copies their outputs into native-ready directories, and writes a `vifx-native-manifest.json` file that future iOS and Android hosts can consume. `vifx native doctor` validates host and runtime readiness. `vifx native build|install|launch --dry-run` detects a host and shows the native commands Vifx would execute. `vifx native run --dry-run` ties those pieces together without claiming native execution parity.
+Vifx native support starts with a concrete artifact contract, host diagnostics, runtime target diagnostics, and a command planning surface. `vifx native prepare` builds configured Vifx targets, copies their outputs into native-ready directories, and writes a `vifx-native-manifest.json` file that future iOS and Android hosts can consume. `vifx native doctor` validates host and runtime readiness. `vifx native build|install|launch --dry-run` detects a host and shows the native commands Vifx would execute. `vifx native run` now proves one bounded executed path for Expo SDK 54 iOS Debug simulator builds without claiming general native execution parity.
 
 ## Native Artifacts
 
@@ -39,7 +39,7 @@ Diagnostics are advisory in this phase. They do not replace a real Xcode or Grad
 - Android: `adb devices`, or `adb -s <serial> get-state` when `--device` is passed.
 - Android emulator readiness: the SDK emulator binary under `ANDROID_HOME` or `ANDROID_SDK_ROOT`.
 
-These checks are still readiness diagnostics. They do not boot a simulator or emulator, install an app, or prove a device launch.
+These checks are still readiness diagnostics by themselves. They do not boot a simulator or emulator, install an app, or prove a device launch unless they are followed by an executed `vifx native run` path.
 
 ## Native Host Diagnostics
 
@@ -71,7 +71,7 @@ vifx native launch ./path/to/project --platform android --application-id dev.vif
 
 Host detection currently looks for:
 
-- iOS: `ios/*.xcodeproj`, defaulting the scheme from the project name and reading `PRODUCT_BUNDLE_IDENTIFIER` when present.
+- iOS: `ios/*.xcodeproj`, preferring a matching `ios/*.xcworkspace` when CocoaPods generated one, defaulting the scheme from the project name, and reading `PRODUCT_BUNDLE_IDENTIFIER` when present.
 - Android: `android/build.gradle`, `android/build.gradle.kts`, `android/settings.gradle`, or `android/settings.gradle.kts`, plus `android/gradlew` when available.
 
 The repository maintains formal host markers in `apps/playground-rn-bare/ios` and `apps/playground-rn-bare/android`. They are used by:
@@ -84,14 +84,14 @@ That validation prepares native artifacts, runs `native doctor` for both platfor
 
 The command plans are deterministic:
 
-- iOS build: `xcodebuild -project <project> -scheme <scheme> -configuration Debug -destination "generic/platform=iOS Simulator" -derivedDataPath .vifx/native-build/ios build`
+- iOS build: `xcodebuild -workspace <workspace> -scheme <scheme> -configuration Debug -destination "generic/platform=iOS Simulator" -derivedDataPath .vifx/native-build/ios build -quiet`, falling back to `-project <project>` when no workspace exists
 - iOS install: `xcrun simctl install booted <app>`
 - iOS launch: `xcrun simctl launch booted <bundle-id>`
 - Android build: `./gradlew :app:assembleDebug`
 - Android install: `./gradlew :app:installDebug`, or `adb install -r <apk>` when `--app-path` is provided.
 - Android launch: `adb shell monkey -p <applicationId> 1`
 
-Without `--dry-run`, the CLI executes the planned command and reports `VIFX_NATIVE_COMMAND_FAILED` on non-zero exit. This is still command orchestration, not native parity proof.
+Without `--dry-run`, the CLI executes the planned command and reports `VIFX_NATIVE_COMMAND_FAILED` on non-zero exit or spawn failure. The error details carry `errorCode`, `errorMessage`, `signal`, and `stdoutTail` or `stderrTail` when available. This is still bounded command orchestration, not native parity proof.
 
 ## Native Run Orchestration
 
@@ -113,15 +113,15 @@ In JSON mode the command returns:
 - `steps.launch`
 - `execution`, or `null` in dry-run mode
 
-The playground validation exercises this command for both iOS and Android in dry-run mode. It proves the orchestration shape, static host checks, and target readiness diagnostics, not real Xcode, Gradle, simulator, emulator, or device execution.
+The maintained playground validation still exercises this command for both iOS and Android in dry-run mode. It proves the orchestration shape, static host checks, and target readiness diagnostics. Separately, the repository now has executed proof for one bounded path: Expo SDK 54 iOS Debug simulator builds where `native run` can infer Expo targets, generate a prebuild host, build via `xcodebuild`, install via `simctl`, launch via `simctl`, and keep the local bundle server alive until the process exits.
 
 ## Remaining Native Work
 
 This page does not claim full Program B completion. Still missing:
 
-- executable production-grade iOS host build
+- broader iOS validation beyond the bounded Expo Debug simulator path
 - executable production-grade Android host build
 - provisioning profile validation beyond static signing markers
-- simulator, emulator, and device execution validation
-- executed build, install, and launch validation
+- broader simulator, emulator, and device execution validation
+- executed Android build, install, and launch validation
 - full native build documentation

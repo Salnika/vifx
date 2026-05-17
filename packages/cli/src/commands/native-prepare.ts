@@ -1,5 +1,4 @@
 import path from "node:path";
-import { loadVifxConfig } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
 import {
   diagnoseNativeToolchain,
@@ -11,6 +10,7 @@ import {
 } from "@vifx/native-artifacts";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 import { parseFlags } from "../lib/args.ts";
+import { resolveNativeTargets } from "../lib/native-targets.ts";
 import type { CliResult } from "../types.ts";
 
 export const NATIVE_PREPARE_HELP = `Usage: vifx native prepare [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--json]
@@ -32,8 +32,10 @@ export interface NativePrepareResult {
 
 export interface NativePrepareTargetsResult {
   configFile: string | null;
+  configKind: "configured" | "inferred-expo";
   projectRoot: string;
   results: NativePrepareResult[];
+  viteMode: "expo" | "react-native";
 }
 
 function validateRequestedPlatform(value: string | undefined) {
@@ -98,28 +100,23 @@ export async function prepareConfiguredNativeTargets(options: {
 }): Promise<NativePrepareTargetsResult> {
   const requestedPlatform = validateRequestedPlatform(options.platform);
   const projectRoot = path.resolve(options.projectRoot);
-  const loaded = await loadVifxConfig({
+  const resolved = await resolveNativeTargets({
     configFile: options.configFile,
-    cwd: projectRoot,
-    optional: false,
+    projectRoot,
   });
-
-  if (loaded.config.vite.mode === "none" || loaded.config.vite.targets.length === 0) {
+  if (!resolved) {
     throw new VifxError({
       code: "VIFX_NATIVE_TARGETS_MISSING",
-      message: `No Vifx native targets are configured in "${loaded.filePath ?? "inline config"}".`,
+      message: `No Vifx native targets are configured in "${projectRoot}".`,
       hint: "Set vite.mode and at least one ios or android vite.targets entry in vifx.config.*.",
       docsPath: "/reference/config#vite-targets",
     });
   }
 
-  const nativeTargets = loaded.config.vite.targets.filter(
-    (target) => target.platform === "ios" || target.platform === "android",
-  );
   const targets =
     requestedPlatform && requestedPlatform !== "all"
-      ? nativeTargets.filter((target) => target.platform === requestedPlatform)
-      : nativeTargets;
+      ? resolved.targets.filter((target) => target.platform === requestedPlatform)
+      : resolved.targets;
 
   if (targets.length === 0) {
     throw new VifxError({
@@ -141,7 +138,7 @@ export async function prepareConfiguredNativeTargets(options: {
       jsxInPackages: target.jsxInPackages,
       outDir: target.outDir,
       platform: target.platform,
-      projectRoot: loaded.config.projectRoot,
+      projectRoot: resolved.projectRoot,
       reactNativeCompat: target.reactNativeCompat,
       shimJsxRuntime: target.shimJsxRuntime,
       shimReact: target.shimReact,
@@ -152,14 +149,14 @@ export async function prepareConfiguredNativeTargets(options: {
       outDir: resolvePrepareOutDir({
         baseOutDir: options.outDir,
         platform: target.platform,
-        projectRoot: loaded.config.projectRoot,
+        projectRoot: resolved.projectRoot,
         totalTargets: targets.length,
       }),
-      projectRoot: loaded.config.projectRoot,
+      projectRoot: resolved.projectRoot,
     });
     const toolchain = await diagnoseNativeToolchain({
       platform: target.platform,
-      projectRoot: loaded.config.projectRoot,
+      projectRoot: resolved.projectRoot,
     });
     results.push({
       manifest,
@@ -168,9 +165,11 @@ export async function prepareConfiguredNativeTargets(options: {
   }
 
   return {
-    configFile: loaded.filePath ?? null,
-    projectRoot: loaded.config.projectRoot,
+    configFile: resolved.configFile,
+    configKind: resolved.configKind,
+    projectRoot: resolved.projectRoot,
     results,
+    viteMode: resolved.viteMode,
   };
 }
 
@@ -212,11 +211,13 @@ export async function runNativePrepareCommand(argv: string[], cwd: string): Prom
       stdout: JSON.stringify(
         {
           configFile: prepared.configFile,
+          configKind: prepared.configKind,
           projectRoot: prepared.projectRoot,
           results: prepared.results.map((result) => ({
             manifest: serializeNativeManifestForJson(result.manifest),
             toolchain: result.toolchain,
           })),
+          viteMode: prepared.viteMode,
         },
         null,
         2,
@@ -230,7 +231,7 @@ export async function runNativePrepareCommand(argv: string[], cwd: string): Prom
     stdout: [
       "Vifx Native Prepare",
       "",
-      `Config: ${prepared.configFile ?? "inline config"}`,
+      `Config: ${prepared.configFile ?? "inferred Expo defaults"}`,
       `Project root: ${prepared.projectRoot}`,
       "",
       prepared.results.map((result) => formatNativeResult(result)).join("\n\n"),
