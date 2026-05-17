@@ -64,6 +64,7 @@ export async function runCompatSuite(options: CompatRunOptions): Promise<CompatR
 }
 
 export {
+  collectAssetMetadata,
   collectAssetScaleGroup,
   detectPackageManager,
   findWorkspaceRoot,

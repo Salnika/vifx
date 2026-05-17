@@ -1,5 +1,11 @@
 {
   "name": "@fixture/design-system",
   "version": "1.0.0",
-  "private": true
+  "private": true,
+  "exports": {
+    ".": {
+      "react-native": "./src/native",
+      "default": "./src/index"
+    }
+  }
 }

@@ -1,5 +1,6 @@
 import { access, lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import { VifxError } from "@vifx/errors";
 
 export type VifxPlatform = "android" | "ios" | "native" | "web" | (string & {});
 
@@ -7,6 +8,7 @@ export interface ResolveReactNativeModuleOptions {
   conditions?: readonly string[];
   extensions?: readonly string[];
   fromFile: string;
+  mainFields?: readonly string[];
   platform: VifxPlatform;
   platformPriority?: readonly string[];
   preserveSymlinks?: boolean;
@@ -42,14 +44,6 @@ interface PackageJsonShape {
   workspaces?: unknown;
 }
 
-interface VifxErrorOptions {
-  cause?: unknown;
-  code: string;
-  details?: unknown;
-  hint?: string;
-  message: string;
-}
-
 interface WorkspaceInfo {
   patterns: string[];
   root: string;
@@ -57,6 +51,7 @@ interface WorkspaceInfo {
 }
 
 const DEFAULT_EXTENSIONS = ["tsx", "ts", "jsx", "js", "json"] as const;
+const DEFAULT_MAIN_FIELDS = ["react-native", "module", "main"] as const;
 
 const DEFAULT_PLATFORM_PRIORITIES: Record<"android" | "ios" | "native" | "web", readonly string[]> =
   {
@@ -65,20 +60,6 @@ const DEFAULT_PLATFORM_PRIORITIES: Record<"android" | "ios" | "native" | "web", 
     native: ["native"],
     web: ["web", "native"],
   };
-
-class LocalVifxError extends Error {
-  readonly code: string;
-  readonly details?: unknown;
-  readonly hint?: string;
-
-  constructor(options: VifxErrorOptions) {
-    super(options.message, { cause: options.cause });
-    this.code = options.code;
-    this.details = options.details;
-    this.hint = options.hint;
-    this.name = "VifxError";
-  }
-}
 
 export function buildPlatformCandidates(
   basePath: string,
@@ -134,14 +115,14 @@ export async function resolveReactNativeModule(
   });
 
   if (!packageLocation) {
-    throw await createVifxError({
+    throw new VifxError({
       code: "VIFX_RESOLVE_NOT_FOUND",
       details: {
         fromFile: options.fromFile,
         platform: options.platform,
         projectRoot: options.projectRoot,
         specifier: options.specifier,
-        trace,
+        trace: serializeResolutionTrace(trace),
       },
       hint: `Install or link "${packageImport.packageName}", or ensure a matching workspace package exists.`,
       message: `Unable to resolve package "${packageImport.packageName}" from "${options.fromFile}".`,
@@ -159,6 +140,7 @@ export async function resolveReactNativeModule(
     packageJson,
     packageImport.subpath,
     buildResolutionConditions(options.platform, options.conditions),
+    normalizeMainFields(options.mainFields),
     trace,
   );
   const fallbackBasePath = packageTarget
@@ -168,12 +150,12 @@ export async function resolveReactNativeModule(
       : undefined;
 
   if (!fallbackBasePath) {
-    throw await createVifxError({
+    throw new VifxError({
       code: "VIFX_RESOLVE_NOT_FOUND",
       details: {
         packageJsonPath,
         specifier: options.specifier,
-        trace,
+        trace: serializeResolutionTrace(trace),
       },
       hint: `Expose "${options.specifier}" via "react-native", "exports", or a resolvable file on disk.`,
       message: `Package "${packageImport.packageName}" does not expose "${packageImport.subpath}".`,
@@ -211,30 +193,6 @@ function buildResolutionConditions(
     seen.add(condition);
     return true;
   });
-}
-
-async function createVifxError(options: VifxErrorOptions): Promise<Error> {
-  const moduleName = "@vifx/errors";
-
-  try {
-    const imported = (await import(moduleName)) as Record<string, unknown>;
-    const create = imported.createVifxError;
-
-    if (typeof create === "function") {
-      return (create as (value: VifxErrorOptions) => Error)(options);
-    }
-
-    const VifxError = imported.VifxError;
-
-    if (typeof VifxError === "function") {
-      return new (VifxError as new (value: VifxErrorOptions) => Error)(options);
-    }
-  } catch {
-    // Keep the first-pass resolver self-contained when the shared errors package
-    // is not available yet.
-  }
-
-  return new LocalVifxError(options);
 }
 
 async function expandPatternSegments(
@@ -399,6 +357,7 @@ async function findCandidateMatch(options: {
   trace: ResolutionTraceEntry[];
 }): Promise<string | undefined> {
   for (const candidate of options.candidates) {
+    await assertNoCaseAmbiguousCandidate(candidate, options.trace);
     const exists = await isFile(candidate);
     pushTrace(
       options.trace,
@@ -413,6 +372,34 @@ async function findCandidateMatch(options: {
   }
 
   return undefined;
+}
+
+async function assertNoCaseAmbiguousCandidate(
+  candidate: string,
+  trace: readonly ResolutionTraceEntry[],
+) {
+  const directory = path.dirname(candidate);
+  const basename = path.basename(candidate);
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+  const matches = entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase() === basename.toLowerCase())
+    .map((entry) => path.join(directory, entry.name))
+    .sort();
+
+  if (matches.length <= 1) {
+    return;
+  }
+
+  throw new VifxError({
+    code: "VIFX_RESOLVE_AMBIGUOUS_PLATFORM_FILE",
+    details: {
+      candidate,
+      filePaths: matches,
+      trace: serializeResolutionTrace(trace),
+    },
+    hint: "Rename files so each platform candidate has one casing-stable path.",
+    message: `Multiple case variants match platform candidate "${candidate}".`,
+  });
 }
 
 function isConditionMap(value: unknown): value is Record<string, unknown> {
@@ -496,6 +483,21 @@ function normalizePlatformPriority(
   });
 }
 
+function normalizeMainFields(mainFields: readonly string[] | undefined): string[] {
+  const seen = new Set<string>();
+  return (mainFields ?? DEFAULT_MAIN_FIELDS)
+    .map((field) => field.trim())
+    .filter(Boolean)
+    .filter((field) => {
+      if (seen.has(field)) {
+        return false;
+      }
+
+      seen.add(field);
+      return true;
+    });
+}
+
 function parsePackageSpecifier(specifier: string): { packageName: string; subpath: string } {
   const segments = specifier.split("/");
 
@@ -504,7 +506,14 @@ function parsePackageSpecifier(specifier: string): { packageName: string; subpat
     const name = segments[1];
 
     if (!scope || !name) {
-      throw new Error(`Invalid scoped package specifier "${specifier}".`);
+      throw new VifxError({
+        code: "VIFX_RESOLVE_INVALID_SPECIFIER",
+        details: {
+          specifier,
+        },
+        hint: 'Use a complete scoped package name such as "@scope/name".',
+        message: `Invalid scoped package specifier "${specifier}".`,
+      });
     }
 
     return {
@@ -516,7 +525,14 @@ function parsePackageSpecifier(specifier: string): { packageName: string; subpat
   const packageName = segments[0];
 
   if (!packageName) {
-    throw new Error(`Invalid package specifier "${specifier}".`);
+    throw new VifxError({
+      code: "VIFX_RESOLVE_INVALID_SPECIFIER",
+      details: {
+        specifier,
+      },
+      hint: "Pass a non-empty package name or a relative/absolute path.",
+      message: `Invalid package specifier "${specifier}".`,
+    });
   }
 
   return {
@@ -542,6 +558,43 @@ function pushTrace(
   });
 }
 
+function serializeResolutionTrace(
+  trace: readonly ResolutionTraceEntry[],
+): Record<string, boolean | string>[] {
+  return trace.map((entry) => {
+    const serialized: Record<string, boolean | string> = {
+      message: entry.message,
+      type: entry.type,
+    };
+
+    if (entry.candidate !== undefined) {
+      serialized.candidate = entry.candidate;
+    }
+
+    if (entry.exists !== undefined) {
+      serialized.exists = entry.exists;
+    }
+
+    if (entry.found !== undefined) {
+      serialized.found = entry.found;
+    }
+
+    if (entry.kind !== undefined) {
+      serialized.kind = entry.kind;
+    }
+
+    if (entry.reason !== undefined) {
+      serialized.reason = entry.reason;
+    }
+
+    if (entry.value !== undefined) {
+      serialized.value = entry.value;
+    }
+
+    return serialized;
+  });
+}
+
 async function readDirectories(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
   return entries
@@ -551,10 +604,31 @@ async function readDirectories(directory: string): Promise<string[]> {
 
 async function readPackageJson(packageJsonPath: string): Promise<PackageJsonShape> {
   const source = await readFile(packageJsonPath, "utf8");
-  const parsed = JSON.parse(source) as unknown;
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(source) as unknown;
+  } catch (error) {
+    throw new VifxError({
+      code: "VIFX_RESOLVE_INVALID_PACKAGE_JSON",
+      cause: error,
+      details: {
+        packageJsonPath,
+      },
+      hint: "Fix the package.json syntax before resolving React Native package entries.",
+      message: `Invalid package.json syntax at "${packageJsonPath}".`,
+    });
+  }
 
   if (!isRecord(parsed)) {
-    throw new Error(`Invalid package.json shape at "${packageJsonPath}".`);
+    throw new VifxError({
+      code: "VIFX_RESOLVE_INVALID_PACKAGE_JSON",
+      details: {
+        packageJsonPath,
+      },
+      hint: "Ensure package.json contains a JSON object.",
+      message: `Invalid package.json shape at "${packageJsonPath}".`,
+    });
   }
 
   return parsed as PackageJsonShape;
@@ -632,11 +706,11 @@ async function resolveCandidateBasePath(options: {
   }
 
   if (hasExplicitExtension(options.basePath, options.extensionOrder)) {
-    throw await createVifxError({
+    throw new VifxError({
       code: "VIFX_RESOLVE_NOT_FOUND",
       details: {
         basePath: options.basePath,
-        trace: options.trace,
+        trace: serializeResolutionTrace(options.trace),
       },
       hint: "Verify that the explicit path exists or remove the extension so platform fallbacks can apply.",
       message: `Unable to resolve the explicit file "${options.basePath}".`,
@@ -657,11 +731,11 @@ async function resolveCandidateBasePath(options: {
     return indexMatch;
   }
 
-  throw await createVifxError({
+  throw new VifxError({
     code: "VIFX_RESOLVE_NOT_FOUND",
     details: {
       basePath: options.basePath,
-      trace: options.trace,
+      trace: serializeResolutionTrace(options.trace),
     },
     hint: "Add a platform-specific file, a base file, or an index file matching the configured extension order.",
     message: `Unable to resolve a file for "${options.basePath}".`,
@@ -741,6 +815,7 @@ function selectPackageEntryTarget(
   packageJson: PackageJsonShape,
   subpath: string,
   conditions: readonly string[],
+  mainFields: readonly string[],
   trace: ResolutionTraceEntry[],
 ): string | undefined {
   const exportsTarget = resolveExportsTarget(packageJson.exports, subpath, conditions, trace);
@@ -753,17 +828,15 @@ function selectPackageEntryTarget(
     return subpath;
   }
 
-  const reactNativeEntry = packageJson["react-native"];
-
-  if (typeof reactNativeEntry === "string") {
-    return reactNativeEntry;
+  for (const mainField of mainFields) {
+    const entry = packageJson[mainField as keyof PackageJsonShape];
+    if (typeof entry === "string") {
+      pushTrace(trace, "package-json", `Matched package main field "${mainField}".`);
+      return entry;
+    }
   }
 
-  if (typeof packageJson.module === "string") {
-    return packageJson.module;
-  }
-
-  return typeof packageJson.main === "string" ? packageJson.main : undefined;
+  return undefined;
 }
 
 function resolveExportsTarget(

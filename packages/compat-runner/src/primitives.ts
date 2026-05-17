@@ -1,6 +1,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { collectAssetGroup } from "@vifx/asset-registry";
 import type { PackageManager, ProjectType } from "@vifx/compat";
+import { VIFX_CONFIG_FILENAMES } from "@vifx/config";
+import { VifxError } from "@vifx/errors";
+import { resolveReactNativeModule } from "@vifx/platform-resolver";
 import type { VifxVitePluginMode } from "@vifx/types";
 import type { AssetGroup, Diagnostic, ProjectInspection } from "./types.ts";
 
@@ -20,6 +24,24 @@ const PACKAGE_MANAGER_FILES: Record<Exclude<PackageManager, "unknown">, string[]
   bun: ["bun.lock", "bun.lockb"],
 };
 
+const VITE_CONFIG_FILENAMES = [
+  "vite.config.vifx.ts",
+  "vite.config.vifx.mts",
+  "vite.config.vifx.mjs",
+  "vite.config.vifx.cts",
+  "vite.config.vifx.cjs",
+  "vite.config.vifx.js",
+  "vite.config.ts",
+  "vite.config.mts",
+  "vite.config.mjs",
+  "vite.config.cts",
+  "vite.config.cjs",
+  "vite.config.js",
+] as const;
+
+const SUPPORTED_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [54];
+const WALK_IGNORED_DIRECTORIES = new Set([".git", ".vifx", "dist", "node_modules"]);
+
 function toPosixPath(filePath: string) {
   return filePath.split(path.sep).join("/");
 }
@@ -38,13 +60,28 @@ async function pathExists(filePath: string) {
   }
 }
 
-async function readJsonFile<T>(filePath: string): Promise<T | null> {
+async function readJsonFile<T>(
+  filePath: string,
+  options: { invalidCode?: string; invalidHint?: string } = {},
+): Promise<T | null> {
   if (!(await pathExists(filePath))) {
     return null;
   }
 
   const contents = await fs.readFile(filePath, "utf8");
-  return JSON.parse(contents) as T;
+  try {
+    return JSON.parse(contents) as T;
+  } catch (error) {
+    throw new VifxError({
+      code: options.invalidCode ?? "VIFX_CONFIG_INVALID",
+      cause: error,
+      details: {
+        filePath,
+      },
+      hint: options.invalidHint ?? "Fix the JSON syntax and rerun project inspection.",
+      message: `Invalid JSON syntax at "${filePath}".`,
+    });
+  }
 }
 
 function getDependencyVersion(packageJson: PackageJson | null, dependencyName: string) {
@@ -53,6 +90,20 @@ function getDependencyVersion(packageJson: PackageJson | null, dependencyName: s
     packageJson?.devDependencies?.[dependencyName] ??
     null
   );
+}
+
+function parsePackageVersionMajor(rawVersion: string | null) {
+  if (!rawVersion) {
+    return null;
+  }
+
+  const match = rawVersion.match(/\d+/u);
+  return match ? Number(match[0]) : null;
+}
+
+function isSupportedExpoVersion(rawVersion: string | null) {
+  const majorVersion = parsePackageVersionMajor(rawVersion);
+  return majorVersion === null || SUPPORTED_EXPO_SDK_MAJOR_VERSIONS.includes(majorVersion);
 }
 
 function parsePackageManager(rawValue: string | undefined) {
@@ -109,7 +160,7 @@ async function walkFiles(rootDirectory: string): Promise<string[]> {
     const entries = await fs.readdir(directory, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist") {
+      if (WALK_IGNORED_DIRECTORIES.has(entry.name)) {
         continue;
       }
 
@@ -177,37 +228,32 @@ export async function resolvePlatformFile(
   },
 ) {
   const fromFilePath = path.resolve(projectRoot, options.from);
-  const specifierBasePath = path.resolve(path.dirname(fromFilePath), options.specifier);
-  const parsedSpecifier = path.parse(specifierBasePath);
-  const basePath =
-    parsedSpecifier.ext === ""
-      ? specifierBasePath
-      : path.join(parsedSpecifier.dir, parsedSpecifier.name);
-  const extensions =
-    parsedSpecifier.ext === "" ? [".tsx", ".ts", ".jsx", ".js", ".json"] : [parsedSpecifier.ext];
-  const platformSuffixes =
-    options.platform === "ios"
-      ? [".ios", ".native", ""]
-      : options.platform === "android"
-        ? [".android", ".native", ""]
-        : options.platform === "web"
-          ? [".web", ""]
-          : [".native", ""];
 
-  for (const platformSuffix of platformSuffixes) {
-    for (const extension of extensions) {
-      const candidatePath = `${basePath}${platformSuffix}${extension}`;
-      if (await pathExists(candidatePath)) {
-        return {
-          relativeFile: relativeFrom(projectRoot, candidatePath),
-        };
-      }
+  try {
+    const result = await resolveReactNativeModule({
+      fromFile: fromFilePath,
+      platform: options.platform,
+      projectRoot,
+      specifier: options.specifier,
+    });
+
+    return {
+      relativeFile: relativeFrom(projectRoot, result.filePath),
+    };
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "VIFX_RESOLVE_NOT_FOUND"
+    ) {
+      return {
+        relativeFile: null,
+      };
     }
-  }
 
-  return {
-    relativeFile: null,
-  };
+    throw error;
+  }
 }
 
 export async function collectAssetScaleGroup(
@@ -215,34 +261,38 @@ export async function collectAssetScaleGroup(
   assetPath: string,
 ): Promise<AssetGroup> {
   const absoluteAssetPath = path.resolve(projectRoot, assetPath);
-  const parsedAssetPath = path.parse(absoluteAssetPath);
-  const baseName = parsedAssetPath.name.replace(/@\dx$/, "");
-  const directoryEntries = await fs.readdir(parsedAssetPath.dir);
-  const matcher = new RegExp(`^${baseName}(?:@(\\d+)x)?\\${parsedAssetPath.ext}$`);
-  const files: string[] = [];
-  const scales = new Set<number>();
-
-  for (const entry of directoryEntries) {
-    const match = entry.match(matcher);
-    if (!match) {
-      continue;
-    }
-
-    const scale = match[1] ? Number(match[1]) : 1;
-    files.push(relativeFrom(projectRoot, path.join(parsedAssetPath.dir, entry)));
-    scales.add(scale);
-  }
-
-  files.sort();
+  const descriptor = await collectAssetGroup({
+    filePath: absoluteAssetPath,
+    projectRoot,
+  });
 
   return {
-    assetPath: relativeFrom(projectRoot, absoluteAssetPath),
-    scales: [...scales].sort((left, right) => left - right),
-    files,
+    assetPath: relativeFrom(projectRoot, descriptor.filePath),
+    scales: [...descriptor.scales],
+    files: descriptor.filePaths.map((filePath) => relativeFrom(projectRoot, filePath)),
   };
 }
 
-async function findConfigFile(projectRoot: string, names: string[]) {
+export async function collectAssetMetadata(projectRoot: string, assetPath: string) {
+  const absoluteAssetPath = path.resolve(projectRoot, assetPath);
+  const descriptor = await collectAssetGroup({
+    filePath: absoluteAssetPath,
+    projectRoot,
+  });
+
+  return {
+    assetPath: relativeFrom(projectRoot, descriptor.filePath),
+    fileCount: descriptor.filePaths.length,
+    height: descriptor.height ?? null,
+    httpServerLocation: descriptor.httpServerLocation,
+    name: descriptor.name,
+    scales: [...descriptor.scales],
+    type: descriptor.type,
+    width: descriptor.width ?? null,
+  };
+}
+
+async function findConfigFile(projectRoot: string, names: readonly string[]) {
   for (const name of names) {
     const configPath = path.join(projectRoot, name);
     if (await pathExists(configPath)) {
@@ -350,8 +400,8 @@ async function buildDiagnostics(
     diagnostics.push({
       level: "warn",
       code: "VIFX_CONFIG_MISSING",
-      summary: "No vifx.config.ts found.",
-      hint: "Run: vifx init",
+      summary: "No supported Vifx config file found.",
+      hint: `Run: vifx init to create ${VIFX_CONFIG_FILENAMES[0]}.`,
       docsPath: "/cli/doctor#vifx-config",
     });
   }
@@ -363,13 +413,23 @@ async function buildDiagnostics(
       summary: "Expo support is currently experimental.",
       docsPath: "/migration/expo#experimental",
     });
+
+    if (!isSupportedExpoVersion(inspection.expoVersion)) {
+      diagnostics.push({
+        level: "warn",
+        code: "VIFX_PROJECT_UNSUPPORTED_EXPO_VERSION",
+        summary: `Expo version "${inspection.expoVersion}" is outside the fixture-backed SDK range.`,
+        hint: `Use Expo SDK ${SUPPORTED_EXPO_SDK_MAJOR_VERSIONS.join(", ")} for the current Vifx experiment path, or keep Metro/Expo CLI for this project.`,
+        docsPath: "/reference/support-matrix#versions-and-scope",
+      });
+    }
   }
 
   if (inspection.workspaceRoot !== inspection.projectRoot) {
     diagnostics.push({
       level: "info",
       code: "VIFX_MONOREPO_EXPERIMENTAL",
-      summary: "Workspace project detected. Monorepo support is still first-pass.",
+      summary: "Workspace project detected. Monorepo support is fixture-backed and experimental.",
       docsPath: "/compat/monorepo#workspace-resolution",
     });
   }
@@ -408,9 +468,16 @@ export async function inspectProject(projectRoot: string): Promise<ProjectInspec
   const resolvedProjectRoot = path.resolve(projectRoot);
   const packageJson = await readJsonFile<PackageJson>(
     path.join(resolvedProjectRoot, "package.json"),
+    {
+      invalidCode: "VIFX_PROJECT_INVALID_PACKAGE_JSON",
+      invalidHint: "Fix package.json before running Vifx project inspection.",
+    },
   );
   const appJson = await readJsonFile<Record<string, unknown>>(
     path.join(resolvedProjectRoot, "app.json"),
+    {
+      invalidHint: "Fix app.json before running Vifx project inspection.",
+    },
   );
   const workspaceRoot = await findWorkspaceRoot(resolvedProjectRoot);
   const packageManager = await detectPackageManager(resolvedProjectRoot);
@@ -420,19 +487,9 @@ export async function inspectProject(projectRoot: string): Promise<ProjectInspec
     "metro.config.cjs",
     "metro.config.js",
   ]);
-  const viteConfigPath = await findConfigFile(resolvedProjectRoot, [
-    "vite.config.ts",
-    "vite.config.mjs",
-    "vite.config.cjs",
-    "vite.config.js",
-  ]);
+  const viteConfigPath = await findConfigFile(resolvedProjectRoot, VITE_CONFIG_FILENAMES);
   const vitePluginMode = await detectVitePluginMode(viteConfigPath);
-  const vifxConfigPath = await findConfigFile(resolvedProjectRoot, [
-    "vifx.config.ts",
-    "vifx.config.mjs",
-    "vifx.config.cjs",
-    "vifx.config.js",
-  ]);
+  const vifxConfigPath = await findConfigFile(resolvedProjectRoot, VIFX_CONFIG_FILENAMES);
   const hermesCompilerPath =
     (await findConfigFile(resolvedProjectRoot, ["node_modules/.bin/hermesc"])) ??
     (workspaceRoot !== resolvedProjectRoot

@@ -26,6 +26,19 @@ vifx build --platform ios
 vifx run --platform ios
 ```
 
+## Validate The Maintained Playgrounds
+
+The repository keeps two formal playgrounds for the bounded Vite paths:
+
+```sh
+pnpm playground:rn-bare
+pnpm playground:expo
+pnpm playground:validate
+```
+
+Each playground runs `vifx doctor`, `vifx inspect`, iOS and Android `vifx build`, and a direct Vite build through
+`vite.config.vifx.ts`.
+
 ## Config Contract Draft
 
 The current docs describe the intended config surface, not a promise that every downstream capability is fully production-ready.
@@ -66,7 +79,7 @@ export default defineVifxConfig({
 ```
 
 - Add `reactNativeCompat: "web"` on a target when you want `vifx run` to serve a browser preview.
-- If you want the bounded Expo Router preview path, switch a target entry to `expo-router/entry` manually after `vifx init`.
+- Expo Router projects with an `app/` directory scaffold `expo-router/entry` automatically through `vifx init` and `vifx vite init`.
 
 ## Report Shape
 
@@ -79,7 +92,10 @@ Adapter: vifx
 
 doctor.projectDetection           PASS   2/2
 resolver.platformExtensions       PASS   4/4
+resolver.packageMainFields        PASS   1/1
+resolver.packageExports           PASS   1/1
 assets.scaleGroups                PASS   1/1
+assets.metadata                   PASS   1/1
 bundler.bundleArtifacts           PASS   1/1
 bundler.sourceMapValidity         PASS   1/1
 monorepo.workspaceResolution      PASS   2/2

@@ -5,7 +5,7 @@ import type { CliResult } from "../types.ts";
 
 const INSPECT_HELP = `Usage: vifx inspect [path] [--json]
 
-Inspects first-pass Vifx project primitives: project type, configs, platform files, and asset groups.
+Inspects Vifx project primitives: project type, configs, platform files, and asset groups.
 
 Options:
   --json  Output machine-readable JSON.
@@ -74,7 +74,10 @@ export async function runInspectCommand(argv: string[], cwd: string): Promise<Cl
       `Project root: ${targetPath}`,
       `Project type: ${inspection.projectType}`,
       `Package manager: ${inspection.packageManager}`,
+      `Metro config: ${inspection.metroConfigPath ?? "missing"}`,
+      `Vite config: ${inspection.viteConfigPath ?? "missing"}`,
       `Vite mode: ${inspection.vitePluginMode}`,
+      `Vifx config: ${inspection.vifxConfigPath ?? "missing"}`,
       `Workspace root: ${path.relative(targetPath, inspection.workspaceRoot) || "."}`,
       formatList("Platform files", inspection.platformFiles),
       assetLines,

@@ -5,6 +5,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@vifx/compat": fileURLToPath(new URL("../compat/src/index.ts", import.meta.url)),
+      "@vifx/config": fileURLToPath(new URL("../config/src/index.ts", import.meta.url)),
       "@vifx/metro-inspect": fileURLToPath(
         new URL("../metro-inspect/src/index.ts", import.meta.url),
       ),

@@ -1,18 +1,15 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import {
+  VIFX_CONFIG_FILENAMES as SHARED_VIFX_CONFIG_FILENAMES,
   defineVifxConfig as defineSharedVifxConfig,
   loadVifxConfig as loadSharedVifxConfig,
   type LoadVifxConfigOptions as SharedLoadVifxConfigOptions,
 } from "@vifx/config";
+import { VifxError } from "@vifx/errors";
 import type { VifxConfig as SharedVifxConfig } from "@vifx/types";
 
-export const VIFX_CONFIG_FILE_NAMES = [
-  "vifx.config.ts",
-  "vifx.config.mts",
-  "vifx.config.js",
-  "vifx.config.mjs",
-] as const;
+export const VIFX_CONFIG_FILE_NAMES = SHARED_VIFX_CONFIG_FILENAMES;
 
 export interface VifxConfig extends SharedVifxConfig {}
 
@@ -95,28 +92,6 @@ interface PlatformResolverModule extends Record<string, unknown> {
   resolveReactNativeModule?: (options: Record<string, unknown>) => Awaitable<unknown>;
 }
 
-interface VifxErrorOptions {
-  cause?: unknown;
-  code: string;
-  details?: unknown;
-  hint?: string;
-  message: string;
-}
-
-class LocalVifxError extends Error {
-  readonly code: string;
-  readonly details?: unknown;
-  readonly hint?: string;
-
-  constructor(options: VifxErrorOptions) {
-    super(options.message, { cause: options.cause });
-    this.code = options.code;
-    this.details = options.details;
-    this.hint = options.hint;
-    this.name = "VifxError";
-  }
-}
-
 export function defineVifxConfig<const TConfig extends VifxConfig>(config: TConfig): TConfig {
   return defineSharedVifxConfig(config);
 }
@@ -138,7 +113,7 @@ export async function createVifxContext(
       const collectAssetGroup = assetRegistry.collectAssetGroup;
 
       if (typeof collectAssetGroup !== "function") {
-        throw await createVifxError({
+        throw new VifxError({
           code: "VIFX_CORE_MISSING_PRIMITIVE",
           details: { module: "@vifx/asset-registry" },
           hint: "Ensure @vifx/asset-registry exports collectAssetGroup().",
@@ -160,7 +135,7 @@ export async function createVifxContext(
       const resolveReactNativeModule = platformResolver.resolveReactNativeModule;
 
       if (typeof resolveReactNativeModule !== "function") {
-        throw await createVifxError({
+        throw new VifxError({
           code: "VIFX_CORE_MISSING_PRIMITIVE",
           details: { module: "@vifx/platform-resolver" },
           hint: "Ensure @vifx/platform-resolver exports resolveReactNativeModule().",
@@ -170,6 +145,9 @@ export async function createVifxContext(
       }
 
       return resolveReactNativeModule({
+        conditions: loaded.config.resolver.conditions,
+        extensions: loaded.config.resolver.extensions,
+        mainFields: loaded.config.resolver.mainFields,
         projectRoot: loaded.config.projectRoot ?? loaded.project.projectRoot,
         ...resolveOptions,
       });
@@ -226,7 +204,7 @@ export async function detectProject(
     reasons.push(`Found workspace root at "${workspace.root}" via ${workspace.source}.`);
   }
 
-  if (hasExpoDependency && appConfigPath) {
+  if (hasExpoDependency || appConfigPath) {
     return {
       appConfigPath,
       packageJsonPath,
@@ -383,29 +361,6 @@ export async function loadProjectContext(cwd: string): Promise<{
   };
 }
 
-async function createVifxError(options: VifxErrorOptions): Promise<Error> {
-  const moduleName = "@vifx/errors";
-
-  try {
-    const imported = (await import(moduleName)) as Record<string, unknown>;
-    const create = imported.createVifxError;
-
-    if (typeof create === "function") {
-      return (create as (value: VifxErrorOptions) => Error)(options);
-    }
-
-    const VifxError = imported.VifxError;
-
-    if (typeof VifxError === "function") {
-      return new (VifxError as new (value: VifxErrorOptions) => Error)(options);
-    }
-  } catch {
-    // Fall back to the local first-pass error while the shared package is absent.
-  }
-
-  return new LocalVifxError(options);
-}
-
 async function findExpoAppConfig(projectRoot: string): Promise<string | undefined> {
   const fileNames = [
     "app.json",
@@ -506,7 +461,7 @@ async function loadRequiredPrimitiveModule<TModule extends Record<string, unknow
     return moduleValue;
   }
 
-  throw await createVifxError({
+  throw new VifxError({
     code: "VIFX_CORE_MISSING_PRIMITIVE",
     details: { exportName, moduleName },
     hint: `Install ${moduleName}, or inject it through createVifxContext({ imports: ... }).`,
@@ -516,10 +471,31 @@ async function loadRequiredPrimitiveModule<TModule extends Record<string, unknow
 
 async function readPackageJson(packageJsonPath: string): Promise<PackageJsonShape> {
   const source = await readFile(packageJsonPath, "utf8");
-  const parsed = JSON.parse(source) as unknown;
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(source) as unknown;
+  } catch (error) {
+    throw new VifxError({
+      code: "VIFX_PROJECT_INVALID_PACKAGE_JSON",
+      cause: error,
+      details: {
+        packageJsonPath,
+      },
+      hint: "Fix the package.json syntax before running project inspection or loading context.",
+      message: `Invalid package.json syntax at "${packageJsonPath}".`,
+    });
+  }
 
   if (!isRecord(parsed)) {
-    throw new Error(`Invalid package.json at "${packageJsonPath}".`);
+    throw new VifxError({
+      code: "VIFX_PROJECT_INVALID_PACKAGE_JSON",
+      details: {
+        packageJsonPath,
+      },
+      hint: "Ensure package.json contains a JSON object.",
+      message: `Invalid package.json shape at "${packageJsonPath}".`,
+    });
   }
 
   return parsed as PackageJsonShape;

@@ -19,6 +19,14 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     features: ["expo-export", "inspection-fixture"],
   },
   {
+    id: "expo-router-basic",
+    title: "Expo Router Basic",
+    relativePath: "fixtures/expo-router-basic",
+    projectType: "expo",
+    packageManager: "pnpm",
+    features: ["expo-project", "expo-router", "browser-preview-target"],
+  },
+  {
     id: "rn-bare-basic",
     title: "React Native Bare Basic",
     relativePath: "fixtures/rn-bare-basic",

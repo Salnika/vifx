@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { SourceMap } from "node:module";
+import { VifxError } from "@vifx/errors";
 
 export interface RawSourceMap {
   version: number;
@@ -86,7 +87,25 @@ export async function loadSourceMap(sourceMapPath: string): Promise<RawSourceMap
 export async function validateSourceMap(
   options: ValidateSourceMapOptions,
 ): Promise<SourceMapValidationResult> {
-  const sourceMap = await loadSourceMap(options.sourceMapPath);
+  let sourceMap: RawSourceMap;
+  try {
+    sourceMap = await loadSourceMap(options.sourceMapPath);
+  } catch (error) {
+    return {
+      file: null,
+      hasMappings: false,
+      sourceCount: 0,
+      sourceMapPath: options.sourceMapPath,
+      sources: [],
+      valid: false,
+      warnings: [
+        error instanceof Error
+          ? `Source map could not be read or parsed: ${error.message}`
+          : "Source map could not be read or parsed.",
+      ],
+    };
+  }
+
   const warnings: string[] = [];
 
   if (sourceMap.version !== 3) {
@@ -126,6 +145,26 @@ export async function validateSourceMap(
     valid,
     warnings,
   };
+}
+
+export async function assertValidSourceMap(
+  options: ValidateSourceMapOptions,
+): Promise<SourceMapValidationResult> {
+  const validation = await validateSourceMap(options);
+
+  if (validation.valid) {
+    return validation;
+  }
+
+  throw new VifxError({
+    code: "VIFX_SOURCEMAP_INVALID",
+    details: {
+      sourceMapPath: validation.sourceMapPath,
+      warnings: validation.warnings,
+    },
+    hint: "Inspect the generated source map, then rebuild with source maps enabled and inline sourcesContent.",
+    message: `Source map "${validation.sourceMapPath}" is invalid.`,
+  });
 }
 
 export async function compareSourceMaps(

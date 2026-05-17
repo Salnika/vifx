@@ -19,8 +19,12 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
+    "@vifx/asset-registry": "workspace:*",
     "@vifx/compat": "workspace:*",
+    "@vifx/config": "workspace:*",
+    "@vifx/errors": "workspace:*",
     "@vifx/metro-inspect": "workspace:*",
+    "@vifx/platform-resolver": "workspace:*",
     "@vifx/types": "workspace:*",
     "@vifx/vite-plugin-react-native": "workspace:*"
   },

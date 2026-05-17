@@ -1,0 +1,6 @@
+dist
+.vifx
+node_modules
+ios/build
+android/.gradle
+android/app/build

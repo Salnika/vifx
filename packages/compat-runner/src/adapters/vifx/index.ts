@@ -4,6 +4,7 @@ import path from "node:path";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 import type { CompatAdapter } from "../../types.ts";
 import {
+  collectAssetMetadata,
   collectAssetScaleGroup,
   detectPackageManager,
   findWorkspaceRoot,
@@ -66,6 +67,9 @@ export const vifxAdapter: CompatAdapter = {
       }
       case "asset-scales": {
         return collectAssetScaleGroup(context.fixturePath, compatCase.operation.assetPath);
+      }
+      case "asset-metadata": {
+        return collectAssetMetadata(context.fixturePath, compatCase.operation.assetPath);
       }
       case "workspace-root": {
         const workingDirectory = path.join(context.fixturePath, compatCase.operation.cwd);

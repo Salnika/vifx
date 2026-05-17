@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { build } from "vite";
 import { expect, test } from "vite-plus/test";
-import { expo, findExpoAppConfig } from "../src/index.ts";
+import { expo, findExpoAppConfig, startExpoDevServer } from "../src/index.ts";
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "../../../fixtures");
 
@@ -76,4 +76,33 @@ test("expo() loads on the Expo fixture and injects EXPO_PUBLIC_ values", async (
   expect(bundleSource).toContain("fixture-injected");
   expect(bundleSource).toContain('AppRegistry.registerComponent("main"');
   expect(bundleSource).toContain('AppRegistry.runApplication("main"');
+});
+
+test("startExpoDevServer serves bounded dev HTML and Vite HMR client", async () => {
+  const projectRoot = await copyFixture("expo-basic");
+  const server = await startExpoDevServer({
+    entry: "./index.js",
+    platform: "ios",
+    port: 5179,
+    projectRoot,
+  });
+
+  try {
+    const htmlResponse = await fetch(server.url);
+    const html = await htmlResponse.text();
+    const clientResponse = await fetch(`${server.url}/@vifx/expo-dev-client`);
+    const client = await clientResponse.text();
+
+    expect(server.hmr).toBe("vite-browser");
+    expect(server.fastRefresh).toBe(false);
+    expect(server.nativeRuntime).toBe(false);
+    expect(htmlResponse.status).toBe(200);
+    expect(html).toContain("Vifx Expo Dev");
+    expect(html).toContain("/@vifx/expo-dev-client");
+    expect(clientResponse.status).toBe(200);
+    expect(client).toContain("import.meta.hot.accept");
+    expect(client).toContain("await import");
+  } finally {
+    await server.close();
+  }
 });

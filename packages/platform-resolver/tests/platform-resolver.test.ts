@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -48,6 +48,38 @@ test("resolves relative imports with platform and native fallbacks", async () =>
       }),
     ]),
   );
+});
+
+test("rejects case-ambiguous platform candidates", async () => {
+  const projectRoot = await createTempProject();
+  const sourceDirectory = path.join(projectRoot, "src");
+
+  await writeFiles(projectRoot, {
+    "src/App.tsx": "export {};",
+    "src/Button.ios.tsx": "export const Button = 'ios';",
+    "src/button.ios.tsx": "export const Button = 'lower-ios';",
+  });
+
+  if ((await readFile(path.join(sourceDirectory, "Button.ios.tsx"), "utf8")).includes("lower")) {
+    return;
+  }
+
+  await expect(
+    resolveReactNativeModule({
+      fromFile: path.join(sourceDirectory, "App.tsx"),
+      platform: "ios",
+      projectRoot,
+      specifier: "./Button",
+    }),
+  ).rejects.toMatchObject({
+    code: "VIFX_RESOLVE_AMBIGUOUS_PLATFORM_FILE",
+    details: {
+      filePaths: [
+        path.join(sourceDirectory, "Button.ios.tsx"),
+        path.join(sourceDirectory, "button.ios.tsx"),
+      ],
+    },
+  });
 });
 
 test("resolves bare packages through exports with react-native conditions", async () => {
@@ -121,6 +153,91 @@ test("resolves legacy react-native package fields when exports are absent", asyn
     path.join(projectRoot, "node_modules/legacy-button/src/native-entry.ts"),
   );
   expect(result.packageName).toBe("legacy-button");
+});
+
+test("respects configured package main field order", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "node_modules/ordered-button/dist/index.ts": "export const mode = 'module';",
+    "node_modules/ordered-button/package.json": JSON.stringify(
+      {
+        main: "./src/main",
+        module: "./dist/index",
+        name: "ordered-button",
+        "react-native": "./src/native",
+      },
+      null,
+      2,
+    ),
+    "node_modules/ordered-button/src/main.ts": "export const mode = 'main';",
+    "node_modules/ordered-button/src/native.ts": "export const mode = 'native';",
+    "src/App.tsx": "export {};",
+  });
+
+  const result = await resolveReactNativeModule({
+    fromFile: path.join(projectRoot, "src/App.tsx"),
+    mainFields: ["module", "react-native", "main"],
+    platform: "ios",
+    projectRoot,
+    specifier: "ordered-button",
+  });
+
+  expect(result.filePath).toBe(path.join(projectRoot, "node_modules/ordered-button/dist/index.ts"));
+  expect(result.trace).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        message: 'Matched package main field "module".',
+      }),
+    ]),
+  );
+});
+
+test("rejects malformed package specifiers with structured diagnostics", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "src/App.tsx": "export {};",
+  });
+
+  await expect(
+    resolveReactNativeModule({
+      fromFile: path.join(projectRoot, "src/App.tsx"),
+      platform: "ios",
+      projectRoot,
+      specifier: "@scope",
+    }),
+  ).rejects.toMatchObject({
+    code: "VIFX_RESOLVE_INVALID_SPECIFIER",
+    details: {
+      specifier: "@scope",
+    },
+    name: "VifxError",
+  });
+});
+
+test("rejects invalid package manifests with structured diagnostics", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "node_modules/broken-package/package.json": "{",
+    "src/App.tsx": "export {};",
+  });
+
+  await expect(
+    resolveReactNativeModule({
+      fromFile: path.join(projectRoot, "src/App.tsx"),
+      platform: "ios",
+      projectRoot,
+      specifier: "broken-package",
+    }),
+  ).rejects.toMatchObject({
+    code: "VIFX_RESOLVE_INVALID_PACKAGE_JSON",
+    details: {
+      packageJsonPath: path.join(projectRoot, "node_modules/broken-package/package.json"),
+    },
+    name: "VifxError",
+  });
 });
 
 test("resolves workspace packages without a node_modules install", async () => {

@@ -17,6 +17,9 @@
     "dev": "vp pack --watch",
     "test": "vp test run"
   },
+  "dependencies": {
+    "@vifx/errors": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",

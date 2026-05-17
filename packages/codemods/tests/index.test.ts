@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -12,7 +12,7 @@ import {
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "../../../fixtures");
 
-test("planInit creates a conservative vifx.config.ts preview", async () => {
+test("planInit creates a vifx.config.ts preview", async () => {
   const plan = await planInit(path.join(FIXTURE_ROOT, "rn-bare-basic"), {});
 
   expect(plan.changes).toHaveLength(1);
@@ -30,12 +30,39 @@ test("planMigration previews package.json and Vifx config changes for Expo fixtu
   expect(plan.nextSteps[0]).toContain("pnpm install");
 });
 
+test("planMigration reports invalid package.json as a structured project error", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-codemods-invalid-"));
+  const targetPath = path.join(tempRoot, "rn-bare-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
+  await writeFile(path.join(targetPath, "package.json"), "{", "utf8");
+
+  await expect(
+    planMigration(targetPath, "react-native", { withVite: false }),
+  ).rejects.toMatchObject({
+    code: "VIFX_PROJECT_INVALID_PACKAGE_JSON",
+    name: "VifxError",
+  });
+});
+
 test("planViteInit creates a real Vite plugin config for Expo fixtures", async () => {
   const plan = await planViteInit(path.join(FIXTURE_ROOT, "expo-basic"), {});
-  const viteConfigChange = plan.changes.find((change) => change.path === "vite.config.ts");
+  const packageJsonChange = plan.changes.find((change) => change.path === "package.json");
+  const viteConfigChange = plan.changes.find((change) => change.path === "vite.config.vifx.ts");
 
+  expect(packageJsonChange?.after).toContain('"vifx:vite": "vite --config vite.config.vifx.ts"');
   expect(viteConfigChange?.after).toContain("@vifx/vite-plugin-expo");
   expect(viteConfigChange?.after).toContain("VIFX_PLATFORM");
+});
+
+test("planViteInit detects Expo Router entries for browser preview targets", async () => {
+  const plan = await planViteInit(path.join(FIXTURE_ROOT, "expo-router-basic"), {});
+  const vifxConfigChange = plan.changes.find((change) => change.path === "vifx.config.ts");
+  const viteConfigChange = plan.changes.find((change) => change.path === "vite.config.vifx.ts");
+
+  expect(vifxConfigChange?.after).toContain('entry: "expo-router/entry"');
+  expect(vifxConfigChange?.after).toContain('reactNativeCompat: "web"');
+  expect(viteConfigChange?.after).toContain('entry: "expo-router/entry"');
 });
 
 test("applyPlannedChanges writes the generated files into a copied fixture", async () => {
@@ -52,7 +79,7 @@ test("applyPlannedChanges writes the generated files into a copied fixture", asy
   expect(await readFile(path.join(targetPath, "vifx.config.ts"), "utf8")).toContain(
     "defineVifxConfig",
   );
-  expect(await readFile(path.join(targetPath, "vite.config.ts"), "utf8")).toContain(
+  expect(await readFile(path.join(targetPath, "vite.config.vifx.ts"), "utf8")).toContain(
     "@vifx/vite-plugin-expo",
   );
 });

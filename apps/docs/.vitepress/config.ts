@@ -36,6 +36,7 @@ export default defineConfig({
             { text: "Packages", link: "/reference/packages" },
             { text: "CLI", link: "/reference/cli" },
             { text: "Config", link: "/reference/config" },
+            { text: "Native Artifacts", link: "/reference/native" },
             { text: "Error Codes", link: "/reference/errors" },
             { text: "Compatibility Report Format", link: "/reference/compatibility-report-format" },
             { text: "Support Matrix", link: "/reference/support-matrix" },

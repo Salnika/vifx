@@ -5,7 +5,7 @@ import type { CliResult } from "../types.ts";
 
 const INIT_HELP = `Usage: vifx init [path] [--write] [--force]
 
-Creates a first-pass vifx.config.ts without overwriting user files by default.
+Creates a vifx.config.ts without overwriting user files by default.
 
 Options:
   --write  Write the planned files instead of printing a preview.

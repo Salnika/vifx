@@ -1,9 +1,9 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
-import type { Plugin } from "vite";
+import { createServer, type Plugin, type ViteDevServer } from "vite";
 import { VifxError } from "@vifx/errors";
 import { reactNative } from "@vifx/vite-plugin-react-native";
-import type { VifxExpoPluginOptions } from "@vifx/types";
+import type { VifxBundlePlatform, VifxExpoPluginOptions } from "@vifx/types";
 
 const EXPO_APP_CONFIG_NAMES = [
   "app.json",
@@ -12,6 +12,29 @@ const EXPO_APP_CONFIG_NAMES = [
   "app.config.js",
   "app.config.mjs",
 ] as const;
+const EXPO_DEV_CLIENT_ID = "\0vifx:expo-dev-client";
+const EXPO_DEV_CLIENT_PUBLIC_ID = "/@vifx/expo-dev-client";
+const EXPO_DEV_ROOT_ELEMENT_ID = "root";
+const WEB_RUNTIME_BROWSER_GLOBALS_KEY = "__VIFX_BROWSER_GLOBALS__";
+
+export interface StartExpoDevServerOptions extends Omit<VifxExpoPluginOptions, "platform"> {
+  host?: string;
+  platform: VifxBundlePlatform;
+  port?: number;
+}
+
+export interface VifxExpoDevServer {
+  close: () => Promise<void>;
+  fastRefresh: false;
+  hmr: "vite-browser";
+  host: string;
+  nativeRuntime: false;
+  platform: VifxBundlePlatform;
+  port: number;
+  projectRoot: string;
+  server: ViteDevServer;
+  url: string;
+}
 
 function resolvePublicEnv(
   explicitEnv: Record<string, string> | undefined,
@@ -33,6 +56,218 @@ async function pathExists(filePath: string) {
   } catch {
     return false;
   }
+}
+
+function toPosixPath(filePath: string) {
+  return filePath.split(path.sep).join("/");
+}
+
+function isPathLikeSpecifier(specifier: string) {
+  return (
+    specifier.startsWith(".") ||
+    specifier.startsWith("/") ||
+    specifier.startsWith("../") ||
+    specifier.startsWith("./")
+  );
+}
+
+function resolveDevEntrySpecifier(projectRoot: string, entry: string) {
+  if (!isPathLikeSpecifier(entry)) {
+    return entry;
+  }
+
+  const absoluteEntryPath = toPosixPath(path.resolve(projectRoot, entry));
+  return absoluteEntryPath.startsWith("/")
+    ? `/@fs${absoluteEntryPath}`
+    : `/@fs/${absoluteEntryPath}`;
+}
+
+function renderExpoDevHtml() {
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "  <head>",
+    '    <meta charset="utf-8" />',
+    '    <link rel="icon" href="data:," />',
+    '    <meta name="viewport" content="width=device-width, initial-scale=1" />',
+    "    <title>Vifx Expo Dev</title>",
+    "    <style>",
+    `      html, body, #${EXPO_DEV_ROOT_ELEMENT_ID} { height: 100%; }`,
+    "      body { margin: 0; }",
+    "    </style>",
+    "  </head>",
+    "  <body>",
+    `    <div id="${EXPO_DEV_ROOT_ELEMENT_ID}"></div>`,
+    `    <script type="module" src="${EXPO_DEV_CLIENT_PUBLIC_ID}"></script>`,
+    "  </body>",
+    "</html>",
+    "",
+  ].join("\n");
+}
+
+function renderExpoDevClient(entrySpecifier: string) {
+  return [
+    "const nativeModuleCache = new Map();",
+    "",
+    "function createNativeModuleProxy(moduleName) {",
+    "  const cachedModule = nativeModuleCache.get(moduleName);",
+    "  if (cachedModule) {",
+    "    return cachedModule;",
+    "  }",
+    "",
+    "  const moduleProxy = new Proxy(",
+    "    {",
+    "      addListener() { return { remove() {} }; },",
+    "      addProxiedListener() { return { remove() {} }; },",
+    "      getConstants() {",
+    "        if (moduleName === 'SourceCode') {",
+    "          return { scriptURL: typeof window !== 'undefined' ? window.location.href : '' };",
+    "        }",
+    "        return {};",
+    "      },",
+    "      removeListeners() {},",
+    "      removeProxiedListeners() {},",
+    "    },",
+    "    {",
+    "      get(target, property) {",
+    "        if (property in target) {",
+    "          return target[property];",
+    "        }",
+    "        if (property === 'name') {",
+    "          return moduleName;",
+    "        }",
+    "        return () => undefined;",
+    "      },",
+    "    },",
+    "  );",
+    "",
+    "  nativeModuleCache.set(moduleName, moduleProxy);",
+    "  return moduleProxy;",
+    "}",
+    "",
+    "if (!globalThis.nativeModuleProxy) {",
+    "  globalThis.nativeModuleProxy = new Proxy({}, {",
+    "    get(_target, property) {",
+    "      return typeof property === 'string' ? createNativeModuleProxy(property) : undefined;",
+    "    },",
+    "  });",
+    "}",
+    "",
+    "if (!globalThis.__fbBatchedBridgeConfig) {",
+    "  globalThis.__fbBatchedBridgeConfig = { remoteModuleConfig: [] };",
+    "}",
+    "",
+    "if (!globalThis.__turboModuleProxy) {",
+    "  globalThis.__turboModuleProxy = (moduleName) => createNativeModuleProxy(moduleName);",
+    "}",
+    "",
+    "if (!globalThis.ErrorUtils) {",
+    "  let globalErrorHandler = (error, isFatal) => {",
+    "    if (isFatal) {",
+    "      console.error(error);",
+    "      return;",
+    "    }",
+    "    console.warn(error);",
+    "  };",
+    "  globalThis.ErrorUtils = {",
+    "    getGlobalHandler() { return globalErrorHandler; },",
+    "    setGlobalHandler(handler) {",
+    "      if (typeof handler === 'function') {",
+    "        globalErrorHandler = handler;",
+    "      }",
+    "    },",
+    "    reportError(error) { globalErrorHandler(error, false); },",
+    "    reportFatalError(error) { globalErrorHandler(error, true); },",
+    "  };",
+    "}",
+    "",
+    "if (!globalThis.ExpoDomWebView) {",
+    "  globalThis.ExpoDomWebView = { expoModulesProxy: globalThis.nativeModuleProxy };",
+    "}",
+    "",
+    `if (!globalThis.${WEB_RUNTIME_BROWSER_GLOBALS_KEY} && typeof window !== 'undefined') {`,
+    `  globalThis.${WEB_RUNTIME_BROWSER_GLOBALS_KEY} = {`,
+    "    Blob: window.Blob,",
+    "    FormData: window.FormData,",
+    "    Headers: window.Headers,",
+    "    ReadableStream: window.ReadableStream,",
+    "    Request: window.Request,",
+    "    Response: window.Response,",
+    "    TextDecoder: window.TextDecoder,",
+    "    TextEncoder: window.TextEncoder,",
+    "    URL: window.URL,",
+    "    URLSearchParams: window.URLSearchParams,",
+    "  };",
+    "}",
+    "",
+    `await import(${JSON.stringify(entrySpecifier)});`,
+    "",
+    "const runtime = globalThis.__VIFX_WEB_RUNTIME__;",
+    "if (runtime && typeof runtime.mount === 'function') {",
+    `  runtime.mount(${JSON.stringify(EXPO_DEV_ROOT_ELEMENT_ID)});`,
+    "}",
+    "",
+    "if (import.meta.hot) {",
+    "  import.meta.hot.accept();",
+    "}",
+    "",
+  ].join("\n");
+}
+
+function expoDevRuntimePlugin(projectRoot: string, entry: string): Plugin {
+  const entrySpecifier = resolveDevEntrySpecifier(projectRoot, entry);
+
+  return {
+    name: "vifx:expo-dev-runtime",
+    enforce: "pre",
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const method = request.method ?? "GET";
+        if (method !== "GET" && method !== "HEAD") {
+          next();
+          return;
+        }
+
+        const requestUrl = new URL(request.url ?? "/", "http://vifx.local");
+        if (requestUrl.pathname !== "/" && requestUrl.pathname !== "/index.html") {
+          next();
+          return;
+        }
+
+        try {
+          const html = await server.transformIndexHtml(requestUrl.pathname, renderExpoDevHtml());
+
+          response.writeHead(200, {
+            "Cache-Control": "no-store",
+            "Content-Type": "text/html; charset=utf-8",
+          });
+
+          if (method === "HEAD") {
+            response.end();
+            return;
+          }
+
+          response.end(html);
+        } catch (error) {
+          next(error);
+        }
+      });
+    },
+    load(id) {
+      if (id !== EXPO_DEV_CLIENT_ID) {
+        return null;
+      }
+
+      return renderExpoDevClient(entrySpecifier);
+    },
+    resolveId(source) {
+      if (source === EXPO_DEV_CLIENT_PUBLIC_ID || source === "@vifx/expo-dev-client") {
+        return EXPO_DEV_CLIENT_ID;
+      }
+
+      return null;
+    },
+  };
 }
 
 export async function findExpoAppConfig(projectRoot: string, explicitPath?: string) {
@@ -133,4 +368,56 @@ export function expo(options: VifxExpoPluginOptions): Plugin[] {
       projectRoot,
     }),
   ];
+}
+
+export async function startExpoDevServer(
+  options: StartExpoDevServerOptions,
+): Promise<VifxExpoDevServer> {
+  const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
+  const entry = options.entry ?? "./index.js";
+  const host = options.host ?? "127.0.0.1";
+  const port = options.port ?? 5173;
+  const server = await createServer({
+    appType: "custom",
+    configFile: false,
+    envFile: false,
+    logLevel: "silent",
+    plugins: [
+      expoDevRuntimePlugin(projectRoot, entry),
+      ...expo({
+        ...options,
+        entry,
+        platform: options.platform,
+        projectRoot,
+        reactNativeCompat: "web",
+        resolvePlatform: "web",
+      }),
+    ],
+    publicDir: false,
+    root: projectRoot,
+    server: {
+      host,
+      port,
+      strictPort: port !== 0,
+    },
+  });
+
+  await server.listen(port);
+
+  const address = server.httpServer?.address();
+  const actualPort = typeof address === "object" && address ? address.port : port;
+  const displayHost = host === "0.0.0.0" ? "127.0.0.1" : host;
+
+  return {
+    close: () => server.close(),
+    fastRefresh: false,
+    hmr: "vite-browser",
+    host,
+    nativeRuntime: false,
+    platform: options.platform,
+    port: actualPort,
+    projectRoot,
+    server,
+    url: `http://${displayHost}:${actualPort}`,
+  };
 }

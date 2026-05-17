@@ -25,6 +25,7 @@ export interface VifxResolveOptions {
   projectRoot: string;
   extensions?: string[];
   conditions?: string[];
+  mainFields?: string[];
 }
 
 export interface VifxResolutionTraceEntry {
@@ -124,6 +125,67 @@ export interface VifxExpoExportInspectionResult {
   manifests: VifxExpoExportManifestArtifact[];
   projectRoot: string;
   warnings: string[];
+}
+
+export interface VifxExpoUpdatesAsset {
+  contentType: string;
+  fileExtension?: string;
+  hash?: string;
+  key: string;
+  url: string;
+}
+
+export interface VifxExpoUpdatesManifest {
+  assets: VifxExpoUpdatesAsset[];
+  createdAt: string;
+  extra: VifxJsonObject;
+  id: string;
+  launchAsset: VifxExpoUpdatesAsset;
+  metadata: Record<string, string>;
+  runtimeVersion: string;
+}
+
+export interface VifxExpoExportGeneratedFile {
+  kind: "asset" | "bundle" | "manifest" | "metadata" | "source-map" | "updates-manifest";
+  path: string;
+  platform?: VifxBundlePlatform;
+}
+
+export interface VifxExpoExportGenerationResult extends VifxExpoExportInspectionResult {
+  generatedFiles: VifxExpoExportGeneratedFile[];
+  updatesManifests: VifxExpoUpdatesManifest[];
+}
+
+export type VifxExpoNoMetroWorkflowId =
+  | "dev-server"
+  | "build"
+  | "export"
+  | "router"
+  | "native-ios"
+  | "native-android"
+  | "updates";
+
+export type VifxExpoNoMetroWorkflowStatus = "blocked" | "inspect-only" | "partial" | "supported";
+
+export interface VifxExpoNoMetroWorkflowReport {
+  blockers: string[];
+  evidence: string[];
+  id: VifxExpoNoMetroWorkflowId;
+  notes: string[];
+  status: VifxExpoNoMetroWorkflowStatus;
+  title: string;
+}
+
+export interface VifxExpoNoMetroContractReport {
+  appDirectory: boolean;
+  decision: "blocked" | "partial" | "supported";
+  expoRouter: boolean;
+  expoVersion: string | null;
+  projectRoot: string;
+  reactNativeVersion: string | null;
+  supportedExpoSdk: string;
+  warnings: string[];
+  workflows: VifxExpoNoMetroWorkflowReport[];
 }
 
 export interface VifxCompatibilityResult {

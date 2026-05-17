@@ -1,6 +1,6 @@
 # Config
 
-The config surface is intentionally conservative in this first pass. It now carries the explicit Vite mode and target contract used by the CLI templates and bounded plugin workflows.
+The config surface carries the explicit Vite mode and target contract used by the CLI templates and bounded plugin workflows.
 
 ## Supported Entry Files
 
@@ -46,6 +46,7 @@ export default defineVifxConfig({
   },
   resolver: {
     conditions: ["react-native", "import", "require", "default"],
+    mainFields: ["react-native", "module", "main"],
   },
 });
 ```
@@ -53,8 +54,9 @@ export default defineVifxConfig({
 ## Config Intent
 
 - Use `defineVifxConfig` from `@vifx/config` as the shared entrypoint.
-- Keep defaults conservative while primitives, CLI workflows, and plugin boundaries stabilize.
+- Keep defaults conservative while primitives, CLI workflows, and plugin boundaries remain experimental.
 - Prefer explicit `vite.mode`, `vite.targets`, resolver settings, and `expoOptions` over inferred behavior.
+- `resolver.mainFields` controls package entry fallback order after `exports` resolution. The default is `react-native`, then `module`, then `main`.
 
 ## Vite Target Notes
 
@@ -65,7 +67,7 @@ export default defineVifxConfig({
 
 ## Notes
 
-- `vifx init` currently emits a conservative `vifx.config.ts`; it does not automatically enable `reactNativeCompat: "web"` or switch Expo projects to `expo-router/entry`.
+- `vifx init` emits `vifx.config.ts`. Expo Router projects with an `app/` directory get `expo-router/entry` and `reactNativeCompat: "web"` targets; other projects keep conservative `./index.js` targets.
 - `loadVifxConfig()` imports the target config directly. External projects therefore need Vifx packages installed where the config resolves them.
-- Validation is intentionally conservative and does not yet expose a full schema-doc pipeline.
+- Validation is conservative and does not yet expose a full schema-doc pipeline.
 - `@vifx/core` keeps compatibility re-exports, but `@vifx/config` is the source of truth for config definition and loading.

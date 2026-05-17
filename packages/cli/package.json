@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "bin": {
-    "cli": "./dist/bin.mjs"
+    "cli": "./dist/bin.mjs",
+    "vifx": "./dist/bin.mjs"
   },
   "files": [
     "bin",
@@ -30,10 +31,14 @@
     "@vifx/compat-runner": "workspace:*",
     "@vifx/config": "workspace:*",
     "@vifx/errors": "workspace:*",
+    "@vifx/expo-export": "workspace:*",
     "@vifx/hermes-tools": "workspace:*",
     "@vifx/metro-inspect": "workspace:*",
+    "@vifx/native-artifacts": "workspace:*",
     "@vifx/types": "workspace:*",
-    "@vifx/vite-plugin-react-native": "workspace:*"
+    "@vifx/vite-plugin-expo": "workspace:*",
+    "@vifx/vite-plugin-react-native": "workspace:*",
+    "vite": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

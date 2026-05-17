@@ -19,6 +19,7 @@ const resolveOptions: VifxResolveOptions = {
   platform: "ios",
   projectRoot: "/repo",
   extensions: ["tsx", "ts", "js"],
+  mainFields: ["react-native", "module", "main"],
 };
 
 const asset: VifxAssetDescriptor = {

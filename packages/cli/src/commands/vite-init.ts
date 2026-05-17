@@ -5,11 +5,11 @@ import type { CliResult } from "../types.ts";
 
 const VITE_INIT_HELP = `Usage: vifx vite init [path] [--write] [--force]
 
-Creates a first-pass vite.config.ts that imports the real Vifx Vite plugin.
+Creates a Vifx-owned vite.config.vifx.ts that imports the real Vifx Vite plugin.
 
 Options:
   --write  Write the planned files instead of printing a preview.
-  --force  Replace an existing vite.config.ts.
+  --force  Replace an existing vite.config.vifx.ts.
   --help   Show this message.
 `;
 

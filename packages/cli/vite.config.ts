@@ -18,6 +18,9 @@ export default defineConfig({
       "@vifx/metro-inspect": fileURLToPath(
         new URL("../metro-inspect/src/index.ts", import.meta.url),
       ),
+      "@vifx/native-artifacts": fileURLToPath(
+        new URL("../native-artifacts/src/index.ts", import.meta.url),
+      ),
       "@vifx/platform-resolver": fileURLToPath(
         new URL("../platform-resolver/src/index.ts", import.meta.url),
       ),
@@ -43,7 +46,12 @@ export default defineConfig({
   pack: {
     dts: true,
     entry: ["src/index.ts", "src/bin.ts"],
-    exports: true,
+    exports: {
+      bin: {
+        cli: "./src/bin.ts",
+        vifx: "./src/bin.ts",
+      },
+    },
     format: ["esm"],
     sourcemap: true,
   },

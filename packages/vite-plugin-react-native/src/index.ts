@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import {
   build,
-  transformWithEsbuild,
+  transformWithOxc,
   type InlineConfig,
   type Plugin,
   type TransformResult,
@@ -55,6 +55,8 @@ const EXPO_MODULES_CORE_DANGEROUS_INTERNAL_ID = "expo-modules-core/src/polyfill/
 const EXPO_ROUTER_FILE_EXTENSION_PATTERN = /\.[jt]sx?$/u;
 const EXPO_ROUTER_PLATFORM_EXTENSIONS = new Set(["android", "ios", "native", "web"]);
 const projectBabelRuntimeCache = new Map<string, Promise<ProjectBabelRuntime | null>>();
+
+type OxcTransformLang = "js" | "jsx" | "ts" | "tsx";
 
 interface ReactNativePluginState {
   aliases: Record<string, string>;
@@ -957,22 +959,36 @@ function shouldTransformExpoPackageSource(
   );
 }
 
-function inferEsbuildLoader(id: string) {
+function inferOxcTransformLang(id: string): OxcTransformLang {
   const normalizedId = toPosixPath(stripQuery(id));
 
   if (normalizedId.endsWith(".tsx")) {
-    return "tsx" as const;
+    return "tsx";
   }
 
-  if (normalizedId.endsWith(".ts")) {
-    return "ts" as const;
+  if (
+    normalizedId.endsWith(".ts") ||
+    normalizedId.endsWith(".mts") ||
+    normalizedId.endsWith(".cts")
+  ) {
+    return "ts";
   }
 
   if (normalizedId.endsWith(".jsx")) {
-    return "jsx" as const;
+    return "jsx";
   }
 
-  return "jsx" as const;
+  return "jsx";
+}
+
+function createOxcTransformOptions(id: string) {
+  const lang = inferOxcTransformLang(id);
+
+  return {
+    jsx: lang === "jsx" || lang === "tsx" ? { runtime: "automatic" as const } : undefined,
+    lang,
+    sourcemap: true,
+  };
 }
 
 function shouldTransformWithProjectBabel(id: string, babelInPackages: string[]) {
@@ -1046,15 +1062,10 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
 
       if (id.startsWith(TRANSFORM_PREFIX)) {
         const originalId = id.slice(TRANSFORM_PREFIX.length);
-        const loader = inferEsbuildLoader(originalId);
-        const transformed = await transformWithEsbuild(
+        const transformed = await transformWithOxc(
           await readFile(originalId, "utf8"),
           originalId,
-          {
-            jsx: loader === "jsx" || loader === "tsx" ? "automatic" : undefined,
-            loader,
-            sourcemap: true,
-          },
+          createOxcTransformOptions(originalId),
         );
 
         return transformed.code;
@@ -1111,16 +1122,11 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         return null;
       }
 
-      const loader = inferEsbuildLoader(id);
-      const transformed = await transformWithEsbuild(code, id, {
-        jsx: loader === "jsx" || loader === "tsx" ? "automatic" : undefined,
-        loader,
-        sourcemap: true,
-      });
+      const transformed = await transformWithOxc(code, id, createOxcTransformOptions(id));
 
       return {
         code: transformed.code,
-        map: transformed.map ?? null,
+        map: (transformed.map as TransformResult["map"]) ?? null,
       };
     },
     async resolveId(source, importer) {

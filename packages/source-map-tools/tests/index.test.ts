@@ -1,6 +1,11 @@
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
-import { compareSourceMaps, symbolicateStackFrame, validateSourceMap } from "../src/index.ts";
+import {
+  assertValidSourceMap,
+  compareSourceMaps,
+  symbolicateStackFrame,
+  validateSourceMap,
+} from "../src/index.ts";
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "fixtures");
 
@@ -12,6 +17,40 @@ test("validateSourceMap validates a Metro-style source map fixture", async () =>
   expect(result.valid).toBe(true);
   expect(result.sourceCount).toBe(1);
   expect(result.sources).toEqual(["src/App.tsx"]);
+});
+
+test("assertValidSourceMap throws a structured error for invalid maps", async () => {
+  await expect(
+    assertValidSourceMap({
+      sourceMapPath: path.join(FIXTURE_ROOT, "invalid.index.map.json"),
+    }),
+  ).rejects.toMatchObject({
+    code: "VIFX_SOURCEMAP_INVALID",
+    details: {
+      warnings: expect.arrayContaining([
+        "Source map does not include any sources.",
+        "Source map does not include any mappings.",
+      ]),
+    },
+  });
+});
+
+test("validateSourceMap reports malformed map files as invalid results", async () => {
+  const result = await validateSourceMap({
+    sourceMapPath: path.join(FIXTURE_ROOT, "malformed.index.map.txt"),
+  });
+
+  expect(result.valid).toBe(false);
+  expect(result.sourceCount).toBe(0);
+  expect(result.warnings[0]).toContain("Source map could not be read or parsed:");
+
+  await expect(
+    assertValidSourceMap({
+      sourceMapPath: path.join(FIXTURE_ROOT, "malformed.index.map.txt"),
+    }),
+  ).rejects.toMatchObject({
+    code: "VIFX_SOURCEMAP_INVALID",
+  });
 });
 
 test("symbolicateStackFrame resolves the original source location", async () => {

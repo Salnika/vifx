@@ -34,6 +34,22 @@ export const compatCases: CompatCase[] = [
     docsPath: "/compat/doctor#project-detection",
   },
   {
+    id: "doctor.project-detection.expo-router-basic",
+    title: "Expo Router projects are detected as Expo projects",
+    category: "doctor.projectDetection",
+    fixtureId: "expo-router-basic",
+    operation: {
+      kind: "project-info",
+    },
+    expected: {
+      projectType: "expo",
+      packageManager: "pnpm",
+      expoVersion: "^54.0.0",
+      reactNativeVersion: "^0.82.0",
+    },
+    docsPath: "/compat/doctor#project-detection",
+  },
+  {
     id: "resolver.platform-extensions.ios-file-wins",
     title: "iOS files win over native files",
     category: "resolver.platformExtensions",
@@ -98,6 +114,38 @@ export const compatCases: CompatCase[] = [
     docsPath: "/compat/resolver#platform-extensions",
   },
   {
+    id: "resolver.package-main-fields.react-native-entry",
+    title: "Package react-native fields are preferred over main fields",
+    category: "resolver.packageMainFields",
+    fixtureId: "monorepo-pnpm-workspaces",
+    operation: {
+      kind: "resolve-file",
+      from: "apps/mobile/src/App.tsx",
+      specifier: "@fixture/ui",
+      platform: "android",
+    },
+    expected: {
+      relativeFile: "packages/ui/src/Button.android.tsx",
+    },
+    docsPath: "/compat/resolver#package-main-fields",
+  },
+  {
+    id: "resolver.package-exports.react-native-condition",
+    title: "Package exports resolve react-native conditions before default entries",
+    category: "resolver.packageExports",
+    fixtureId: "monorepo-pnpm-workspaces",
+    operation: {
+      kind: "resolve-file",
+      from: "apps/mobile/src/App.tsx",
+      specifier: "@fixture/design-system",
+      platform: "ios",
+    },
+    expected: {
+      relativeFile: "packages/design-system/src/native.ts",
+    },
+    docsPath: "/compat/resolver#package-exports",
+  },
+  {
     id: "assets.scale-groups.icon",
     title: "Asset scale groups are discovered from React Native file naming",
     category: "assets.scaleGroups",
@@ -112,6 +160,27 @@ export const compatCases: CompatCase[] = [
       files: ["src/assets/icon.png", "src/assets/icon@2x.png", "src/assets/icon@3x.png"],
     },
     docsPath: "/compat/assets#scale-groups",
+  },
+  {
+    id: "assets.metadata.svg-logo",
+    title: "Asset metadata includes normalized location, type, scales, and dimensions",
+    category: "assets.metadata",
+    fixtureId: "rn-bare-assets",
+    operation: {
+      kind: "asset-metadata",
+      assetPath: "assets/logo.svg",
+    },
+    expected: {
+      assetPath: "assets/logo.svg",
+      fileCount: 1,
+      height: 32,
+      httpServerLocation: "/assets",
+      name: "logo",
+      scales: [1],
+      type: "svg",
+      width: 64,
+    },
+    docsPath: "/compat/assets#metadata",
   },
   {
     id: "bundler.bundle-artifacts.rn-bare-basic-ios",

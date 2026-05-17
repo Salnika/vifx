@@ -17,6 +17,7 @@ test("shared contracts compose resolver, asset, project, and config data", () =>
     projectRoot: "/repo",
     extensions: ["tsx", "ts", "js"],
     conditions: ["react-native"],
+    mainFields: ["react-native", "module", "main"],
   });
 
   const asset: VifxAssetDescriptor = {

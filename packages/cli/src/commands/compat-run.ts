@@ -5,7 +5,7 @@ import type { CliResult } from "../types.ts";
 
 const COMPAT_RUN_HELP = `Usage: vifx compat run [--adapter metro|vifx|all] [--report terminal|json|markdown] [--fixture <id>]
 
-Runs first-pass compatibility cases against the available adapters.
+Runs compatibility cases against the available adapters.
 
 Options:
   --adapter  Adapter id. Supports "metro", "vifx", or "all".

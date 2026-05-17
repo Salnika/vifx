@@ -703,7 +703,7 @@ Must:
 - Read package manager.
 - Add Vifx dev dependencies.
 - Generate `vifx.config.ts`.
-- Optionally generate `vite.config.ts` with Vifx plugin.
+- Optionally generate `vite.config.vifx.ts` with Vifx plugin so existing user `vite.config.ts` files remain untouched.
 - Add scripts without removing existing scripts.
 - Preserve Metro config.
 - Print clear next steps.
@@ -716,7 +716,7 @@ Suggested scripts:
     "vifx:doctor": "vifx doctor",
     "vifx:compat": "vifx compat run --adapter vifx",
     "vifx:inspect": "vifx inspect",
-    "vifx:vite": "vite --config vite.config.ts"
+    "vifx:vite": "vite --config vite.config.vifx.ts"
   }
 }
 ```
@@ -771,7 +771,7 @@ Initial non-goals:
 
 - Full Expo Router support.
 - Full Fast Refresh parity.
-- Full Expo Updates export.
+- Full Expo Updates serving, signing, and native validation.
 - Production-ready app store builds.
 
 Acceptance criteria:
@@ -798,7 +798,7 @@ Responsibilities for first milestone:
 Non-goals for first milestone:
 
 - Full Expo Router support.
-- Full Expo Updates output generation.
+- Full Expo Updates serving, signing, and native validation.
 - Full EAS integration.
 - Replacement for `expo start`.
 
@@ -895,14 +895,15 @@ Docs requirements:
 Support matrix example:
 
 ```md
-| Feature         | Metro reference | Vifx primitive | Vite RN plugin |  Expo plugin |
-| --------------- | --------------: | -------------: | -------------: | -----------: |
-| Platform files  |             yes |        partial |        partial |      partial |
-| Assets @2x/@3x  |             yes |        partial |        partial |      partial |
-| Hermes bytecode |             yes |        planned |        planned |      planned |
-| Fast Refresh    |             yes |            n/a |        planned |      planned |
-| Expo Router     |             yes |            n/a |             no |      planned |
-| Expo Updates    |             yes |   inspect only |             no | inspect only |
+| Feature         | Metro reference |         Vifx primitive |  Vite RN plugin |            Expo plugin |
+| --------------- | --------------: | ---------------------: | --------------: | ---------------------: |
+| Platform files  |             yes |                partial |         partial |                partial |
+| Assets @2x/@3x  |             yes |                partial |         partial |                partial |
+| Hermes bytecode |             yes |                planned |         planned |                planned |
+| Dev server      |             yes |                    n/a | bounded browser |        bounded browser |
+| Fast Refresh    |             yes |                    n/a |         planned |                planned |
+| Expo Router     |             yes |                    n/a |              no |                planned |
+| Expo Updates    |             yes | partial bounded server |              no | partial bounded server |
 ```
 
 ---
@@ -1086,8 +1087,8 @@ Hermes compiler: unavailable
 
 Issues:
   WARN  VIFX_CONFIG_MISSING
-        No vifx.config.ts found.
-        Run: vifx init
+        No supported Vifx config file found.
+        Run: vifx init to create vifx.config.ts.
 
   INFO  VIFX_EXPERIMENTAL_EXPO
         Expo support is currently experimental.
@@ -1235,7 +1236,7 @@ Do not implement these in the first milestone:
 - Full Expo CLI replacement.
 - Full Fast Refresh parity.
 - Full Expo Router support.
-- Full Expo Updates generation.
+- Full Expo Updates serving, signing, and native validation.
 - Native iOS/Android project modification.
 - Module Federation.
 - Advanced code splitting.
@@ -1296,19 +1297,22 @@ Implemented in the current repository pass:
 - `packages/codemods`
 - `packages/source-map-tools`
 - `packages/hermes-tools`
+- `packages/native-artifacts`
 - `packages/cli`
 - `packages/expo-export`
 - `packages/vite-plugin-react-native`
 - `packages/vite-plugin-expo`
 - first-pass fixtures under `fixtures/`
+- formal validation playgrounds under `apps/playground-rn-bare` and `apps/playground-expo`
 
 Validated in this repository:
 
 ```bash
 vp install
 vp check
-pnpm test
-pnpm build
+vp test
+vp run build
+pnpm playground:validate
 pnpm --filter @vifx/cli vifx doctor ./fixtures/rn-bare-basic
 pnpm --filter @vifx/cli vifx inspect ./fixtures/rn-bare-basic
 pnpm --filter @vifx/cli vifx compat run --adapter vifx
@@ -1395,6 +1399,7 @@ Completed:
 - `@vifx/vite-plugin-react-native`
 - `buildReactNativeBundle`
 - `fixtures/rn-bare-basic` as the smoke target
+- `apps/playground-rn-bare` as the maintained bare React Native playground, validated by `pnpm playground:rn-bare`
 - resolver, asset, source-map, and optional Hermes integration on the controlled bundle path
 - compatibility cases for bundle artifact shape and source-map validity
 
@@ -1409,6 +1414,7 @@ Completed:
 - Expo app config detection
 - `EXPO_PUBLIC_*` env injection
 - safe `expo` and `registerRootComponent` shim
+- `apps/playground-expo` as the maintained Expo playground, validated by `pnpm playground:expo`
 
 #### Milestone 7 — Expo export inspection
 
@@ -1419,7 +1425,71 @@ Completed:
 - `@vifx/expo-export`
 - `fixtures/expo-export-basic`
 - existing export inspection for bundles, source maps, manifests, and assets
-- inspect-only posture with no output generation claims
+- executable Expo without Metro contract report for dev, build, export, Router, native, and Updates workflows
+- `vifx expo audit` CLI reporting for the Program C contract matrix
+- `startExpoDevServer` and `vifx expo dev` for bounded browser-only Expo dev serving with Vite HMR
+- `writeExpoExport` and `vifx expo export` for bounded Vifx-generated bundle, source-map, asset, manifest, metadata, and optional Expo Updates v1 manifest output
+- `startExpoUpdatesServer` and `vifx expo serve` for bounded local Updates JSON manifest, optional response signing, and asset responses
+- `apps/playground-expo` executes export generation and audit as part of `pnpm playground:expo`
+- no full Expo Updates native validation, multipart directive, or EAS parity claims
+
+#### Program B — Native artifact and lifecycle planning
+
+Status: **started**
+
+Completed:
+
+- `@vifx/native-artifacts`
+- `vifx native prepare`
+- `vifx native doctor`
+- `vifx native build --dry-run`
+- `vifx native install --dry-run`
+- `vifx native launch --dry-run`
+- `vifx native run --dry-run`
+- `apps/playground-rn-bare/ios` as a formal iOS host marker for native diagnostics
+- `apps/playground-rn-bare/android` as a formal Android host marker for native diagnostics
+- `pnpm native:validate`
+- deterministic iOS and Android artifact directory manifests for existing Vifx bundle outputs
+- advisory Xcode and Android SDK toolchain diagnostics
+- advisory simulator, emulator, and device target diagnostics
+- iOS and Android host detection for command planning
+- static iOS signing and Android signing marker diagnostics
+- iOS provisioning profile readiness and Android signing material diagnostics
+- deterministic native build, install, and launch command plans
+- dry-run prepare, diagnose, build, install, and launch orchestration
+
+Still missing:
+
+- executable production-grade iOS host build
+- executable production-grade Android host build
+- executed native build, install, provisioning profile validation, simulator, emulator, device launch validation, and full native docs
+
+#### Program C — Expo without Metro parity
+
+Status: **contract audit, bounded dev serving, and bounded generation started**
+
+Completed:
+
+- `evaluateExpoNoMetroContract` in `@vifx/expo-export`
+- `vifx expo audit` as a CLI surface for the same support matrix
+- `startExpoDevServer` in `@vifx/vite-plugin-expo`
+- `vifx expo dev` as a bounded browser dev-server CLI with Vite HMR
+- `writeExpoExport` in `@vifx/expo-export`
+- `vifx expo export` as a bounded export-generation CLI
+- bounded Expo Updates v1 manifest generation for Vifx export artifacts
+- bounded Expo Updates v1 local serving for generated manifests, bundles, assets, and optional `expo-signature` headers
+- maintained playground validation for export and audit through `pnpm playground:expo`
+- explicit workflow status for Expo dev server, build, export, Router, native iOS, native Android, and Updates
+- evidence and blocker reporting so support claims are not prose-only
+
+Still missing:
+
+- native Expo dev server/device runtime parity beyond the bounded browser-only Vite HMR path
+- React Native Fast Refresh parity
+- full Expo build/export generation without Metro beyond bounded Vifx bundle, source-map, asset, manifest, metadata, and Updates manifest output
+- Expo Router parity beyond bounded browser preview
+- Expo native iOS/Android runtime integration
+- Expo Updates multipart directives, EAS parity, and native execution
 
 ### Notes for next agents
 

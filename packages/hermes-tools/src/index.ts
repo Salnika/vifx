@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { VifxError } from "@vifx/errors";
 
 const execFileAsync = promisify(execFile);
 
@@ -33,18 +34,6 @@ export interface CompileHermesBytecodeResult {
   compilerPath: string;
   outputBytecodePath: string;
   sourceMapPath?: string;
-}
-
-class HermesToolsError extends Error {
-  readonly code: string;
-  readonly hint?: string;
-
-  constructor(options: { code: string; hint?: string; message: string }) {
-    super(options.message);
-    this.code = options.code;
-    this.hint = options.hint;
-    this.name = "HermesToolsError";
-  }
 }
 
 async function isExecutable(filePath: string) {
@@ -160,19 +149,25 @@ export async function compileHermesBytecode(
     : undefined;
 
   if (!(await fileExists(inputBundlePath))) {
-    throw new HermesToolsError({
+    throw new VifxError({
       code: "VIFX_HERMES_INPUT_MISSING",
       hint: "Pass an existing JavaScript bundle path to --input.",
       message: `Bundle input "${inputBundlePath}" does not exist.`,
+      details: {
+        inputBundlePath,
+      },
     });
   }
 
   const compiler = await detectHermesCompiler(options);
   if (!compiler.available || !compiler.path) {
-    throw new HermesToolsError({
+    throw new VifxError({
       code: "VIFX_HERMES_UNAVAILABLE",
       hint: "Install Hermes and make hermesc available in PATH, HERMES_CLI, or node_modules/.bin.",
       message: "Unable to find a Hermes compiler in the current environment.",
+      details: {
+        cwd: path.resolve(options.cwd ?? process.cwd()),
+      },
     });
   }
 
@@ -191,18 +186,29 @@ export async function compileHermesBytecode(
       env: options.env ?? process.env,
     });
   } catch (error) {
-    throw new HermesToolsError({
+    throw new VifxError({
       code: "VIFX_HERMES_COMPILE_FAILED",
+      cause: error,
       hint: "Run the Hermes compiler manually with the same bundle to inspect the underlying failure.",
       message: error instanceof Error ? error.message : "Hermes compilation failed.",
+      details: {
+        command: command.join(" "),
+        compilerPath: compiler.path,
+        inputBundlePath,
+        outputBytecodePath,
+      },
     });
   }
 
   if (!(await fileExists(outputBytecodePath))) {
-    throw new HermesToolsError({
+    throw new VifxError({
       code: "VIFX_HERMES_OUTPUT_MISSING",
       hint: "Check the Hermes compiler arguments and output permissions.",
       message: `Hermes compilation finished without creating "${outputBytecodePath}".`,
+      details: {
+        command: command.join(" "),
+        outputBytecodePath,
+      },
     });
   }
 

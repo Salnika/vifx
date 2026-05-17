@@ -5,7 +5,7 @@ import type { CliResult } from "../types.ts";
 
 const DOCTOR_HELP = `Usage: vifx doctor [path] [--json]
 
-Checks project readiness for first-pass Vifx workflows.
+Checks project readiness for Vifx workflows.
 
 Options:
   --json  Output machine-readable JSON with no extra logs.
@@ -28,7 +28,9 @@ function formatDiagnostic(diagnostic: {
   ];
 
   if (diagnostic.hint) {
-    lines.push(`        Run: ${diagnostic.hint.replace(/^Run:\s*/, "")}`);
+    lines.push(
+      `        ${diagnostic.hint.startsWith("Run:") ? diagnostic.hint : `Hint: ${diagnostic.hint}`}`,
+    );
   }
 
   return lines.join("\n");
@@ -81,16 +83,17 @@ export async function runDoctorCommand(argv: string[], cwd: string): Promise<Cli
       formatValue("Package manager", inspection.packageManager),
       formatValue("React Native", inspection.reactNativeVersion),
       formatValue("Expo", inspection.expoVersion),
-      formatValue("Metro config", inspection.metroConfigPath ? "found" : "missing"),
+      formatValue("Metro config", inspection.metroConfigPath),
+      formatValue("Vite config", inspection.viteConfigPath),
       formatValue("Vite mode", inspection.vitePluginMode),
-      formatValue("Vifx config", inspection.vifxConfigPath ? "found" : "missing"),
+      formatValue("Vifx config", inspection.vifxConfigPath),
       formatValue("Workspace root", workspaceRoot),
       formatValue("Hermes compiler", inspection.hermesCompilerPath ?? "unavailable"),
       "",
       "Issues:",
       inspection.diagnostics.length > 0
         ? inspection.diagnostics.map((diagnostic) => formatDiagnostic(diagnostic)).join("\n\n")
-        : "  INFO  VIFX_NO_ISSUES\n        No first-pass issues detected.",
+        : "  INFO  VIFX_NO_ISSUES\n        No issues detected.",
     ].join("\n"),
     stderr: "",
   };

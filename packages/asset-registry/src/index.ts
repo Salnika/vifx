@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { VifxError } from "@vifx/errors";
 
 export interface AssetVariantDescriptor {
   filePath: string;
@@ -41,14 +42,6 @@ interface AssetDimensions {
   width: number;
 }
 
-interface VifxErrorOptions {
-  cause?: unknown;
-  code: string;
-  details?: unknown;
-  hint?: string;
-  message: string;
-}
-
 const DEFAULT_SUPPORTED_ASSET_EXTENSIONS = [
   "gif",
   "jpeg",
@@ -64,20 +57,6 @@ const DEFAULT_SUPPORTED_ASSET_EXTENSIONS = [
 
 export const supportedAssetExtensions = [...DEFAULT_SUPPORTED_ASSET_EXTENSIONS];
 
-class LocalVifxError extends Error {
-  readonly code: string;
-  readonly details?: unknown;
-  readonly hint?: string;
-
-  constructor(options: VifxErrorOptions) {
-    super(options.message, { cause: options.cause });
-    this.code = options.code;
-    this.details = options.details;
-    this.hint = options.hint;
-    this.name = "VifxError";
-  }
-}
-
 export async function collectAssetGroup(
   options: CollectAssetGroupOptions,
 ): Promise<NormalizedAssetDescriptor> {
@@ -85,7 +64,7 @@ export async function collectAssetGroup(
   const filePath = path.resolve(options.filePath);
 
   if (!(await isFile(filePath))) {
-    throw await createVifxError({
+    throw new VifxError({
       code: "VIFX_ASSET_NOT_FOUND",
       details: { filePath },
       hint: "Pass the path to an existing asset file.",
@@ -96,16 +75,18 @@ export async function collectAssetGroup(
   const parsedInput = parseAssetPath(filePath, options.supportedExtensions);
 
   if (!parsedInput) {
-    throw await createVifxError({
+    throw new VifxError({
       code: "VIFX_ASSET_UNSUPPORTED_TYPE",
       details: {
         filePath,
-        supportedExtensions: options.supportedExtensions ?? supportedAssetExtensions,
+        supportedExtensions: [...(options.supportedExtensions ?? supportedAssetExtensions)],
       },
       hint: `Use one of the supported asset extensions: ${(options.supportedExtensions ?? supportedAssetExtensions).join(", ")}.`,
       message: `Unsupported asset type for "${filePath}".`,
     });
   }
+
+  assertValidAssetScale(parsedInput.scale, filePath);
 
   const directory = path.dirname(filePath);
   const entries = await readdir(directory, { withFileTypes: true });
@@ -124,6 +105,7 @@ export async function collectAssetGroup(
           entry.parsed.type === parsedInput.type,
       )
       .map(async ({ filePath: variantPath, parsed }) => {
+        assertValidAssetScale(parsed.scale, variantPath);
         const buffer = await readFile(variantPath);
         return {
           filePath: variantPath,
@@ -137,11 +119,12 @@ export async function collectAssetGroup(
   variants.sort(
     (left, right) => left.scale - right.scale || left.filePath.localeCompare(right.filePath),
   );
+  assertUniqueAssetScales(variants, filePath);
 
   const canonicalVariant = variants.find((variant) => variant.scale === 1) ?? variants[0];
 
   if (!canonicalVariant) {
-    throw await createVifxError({
+    throw new VifxError({
       code: "VIFX_ASSET_NOT_FOUND",
       details: { filePath },
       hint: "Ensure at least one asset file exists in the group.",
@@ -259,27 +242,43 @@ function createAssetGroupHash(
   return hash.digest("hex").slice(0, 16);
 }
 
-async function createVifxError(options: VifxErrorOptions): Promise<Error> {
-  const moduleName = "@vifx/errors";
+function assertUniqueAssetScales(variants: readonly AssetVariantDescriptor[], filePath: string) {
+  const seenScales = new Map<number, string>();
 
-  try {
-    const imported = (await import(moduleName)) as Record<string, unknown>;
-    const create = imported.createVifxError;
-
-    if (typeof create === "function") {
-      return (create as (value: VifxErrorOptions) => Error)(options);
+  for (const variant of variants) {
+    const existingFilePath = seenScales.get(variant.scale);
+    if (!existingFilePath) {
+      seenScales.set(variant.scale, variant.filePath);
+      continue;
     }
 
-    const VifxError = imported.VifxError;
+    throw new VifxError({
+      code: "VIFX_ASSET_INVALID_SCALE",
+      details: {
+        duplicateScale: variant.scale,
+        filePath,
+        filePaths: [existingFilePath, variant.filePath],
+      },
+      hint: `Keep only one asset variant for scale ${String(variant.scale)}x.`,
+      message: `Multiple asset variants declare scale ${String(variant.scale)}x for "${filePath}".`,
+    });
+  }
+}
 
-    if (typeof VifxError === "function") {
-      return new (VifxError as new (value: VifxErrorOptions) => Error)(options);
-    }
-  } catch {
-    // Keep the package self-contained until @vifx/errors is available.
+function assertValidAssetScale(scale: number, filePath: string) {
+  if (Number.isFinite(scale) && scale > 0) {
+    return;
   }
 
-  return new LocalVifxError(options);
+  throw new VifxError({
+    code: "VIFX_ASSET_INVALID_SCALE",
+    details: {
+      filePath,
+      scale,
+    },
+    hint: "Use a positive numeric scale suffix such as @2x or omit the suffix for 1x.",
+    message: `Invalid asset scale "${String(scale)}" for "${filePath}".`,
+  });
 }
 
 function createHttpServerLocation(projectRoot: string, directory: string): string {

@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -eu
+
+echo "This lightweight wrapper exists for Vifx native command planning. Install a real Gradle wrapper before executing native Android builds." >&2
+exit 1

@@ -1,6 +1,7 @@
 export const FIXTURE_IDS = [
   "expo-basic",
   "expo-export-basic",
+  "expo-router-basic",
   "rn-bare-basic",
   "rn-bare-platform-files",
   "rn-bare-assets",
@@ -13,7 +14,10 @@ export type FixtureId = (typeof FIXTURE_IDS)[number];
 export const COMPAT_CATEGORIES = [
   "doctor.projectDetection",
   "resolver.platformExtensions",
+  "resolver.packageMainFields",
+  "resolver.packageExports",
   "assets.scaleGroups",
+  "assets.metadata",
   "bundler.bundleArtifacts",
   "bundler.sourceMapValidity",
   "monorepo.workspaceResolution",
@@ -53,6 +57,11 @@ export interface AssetScalesOperation {
   assetPath: string;
 }
 
+export interface AssetMetadataOperation {
+  kind: "asset-metadata";
+  assetPath: string;
+}
+
 export interface WorkspaceRootOperation {
   kind: "workspace-root";
   cwd: string;
@@ -74,6 +83,7 @@ export type CompatOperation =
   | ProjectInfoOperation
   | ResolveFileOperation
   | AssetScalesOperation
+  | AssetMetadataOperation
   | WorkspaceRootOperation
   | BundleArtifactsOperation
   | SourceMapValidityOperation;
@@ -93,6 +103,17 @@ export interface AssetScalesExpectation {
   assetPath: string;
   scales: number[];
   files: string[];
+}
+
+export interface AssetMetadataExpectation {
+  assetPath: string;
+  fileCount: number;
+  height: number | null;
+  httpServerLocation: string;
+  name: string;
+  scales: number[];
+  type: string;
+  width: number | null;
 }
 
 export interface WorkspaceRootExpectation {
@@ -118,6 +139,7 @@ export type CompatExpectation =
   | ProjectInfoExpectation
   | ResolveFileExpectation
   | AssetScalesExpectation
+  | AssetMetadataExpectation
   | WorkspaceRootExpectation
   | BundleArtifactsExpectation
   | SourceMapValidityExpectation;

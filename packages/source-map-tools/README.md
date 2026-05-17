@@ -1,3 +1,3 @@
 # @vifx/source-map-tools
 
-Source map validation, normalization, comparison, and symbolication helpers.
+Source map validation, assertion, normalization, comparison, and symbolication helpers.

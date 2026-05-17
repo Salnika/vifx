@@ -124,6 +124,41 @@ test("loadVifxConfig loads and validates a TypeScript config file", async () => 
   expect(loaded.config.resolver.extensions).toEqual(["tsx", "ts", "js"]);
 });
 
+test("loadVifxConfig supports every SPECS config filename", async () => {
+  for (const fileName of [
+    "vifx.config.ts",
+    "vifx.config.mts",
+    "vifx.config.js",
+    "vifx.config.mjs",
+  ]) {
+    const directory = await mkdtemp(join(tmpdir(), "vifx-config-format-"));
+    tempDirectories.push(directory);
+
+    await writeFile(join(directory, "package.json"), '{"type":"module"}\n');
+    await writeFile(
+      join(directory, fileName),
+      [
+        "export default {",
+        `  projectRoot: ${JSON.stringify(directory)},`,
+        '  projectType: "react-native",',
+        "  reactNative: true,",
+        "};",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadVifxConfig({
+      cwd: directory,
+      optional: false,
+    });
+
+    expect(loaded.filePath).toBe(join(directory, fileName));
+    expect(loaded.config.projectRoot).toBe(directory);
+    expect(loaded.config.projectType).toBe("react-native");
+    expect(loaded.config.reactNative).toBe(true);
+  }
+});
+
 test("validateVifxConfig rejects unknown keys with a readable error", () => {
   expect(() =>
     validateVifxConfig({

@@ -7,19 +7,23 @@ import {
   resolveFixturePath,
 } from "../src/index.ts";
 
-test("fixture manifests expose the first-pass fixtures", () => {
-  expect(getFixtureManifests()).toHaveLength(7);
+test("fixture manifests expose the compatibility fixtures", () => {
+  expect(getFixtureManifests()).toHaveLength(8);
   expect(getFixtureManifest("expo-basic").projectType).toBe("expo");
+  expect(getFixtureManifest("expo-router-basic").features).toContain("expo-router");
   expect(resolveFixturePath("expo-basic")).toContain("fixtures/expo-basic");
 });
 
-test("compat cases cover doctor, resolver, assets, and monorepo categories", () => {
+test("compat cases cover the NEXT minimum categories", () => {
   const categories = [...new Set(compatCases.map((compatCase) => compatCase.category))];
 
   expect(categories).toEqual([
     "doctor.projectDetection",
     "resolver.platformExtensions",
+    "resolver.packageMainFields",
+    "resolver.packageExports",
     "assets.scaleGroups",
+    "assets.metadata",
     "bundler.bundleArtifacts",
     "bundler.sourceMapValidity",
     "monorepo.workspaceResolution",

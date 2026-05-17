@@ -69,6 +69,46 @@ test("groups scaled PNG assets into a deterministic normalized descriptor", asyn
   expect(firstDescriptor.variants).toHaveLength(3);
 });
 
+test("rejects invalid asset scales with structured diagnostics", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeBinaryFiles(projectRoot, {
+    "assets/icon.png": createPngHeader(10, 12),
+    "assets/icon@0x.png": createPngHeader(10, 12),
+  });
+
+  await expect(
+    collectAssetGroup({
+      filePath: path.join(projectRoot, "assets/icon@0x.png"),
+      projectRoot,
+    }),
+  ).rejects.toMatchObject({
+    code: "VIFX_ASSET_INVALID_SCALE",
+    message: expect.stringContaining("Invalid asset scale"),
+  });
+});
+
+test("rejects duplicate scale variants with structured diagnostics", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeBinaryFiles(projectRoot, {
+    "assets/icon.png": createPngHeader(10, 12),
+    "assets/icon@1x.png": createPngHeader(10, 12),
+  });
+
+  await expect(
+    collectAssetGroup({
+      filePath: path.join(projectRoot, "assets/icon.png"),
+      projectRoot,
+    }),
+  ).rejects.toMatchObject({
+    code: "VIFX_ASSET_INVALID_SCALE",
+    details: {
+      duplicateScale: 1,
+    },
+  });
+});
+
 test("collects font assets and builds dev-server URLs", async () => {
   const projectRoot = await createTempProject();
 

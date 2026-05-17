@@ -1,24 +1,27 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import { resolveFixturePath } from "@vifx/compat";
 import { formatCompatReport, inspectProject, runCompatSuite } from "../src/index.ts";
 
-test("runCompatSuite executes the vifx adapter against the first-pass cases", async () => {
+test("runCompatSuite executes the vifx adapter against the compatibility cases", async () => {
   const report = await runCompatSuite({
     adapter: "vifx",
   });
 
   expect(report.status).toBe("PASS");
-  expect(report.totalCases).toBe(11);
+  expect(report.totalCases).toBe(15);
   expect(report.failedCases).toBe(0);
 });
 
-test("runCompatSuite executes the Metro reference adapter against the first-pass cases", async () => {
+test("runCompatSuite executes the Metro reference adapter against the compatibility cases", async () => {
   const report = await runCompatSuite({
     adapter: "metro",
   });
 
   expect(report.status).toBe("PASS");
-  expect(report.totalCases).toBe(11);
+  expect(report.totalCases).toBe(15);
   expect(report.failedCases).toBe(0);
 });
 
@@ -31,6 +34,105 @@ test("inspectProject returns doctor-friendly metadata", async () => {
   expect(inspection.vitePluginMode).toBe("none");
   expect(inspection.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
     "VIFX_CONFIG_MISSING",
+  );
+});
+
+test("inspectProject uses shared Vifx config filenames", async () => {
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "vifx-compat-runner-"));
+
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify({ name: "config-format-fixture" }, null, 2),
+    "utf8",
+  );
+  await writeFile(path.join(projectRoot, "vifx.config.mts"), "export default {};\n", "utf8");
+
+  const inspection = await inspectProject(projectRoot);
+
+  expect(inspection.vifxConfigPath).toBe("vifx.config.mts");
+  expect(inspection.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+    "VIFX_CONFIG_MISSING",
+  );
+});
+
+test("inspectProject detects Vifx-owned Vite config formats", async () => {
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "vifx-compat-runner-"));
+
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify({ name: "vite-format-fixture" }, null, 2),
+    "utf8",
+  );
+  await writeFile(
+    path.join(projectRoot, "vite.config.vifx.mts"),
+    'import { reactNativeVitePlugin } from "@vifx/vite-plugin-react-native";\nexport default { plugins: [reactNativeVitePlugin()] };\n',
+    "utf8",
+  );
+
+  const inspection = await inspectProject(projectRoot);
+
+  expect(inspection.viteConfigPath).toBe("vite.config.vifx.mts");
+  expect(inspection.vitePluginMode).toBe("react-native");
+});
+
+test("inspectProject ignores generated Vifx output directories", async () => {
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "vifx-compat-runner-"));
+
+  await mkdir(path.join(projectRoot, "src", "assets"), { recursive: true });
+  await mkdir(path.join(projectRoot, ".vifx", "native", "ios", "assets"), { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify({ name: "generated-output-fixture" }, null, 2),
+    "utf8",
+  );
+  await writeFile(path.join(projectRoot, "src", "assets", "icon.svg"), "<svg />\n", "utf8");
+  await writeFile(
+    path.join(projectRoot, ".vifx", "native", "ios", "assets", "icon.svg"),
+    "<svg />\n",
+    "utf8",
+  );
+
+  const inspection = await inspectProject(projectRoot);
+
+  expect(inspection.assetGroups.map((assetGroup) => assetGroup.assetPath)).toEqual([
+    "src/assets/icon.svg",
+  ]);
+});
+
+test("inspectProject warns for Expo SDK versions outside the fixture-backed range", async () => {
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "vifx-compat-runner-"));
+
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify(
+      {
+        dependencies: {
+          expo: "~53.0.0",
+          "react-native": "0.80.0",
+        },
+        name: "old-expo-fixture",
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  await writeFile(
+    path.join(projectRoot, "app.json"),
+    JSON.stringify({ expo: { name: "Old Expo" } }, null, 2),
+    "utf8",
+  );
+
+  const inspection = await inspectProject(projectRoot);
+
+  expect(inspection.projectType).toBe("expo");
+  expect(inspection.diagnostics).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        code: "VIFX_PROJECT_UNSUPPORTED_EXPO_VERSION",
+        level: "warn",
+      }),
+    ]),
   );
 });
 
