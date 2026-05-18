@@ -36,11 +36,11 @@ Bundling includes platform resolution, assets, source maps, Hermes, export shape
 - Normalize paths before comparing reports.
 - Use symbolication helpers to turn mismatches into actionable diagnostics.
 
-### Expo Export And Updates
+### Expo Export Artifacts
 
 - Inspect first and generate later.
-- Document inspect-only states clearly.
-- Keep Router and Updates generation separate from basic export understanding.
+- Generate bundle artifacts without Metro.
+- Keep Expo Updates runtime, serving, signing, and EAS outside this package.
 
 ### Metro Compatibility
 

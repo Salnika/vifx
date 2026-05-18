@@ -1,13 +1,7 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { loadVifxConfig } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
-import {
-  evaluateExpoNoMetroContract,
-  startExpoUpdatesServer,
-  writeExpoExport,
-} from "@vifx/expo-export";
-import type { VifxExpoUpdatesServer } from "@vifx/expo-export";
+import { evaluateExpoNoMetroContract, writeExpoExport } from "@vifx/expo-export";
 import { startExpoDevServer } from "@vifx/vite-plugin-expo";
 import type { VifxExpoDevServer } from "@vifx/vite-plugin-expo";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
@@ -22,10 +16,9 @@ import type { CliResult } from "../types.ts";
 export const EXPO_HELP = `Usage:
   vifx expo audit [path] [--export-root <dir>] [--supported-sdk <sdk>] [--json]
   vifx expo dev [path] [--platform ios|android] [--config <file>] [--host <host>] [--port <number>] [--json]
-  vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--updates-url <url>] [--runtime-version <version>] [--created-at <timestamp>] [--json]
-  vifx expo serve [path] [--export-root <dir>] [--host <host>] [--port <number>] [--signing-key <file>] [--signing-key-id <id>] [--signing-alg <alg>] [--json]
+  vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--json]
 
-Audits the explicit Expo without Metro support contract. This is a support matrix and blocker report, not an Expo CLI replacement.
+Audits and runs the Expo no-Metro Vite bundling corridor. These commands produce or inspect Vifx bundle artifacts; they do not replace Expo CLI, Expo Go, EAS, or app build/run workflows.
 
 Options:
   --export-root     Optional existing Expo export directory to inspect.
@@ -36,12 +29,10 @@ Options:
 
 const DEFAULT_EXPO_DEV_HOST = "127.0.0.1";
 const DEFAULT_EXPO_DEV_PORT = 5173;
-const DEFAULT_EXPO_UPDATES_HOST = "127.0.0.1";
-const DEFAULT_EXPO_UPDATES_PORT = 8081;
 
 const EXPO_DEV_HELP = `Usage: vifx expo dev [path] [--platform ios|android] [--config <file>] [--host <host>] [--port <number>] [--json]
 
-Starts a Vite-powered Expo browser preview server for a configured web-compatible Expo target.
+Starts a Vite-powered Expo bundle dev server for a configured web-compatible Expo target.
 
 Options:
   --platform  Restrict the dev server to one platform target.
@@ -52,34 +43,16 @@ Options:
   --help      Show this message.
 `;
 
-const EXPO_EXPORT_HELP = `Usage: vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--updates-url <url>] [--runtime-version <version>] [--created-at <timestamp>] [--json]
+const EXPO_EXPORT_HELP = `Usage: vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--json]
 
-Builds configured Expo Vifx targets and writes an Expo export directory with bundles, source maps, assets, manifest, metadata, and optional Expo Updates v1 manifests.
-
-Options:
-  --platform         Restrict the export to one platform. Default: all configured targets.
-  --config           Use a specific Vifx config file.
-  --out-dir          Export output directory. Default: dist/expo.
-  --updates-url      Base URL where exported files will be served for Updates manifests.
-  --runtime-version  Runtime version for generated Updates manifests. Requires --updates-url.
-  --created-at       ISO timestamp for generated Updates manifests. Defaults to current time.
-  --json             Output machine-readable generation results.
-  --help             Show this message.
-`;
-
-const EXPO_SERVE_HELP = `Usage: vifx expo serve [path] [--export-root <dir>] [--host <host>] [--port <number>] [--signing-key <file>] [--signing-key-id <id>] [--signing-alg <alg>] [--json]
-
-Serves a Vifx-generated Expo export directory using the Expo Updates v1 JSON or multipart manifest request shape.
+Builds configured Expo Vifx targets and writes an Expo artifact directory with bundles, source maps, assets, manifest, and metadata.
 
 Options:
-  --export-root     Existing generated export directory to serve. Default: dist/expo.
-  --host            Hostname to bind the local Updates server to. Default: 127.0.0.1.
-  --port            Port to bind the local Updates server to. Default: 8081.
-  --signing-key     PEM private key used to sign manifest responses when requested.
-  --signing-key-id  Optional key id emitted in the expo-signature header.
-  --signing-alg     Signing algorithm to advertise. Currently only rsa-v1_5-sha256.
-  --json            Output machine-readable server details.
-  --help            Show this message.
+  --platform  Restrict the export to one platform. Default: all configured targets.
+  --config    Use a specific Vifx config file.
+  --out-dir   Export output directory. Default: dist/expo.
+  --json      Output machine-readable generation results.
+  --help      Show this message.
 `;
 
 interface ExpoBuildResult {
@@ -157,84 +130,6 @@ function parseExpoDevServerPort(value: string | boolean | undefined) {
   return port;
 }
 
-function parseUpdatesServerPort(value: string | boolean | undefined) {
-  if (value === undefined) {
-    return DEFAULT_EXPO_UPDATES_PORT;
-  }
-
-  if (typeof value !== "string") {
-    throw new VifxError({
-      code: "VIFX_EXPO_UPDATES_SERVER_INVALID_PORT",
-      message: "The --port flag expects a numeric value.",
-      hint: "Pass --port 8081 or another TCP port number.",
-      docsPath: "/reference/cli#vifx-expo-serve",
-    });
-  }
-
-  const port = Number.parseInt(value, 10);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    throw new VifxError({
-      code: "VIFX_EXPO_UPDATES_SERVER_INVALID_PORT",
-      message: `Invalid port "${value}" for vifx expo serve.`,
-      hint: "Use a port between 0 and 65535.",
-      docsPath: "/reference/cli#vifx-expo-serve",
-    });
-  }
-
-  return port;
-}
-
-function parseSigningAlg(value: string | boolean | undefined) {
-  if (value === undefined) {
-    return "rsa-v1_5-sha256";
-  }
-
-  if (value !== "rsa-v1_5-sha256") {
-    throw new VifxError({
-      code: "VIFX_EXPO_UPDATES_SIGNING_ALG_UNSUPPORTED",
-      message: `Unsupported Expo Updates signing algorithm "${String(value)}".`,
-      hint: 'Use the supported algorithm "rsa-v1_5-sha256".',
-      docsPath: "/reference/cli#vifx-expo-serve",
-    });
-  }
-
-  return value;
-}
-
-async function resolveSigningOptions(flags: Record<string, string | boolean>) {
-  const signingKey = flags["signing-key"];
-  const signingKeyId = flags["signing-key-id"];
-  const signingAlg = parseSigningAlg(flags["signing-alg"]);
-
-  if (signingKey === undefined && signingKeyId === undefined) {
-    return undefined;
-  }
-
-  if (typeof signingKey !== "string") {
-    throw new VifxError({
-      code: "VIFX_EXPO_UPDATES_SIGNING_KEY_MISSING",
-      message: "Expo Updates response signing requires --signing-key.",
-      hint: "Pass a PEM private key path with --signing-key, or omit all signing flags.",
-      docsPath: "/reference/cli#vifx-expo-serve",
-    });
-  }
-
-  if (signingKeyId !== undefined && typeof signingKeyId !== "string") {
-    throw new VifxError({
-      code: "VIFX_EXPO_UPDATES_SIGNING_KEY_MISSING",
-      message: "The --signing-key-id flag expects a string value.",
-      hint: "Pass --signing-key-id root or omit the key id.",
-      docsPath: "/reference/cli#vifx-expo-serve",
-    });
-  }
-
-  return {
-    alg: signingAlg,
-    keyId: signingKeyId,
-    privateKey: await readFile(signingKey, "utf8"),
-  };
-}
-
 function createExpoDevServerLifetime(server: VifxExpoDevServer) {
   return new Promise<number>((resolve) => {
     let settled = false;
@@ -265,40 +160,6 @@ function createExpoDevServerLifetime(server: VifxExpoDevServer) {
 
     httpServer.once("close", () => finish(0));
     httpServer.once("error", () => finish(1));
-    process.once("SIGINT", handleSignal);
-    process.once("SIGTERM", handleSignal);
-  });
-}
-
-function createServerLifetime(server: VifxExpoUpdatesServer) {
-  return new Promise<number>((resolve) => {
-    let settled = false;
-
-    const finish = (exitCode: number) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      process.off("SIGINT", handleSignal);
-      process.off("SIGTERM", handleSignal);
-      resolve(exitCode);
-    };
-
-    const handleSignal = () => {
-      if (!server.server.listening) {
-        finish(0);
-        return;
-      }
-
-      server.close().then(
-        () => finish(0),
-        () => finish(1),
-      );
-    };
-
-    server.server.once("close", () => finish(0));
-    server.server.once("error", () => finish(1));
     process.once("SIGINT", handleSignal);
     process.once("SIGTERM", handleSignal);
   });
@@ -341,39 +202,6 @@ function selectSingleExpoTarget(
   }
 
   return matchingTargets[0]!;
-}
-
-function resolveUpdatesOptions(
-  flags: Record<string, string | boolean>,
-): { baseUrl: string; createdAt?: string; runtimeVersion: string } | undefined {
-  const updatesUrl = typeof flags["updates-url"] === "string" ? flags["updates-url"] : undefined;
-  const runtimeVersion =
-    typeof flags["runtime-version"] === "string" ? flags["runtime-version"] : undefined;
-  const createdAt = typeof flags["created-at"] === "string" ? flags["created-at"] : undefined;
-
-  if (!updatesUrl && !runtimeVersion && !createdAt) {
-    return undefined;
-  }
-
-  if (!updatesUrl || !runtimeVersion) {
-    throw new VifxError({
-      code: "VIFX_EXPO_EXPORT_UPDATES_OPTIONS_MISSING",
-      message:
-        "Expo Updates manifest generation requires both --updates-url and --runtime-version.",
-      hint: "Pass both flags, or omit all Updates flags to generate only export artifacts.",
-      docsPath: "/reference/cli#vifx-expo-export",
-    });
-  }
-
-  const updates: { baseUrl: string; createdAt?: string; runtimeVersion: string } = {
-    baseUrl: updatesUrl,
-    runtimeVersion,
-  };
-  if (createdAt) {
-    updates.createdAt = createdAt;
-  }
-
-  return updates;
 }
 
 async function buildExpoTarget(
@@ -463,7 +291,7 @@ export async function runExpoAuditCommand(argv: string[], cwd: string): Promise<
         ? report.warnings.map((warning) => `  WARN  ${warning}`).join("\n")
         : "  INFO  No contract warnings.",
       "",
-      "Workflows:",
+      "Bundling Workflows:",
       report.workflows.map((workflow) => formatWorkflow(workflow)).join("\n\n"),
     ].join("\n"),
     stderr: "",
@@ -589,7 +417,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
       `Platform: ${server.platform}`,
       `URL: ${server.url}`,
       "",
-      "Boundary: this is a Vite browser dev server with Vite HMR only; it is not Expo Go, native device runtime parity, or React Native Fast Refresh parity.",
+      "Boundary: this is a Vite bundle/dev server for configured Expo targets. It is not Expo CLI, Expo Go, native runtime parity, or React Native Fast Refresh parity.",
       "Press Ctrl+C to stop the Expo dev server.",
     ].join("\n"),
     stderr: "",
@@ -600,7 +428,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
 export async function runExpoExportCommand(argv: string[], cwd: string): Promise<CliResult> {
   const parsed = parseFlags(argv, {
     booleanFlags: ["help", "json"],
-    stringFlags: ["config", "created-at", "out-dir", "platform", "runtime-version", "updates-url"],
+    stringFlags: ["config", "out-dir", "platform"],
     aliases: {
       "-h": "--help",
     },
@@ -625,7 +453,6 @@ export async function runExpoExportCommand(argv: string[], cwd: string): Promise
   const requestedPlatform = validateRequestedPlatform(
     typeof parsed.flags.platform === "string" ? parsed.flags.platform : undefined,
   );
-  const updates = resolveUpdatesOptions(parsed.flags);
   const projectRoot = path.resolve(cwd, parsed.positional[0] ?? ".");
   const loaded = await loadVifxConfig({
     configFile: typeof parsed.flags.config === "string" ? parsed.flags.config : undefined,
@@ -663,7 +490,6 @@ export async function runExpoExportCommand(argv: string[], cwd: string): Promise
     bundles: builds.map((build) => build.result),
     projectRoot: loaded.config.projectRoot,
     ...(exportRoot === undefined ? {} : { exportRoot }),
-    ...(updates === undefined ? {} : { updates }),
   });
 
   if (parsed.flags.json) {
@@ -695,95 +521,14 @@ export async function runExpoExportCommand(argv: string[], cwd: string): Promise
       `Bundles: ${exportResult.bundles.length}`,
       `Assets: ${exportResult.assets.length}`,
       `Manifests: ${exportResult.manifests.length}`,
-      `Updates manifests: ${exportResult.updatesManifests.length}`,
       "",
       "Generated files:",
       ...exportResult.generatedFiles.map(
         (file) => `  - ${file.path}${file.platform ? ` (${file.platform})` : ""}`,
       ),
       "",
-      "Boundary: generated output covers Vifx bundles, assets, manifests, metadata, and optional Updates v1 manifests only; Updates serving, response signing, native validation, directives, and EAS parity remain separate work.",
+      "Boundary: generated output covers Vifx bundles, source maps, assets, manifest, and metadata only. Expo Updates runtime, local Updates serving, response signing, EAS, and native validation are outside this command.",
     ].join("\n"),
     stderr: "",
-  };
-}
-
-export async function runExpoServeCommand(argv: string[], cwd: string): Promise<CliResult> {
-  const parsed = parseFlags(argv, {
-    booleanFlags: ["help", "json"],
-    stringFlags: ["export-root", "host", "port", "signing-alg", "signing-key", "signing-key-id"],
-    aliases: {
-      "-h": "--help",
-    },
-  });
-
-  if (parsed.errors.length > 0) {
-    return {
-      exitCode: 1,
-      stdout: "",
-      stderr: parsed.errors.join("\n"),
-    };
-  }
-
-  if (parsed.flags.help) {
-    return {
-      exitCode: 0,
-      stdout: EXPO_SERVE_HELP,
-      stderr: "",
-    };
-  }
-
-  const projectRoot = path.resolve(cwd, parsed.positional[0] ?? ".");
-  const host =
-    typeof parsed.flags.host === "string" ? parsed.flags.host : DEFAULT_EXPO_UPDATES_HOST;
-  const port = parseUpdatesServerPort(parsed.flags.port);
-  const exportRoot =
-    typeof parsed.flags["export-root"] === "string" ? parsed.flags["export-root"] : undefined;
-  const signing = await resolveSigningOptions(parsed.flags);
-  // @ts-expect-error: TypeScript doesn't understand the conditional spreading here, but the runtime behavior is correct.
-  const server = await startExpoUpdatesServer({
-    host,
-    port,
-    projectRoot,
-    ...(exportRoot === undefined ? {} : { exportRoot }),
-    ...(signing === undefined ? {} : { signing }),
-  });
-  const waitUntilExit = createServerLifetime(server);
-
-  if (parsed.flags.json) {
-    return {
-      exitCode: 0,
-      stdout: JSON.stringify(
-        {
-          exportRoot: server.exportRoot,
-          host: server.host,
-          port: server.port,
-          projectRoot: server.projectRoot,
-          signing: Boolean(signing),
-          url: server.url,
-        },
-        null,
-        2,
-      ),
-      stderr: "",
-      waitUntilExit,
-    };
-  }
-
-  return {
-    exitCode: 0,
-    stdout: [
-      "Vifx Expo Updates Serve",
-      "",
-      `Project root: ${server.projectRoot}`,
-      `Export root: ${server.exportRoot}`,
-      `URL: ${server.url}`,
-      `Signing: ${signing ? "enabled when requested" : "disabled"}`,
-      "",
-      "Manifest requests must include expo-protocol-version: 1, expo-platform, and expo-runtime-version headers.",
-      "Press Ctrl+C to stop the Updates server.",
-    ].join("\n"),
-    stderr: "",
-    waitUntilExit,
   };
 }

@@ -1,8 +1,8 @@
 # Expo Migration
 
-The recommended onboarding path for an existing Expo project is now a single setup command followed by explicit validation.
+The recommended path for an existing Expo project is no-Metro Vite bundling activation: setup, build, audit, dev-server proof, and export artifact generation.
 
-This guide assumes you are running Vifx from this repository, not from published npm packages:
+Run Vifx from this repository:
 
 ```sh
 pnpm vifx <command> ...
@@ -12,11 +12,9 @@ pnpm vifx <command> ...
 
 - Node `>=22.12.0`
 - An existing Expo project with `expo` and `react-native` dependencies
-- Run commands from this Vifx repository and point them at your Expo project path
+- A project path you can pass to Vifx commands
 
 ## 1. Run Setup
-
-Apply the setup:
 
 ```sh
 pnpm vifx setup <expo-project-path> --yes
@@ -28,78 +26,52 @@ Optional advanced direct-Vite config:
 pnpm vifx setup <expo-project-path> --yes --with-vite-config
 ```
 
-## What Setup Creates
+By default, setup creates only `vifx.config.ts`. It does not edit `vite.config.ts`, `app.json`, Expo scripts, EAS scripts, or app source files.
 
-By default, `vifx setup` creates only `vifx.config.ts`.
+## 2. Build Vite Bundles
 
-- It does not edit `vite.config.ts`.
-- It does not edit `app.json`.
-- It does not edit existing Expo scripts or EAS scripts.
-- It does not add `@vifx/*` dependencies to the target project's `package.json`.
+```sh
+pnpm vifx build <expo-project-path>
+pnpm vifx build <expo-project-path> --platform ios --json
+```
 
-The generated config keeps the current Expo defaults used by the repository today:
+This is the core replacement surface: configured Expo targets produce Vifx/Vite bundle artifacts without Metro.
 
-- `vite.mode = "expo"`
-- iOS and Android targets
-- `entry: "expo-router/entry"` when both `expo-router` and `app/` are detected
-- `entry: "./index.js"` otherwise
-- `reactNativeCompat: "web"` only for the Expo Router browser-preview path
-- `expoOptions.publicEnvPrefix = "EXPO_PUBLIC_"`
-- conservative `hermes: false` and `dist/vite/<platform>` output directories
-
-`--with-vite-config` adds `vite.config.vifx.ts` as an opt-in advanced surface. It is not required for the main guide flow.
-
-## 2. Audit The Current Contract
+## 3. Audit The Bundling Contract
 
 ```sh
 pnpm vifx expo audit <expo-project-path>
 pnpm vifx expo audit <expo-project-path> --json
 ```
 
-Use this to confirm that the setup removed the missing-config blockers for the supported workflows.
+The audit reports only bundling workflows:
 
-## 3. Start Browser Preview When Configured
+- config
+- Vite build
+- Metro parity
+- dev server
+- export artifacts
 
-If setup detected Expo Router and an `app/` directory, it configures a browser-preview target:
+## 4. Start Vite Dev Server When Configured
 
 ```sh
 pnpm vifx expo dev <expo-project-path> --platform ios
 ```
 
-This is a Vite browser dev server only. It does not replace `expo start`, Expo Go, native device runtime parity, or React Native Fast Refresh parity.
+This starts a Vite bundle/dev server for a configured target with `reactNativeCompat: "web"`. It is not `expo start`, Expo Go, native dev-client protocol parity, or full Fast Refresh.
 
-## 4. Run The Minimal iOS Native Path
-
-```sh
-pnpm vifx native run <expo-project-path> --platform ios
-```
-
-For Expo iOS, this is currently a maintained Debug simulator workflow:
-
-- Expo prebuild when needed
-- CocoaPods when needed
-- local Vifx bundle server
-- `xcodebuild` + `simctl`
-
-## Continue With Export And Updates
+## 5. Generate Export Artifacts
 
 ```sh
 pnpm vifx expo export <expo-project-path> --out-dir dist/expo
-pnpm vifx expo serve <expo-project-path> --export-root dist/expo
+pnpm vifx expo audit <expo-project-path> --export-root dist/expo
 ```
 
-Use this when you want local export and Expo Updates validation from the same Vifx config.
+The export contains bundles, source maps, assets, `manifest.json`, and `metadata.json`.
 
-## Not Supported Yet
+## Non-Goals
 
-The recommended setup path does not currently provide:
-
-- Expo Go parity
-- native dev-client protocol parity
-- React Native Fast Refresh parity
-- EAS parity
-- Android runtime parity
-- broad Expo production parity outside the current iOS simulator path
+Vifx does not replace Expo CLI, Expo Go, EAS, app build/run workflows, Expo Updates runtime, Updates serving/signing, or production native validation.
 
 ## Related Docs
 

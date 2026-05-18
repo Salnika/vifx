@@ -2,8 +2,7 @@ import { defineConfig } from "vitepress";
 
 export default defineConfig({
   title: "Vifx",
-  description:
-    "Compatibility toolkit and experimental modern bundling layer for React Native and Expo.",
+  description: "Vite bundling engine for React Native and Expo without Metro.",
   lastUpdated: true,
   outDir: "./dist",
   themeConfig: {
@@ -36,7 +35,6 @@ export default defineConfig({
             { text: "Packages", link: "/reference/packages" },
             { text: "CLI", link: "/reference/cli" },
             { text: "Config", link: "/reference/config" },
-            { text: "Native Artifacts", link: "/reference/native" },
             { text: "Error Codes", link: "/reference/errors" },
             { text: "Compatibility Report Format", link: "/reference/compatibility-report-format" },
             { text: "Support Matrix", link: "/reference/support-matrix" },

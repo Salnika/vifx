@@ -14,12 +14,10 @@ export default defineConfig({
       ),
       "@vifx/config": fileURLToPath(new URL("../config/src/index.ts", import.meta.url)),
       "@vifx/errors": fileURLToPath(new URL("../errors/src/index.ts", import.meta.url)),
+      "@vifx/expo-export": fileURLToPath(new URL("../expo-export/src/index.ts", import.meta.url)),
       "@vifx/hermes-tools": fileURLToPath(new URL("../hermes-tools/src/index.ts", import.meta.url)),
       "@vifx/metro-inspect": fileURLToPath(
         new URL("../metro-inspect/src/index.ts", import.meta.url),
-      ),
-      "@vifx/native-artifacts": fileURLToPath(
-        new URL("../native-artifacts/src/index.ts", import.meta.url),
       ),
       "@vifx/platform-resolver": fileURLToPath(
         new URL("../platform-resolver/src/index.ts", import.meta.url),

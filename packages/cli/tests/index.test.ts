@@ -1,11 +1,10 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { chmod } from "node:fs/promises";
 import { cp } from "node:fs/promises";
 import { expect, test } from "vite-plus/test";
 import { executeCli } from "../src/index.ts";
-import { resolveNativeTargets } from "../src/lib/native-targets.ts";
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "../../../fixtures");
 
@@ -52,26 +51,31 @@ test("expo parent command prints Expo audit help", async () => {
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("vifx expo audit");
   expect(result.stdout).toContain("vifx expo dev");
-  expect(result.stdout).toContain("vifx expo serve");
-  expect(result.stdout).toContain("Expo without Metro support contract");
+  expect(result.stdout).toContain("vifx expo export");
+  expect(result.stdout).toContain("no-Metro Vite bundling corridor");
+  expect(result.stdout).not.toContain("serve");
+  expect(result.stdout).not.toContain("updates");
+  expect(result.stdout).not.toContain("signing");
+  expect(result.stdout).not.toContain("native");
 });
 
-test("expo dev --help prints browser preview server usage", async () => {
+test("root help does not expose native or Expo Updates commands", async () => {
+  const result = await executeCli(["--help"]);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("vifx <command>");
+  expect(result.stdout).toContain("expo export");
+  expect(result.stdout).not.toContain("native");
+  expect(result.stdout).not.toContain("expo serve");
+});
+
+test("expo dev --help prints Vite bundle dev server usage", async () => {
   const result = await executeCli(["expo", "dev", "--help"]);
 
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Usage: vifx expo dev");
-  expect(result.stdout).toContain("Vite-powered Expo browser preview server");
-});
-
-test("expo serve --help prints Updates server usage", async () => {
-  const result = await executeCli(["expo", "serve", "--help"]);
-
-  expect(result.exitCode).toBe(0);
-  expect(result.stdout).toContain("Usage: vifx expo serve");
-  expect(result.stdout).toContain("--export-root");
-  expect(result.stdout).toContain("--signing-key");
-  expect(result.stdout).toContain("Expo Updates v1");
+  expect(result.stdout).toContain("Vite-powered Expo bundle dev server");
+  expect(result.stdout).not.toContain("native");
 });
 
 test("expo audit --json returns the no-Metro contract matrix", async () => {
@@ -93,13 +97,11 @@ test("expo audit --json returns the no-Metro contract matrix", async () => {
   expect(report.expoVersion).toBe("~54.0.0");
   expect(report.supportedExpoSdk).toBe("54");
   expect(report.workflows.map((workflow) => [workflow.id, workflow.status])).toEqual([
+    ["config", "blocked"],
+    ["vite-build", "blocked"],
+    ["metro-parity", "partial"],
     ["dev-server", "blocked"],
-    ["build", "blocked"],
-    ["export", "blocked"],
-    ["router", "blocked"],
-    ["native-ios", "partial"],
-    ["native-android", "blocked"],
-    ["updates", "blocked"],
+    ["export-artifacts", "blocked"],
   ]);
 });
 
@@ -115,9 +117,9 @@ test("expo audit terminal output lists workflow evidence and blockers", async ()
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Vifx Expo Audit");
   expect(result.stdout).toContain("Decision: partial");
-  expect(result.stdout).toContain("INSPECT-ONLY export - Expo export without Metro");
+  expect(result.stdout).toContain("PARTIAL      export-artifacts - Export artifacts without Metro");
   expect(result.stdout).toContain("Inspected 2 bundle(s), 1 asset(s), and 2 manifest(s).");
-  expect(result.stdout).toContain("Expo Updates without Metro");
+  expect(result.stdout).not.toContain("Updates");
 });
 
 test("expo export --json builds configured Expo targets and writes an inspectable export", async () => {
@@ -174,12 +176,6 @@ test("expo export --json builds configured Expo targets and writes an inspectabl
     "ios",
     "--out-dir",
     "dist/expo",
-    "--updates-url",
-    "https://updates.example/vifx/",
-    "--runtime-version",
-    "1.0.0",
-    "--created-at",
-    "2026-05-17T00:00:00.000Z",
     "--json",
   ]);
   const parsed = JSON.parse(result.stdout) as {
@@ -188,7 +184,6 @@ test("expo export --json builds configured Expo targets and writes an inspectabl
       exportRoot: string;
       generatedFiles: Array<{ kind: string; path: string }>;
       manifests: Array<{ contents: { slug?: string }; kind: string }>;
-      updatesManifests: Array<{ launchAsset: { url: string }; runtimeVersion: string }>;
     };
   };
 
@@ -196,33 +191,13 @@ test("expo export --json builds configured Expo targets and writes an inspectabl
   expect(parsed.export.exportRoot).toBe("dist/expo");
   expect(parsed.export.bundles.map((bundle) => bundle.platform)).toEqual(["ios"]);
   expect(parsed.export.generatedFiles.map((file) => file.kind)).toContain("metadata");
-  expect(parsed.export.generatedFiles.map((file) => file.kind)).toContain("updates-manifest");
-  expect(parsed.export.updatesManifests).toHaveLength(1);
-  expect(parsed.export.updatesManifests[0]?.runtimeVersion).toBe("1.0.0");
-  expect(parsed.export.updatesManifests[0]?.launchAsset.url).toBe(
-    "https://updates.example/vifx/ios/index.bundle",
-  );
+  expect(parsed.export.generatedFiles.map((file) => file.kind)).not.toContain("updates-manifest");
   expect(
     parsed.export.manifests.find((manifest) => manifest.kind === "manifest")?.contents.slug,
   ).toBe("cli-expo-export");
   expect(
     await readFile(path.join(projectRoot, "dist", "expo", "ios", "index.bundle"), "utf8"),
   ).toContain("cli expo export");
-});
-
-test("expo export rejects incomplete Updates manifest options", async () => {
-  const result = await executeCli([
-    "expo",
-    "export",
-    path.join(FIXTURE_ROOT, "expo-basic"),
-    "--updates-url",
-    "https://updates.example/vifx/",
-    "--json",
-  ]);
-  const error = JSON.parse(result.stderr) as { code: string };
-
-  expect(result.exitCode).toBe(1);
-  expect(error.code).toBe("VIFX_EXPO_EXPORT_UPDATES_OPTIONS_MISSING");
 });
 
 test("doctor --json returns machine-readable inspection data", async () => {
@@ -373,509 +348,6 @@ test("build --json uses vifx.config.ts targets to produce bundle artifacts", asy
   expect(parsed.results[0]?.durationMs).toBeGreaterThanOrEqual(0);
 });
 
-test("native prepare --json builds and writes native artifact manifests", async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-"));
-  const targetPath = path.join(tempRoot, "rn-bare-basic");
-
-  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
-  await writeFile(
-    path.join(targetPath, "vifx.config.ts"),
-    [
-      "export default {",
-      "  vite: {",
-      '    mode: "react-native",',
-      "    targets: [",
-      "      {",
-      '        platform: "ios",',
-      '        entry: "./index.js",',
-      '        outDir: ".vifx/cli-build/ios",',
-      "        hermes: false,",
-      "      },",
-      "    ],",
-      "  },",
-      "};",
-      "",
-    ].join("\n"),
-  );
-
-  const result = await executeCli([
-    "native",
-    "prepare",
-    targetPath,
-    "--platform",
-    "ios",
-    "--out-dir",
-    ".vifx/native-cli/ios",
-    "--json",
-  ]);
-  const parsed = JSON.parse(result.stdout) as {
-    results: Array<{
-      manifest: {
-        bundle: { outputPath: string };
-        manifestPath: string;
-        platform: string;
-      };
-      toolchain: { checks: Array<{ name: string; status: string }> };
-    }>;
-  };
-
-  expect(result.exitCode).toBe(0);
-  expect(parsed.results).toHaveLength(1);
-  expect(parsed.results[0]?.manifest.platform).toBe("ios");
-  expect(parsed.results[0]?.manifest.bundle.outputPath).toBe(".vifx/native-cli/ios/main.jsbundle");
-  expect(parsed.results[0]?.manifest.manifestPath).toBe(
-    ".vifx/native-cli/ios/vifx-native-manifest.json",
-  );
-  expect(parsed.results[0]?.toolchain.checks.map((check) => check.name)).toContain("xcodebuild");
-  expect(
-    await readFile(path.join(targetPath, ".vifx/native-cli/ios/main.jsbundle"), "utf8"),
-  ).toContain("rn ios bundle");
-});
-
-test("native prepare infers Expo targets when vifx.config.ts is missing", async () => {
-  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-expo-infer-"));
-  await writeFile(
-    path.join(projectRoot, "package.json"),
-    JSON.stringify(
-      {
-        dependencies: {
-          expo: "~54.0.0",
-          "react-native": "0.81.0",
-        },
-        name: "native-expo-infer",
-      },
-      null,
-      2,
-    ),
-  );
-  await writeFile(
-    path.join(projectRoot, "app.json"),
-    JSON.stringify({ expo: { name: "Native Expo Infer", slug: "native-expo-infer" } }, null, 2),
-  );
-  await writeFile(path.join(projectRoot, "index.js"), "console.log('native expo infer');\n");
-
-  const result = await executeCli([
-    "native",
-    "prepare",
-    projectRoot,
-    "--platform",
-    "ios",
-    "--json",
-  ]);
-  const parsed = JSON.parse(result.stdout) as {
-    configFile: string | null;
-    configKind: string;
-    projectRoot: string;
-    results: Array<{
-      manifest: {
-        bundle: { outputPath: string };
-        platform: string;
-      };
-    }>;
-    viteMode: string;
-  };
-
-  expect(result.exitCode).toBe(0);
-  expect(parsed.configFile).toBeNull();
-  expect(parsed.configKind).toBe("inferred-expo");
-  expect(parsed.viteMode).toBe("expo");
-  expect(parsed.results[0]?.manifest.platform).toBe("ios");
-  expect(parsed.results[0]?.manifest.bundle.outputPath).toBe(".vifx/native/ios/main.jsbundle");
-});
-
-test("resolveNativeTargets disables React shims for inferred Expo native builds", async () => {
-  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-expo-targets-"));
-  await writeFile(
-    path.join(projectRoot, "package.json"),
-    JSON.stringify(
-      {
-        dependencies: {
-          expo: "~54.0.0",
-          "expo-router": "~6.0.0",
-          "react-native": "0.81.0",
-        },
-        name: "native-expo-targets",
-      },
-      null,
-      2,
-    ),
-  );
-  await writeFile(
-    path.join(projectRoot, "app.json"),
-    JSON.stringify({ expo: { name: "Native Expo Targets", slug: "native-expo-targets" } }, null, 2),
-  );
-  await mkdir(path.join(projectRoot, "app"), { recursive: true });
-  await writeFile(
-    path.join(projectRoot, "app", "index.tsx"),
-    "export default function App() { return null; }\n",
-  );
-
-  const resolved = await resolveNativeTargets({
-    projectRoot,
-  });
-
-  expect(resolved?.configKind).toBe("inferred-expo");
-  expect(resolved?.targets[0]?.shimJsxRuntime).toBe(false);
-  expect(resolved?.targets[0]?.shimReact).toBe(false);
-  expect(resolved?.targets[0]?.shimReactNative).toBe(false);
-  expect(resolved?.targets[0]?.babelInPackages).toContain("expo-");
-  expect(resolved?.targets[0]?.babelInPackages).toContain("react-native-");
-  expect(resolved?.targets[0]?.babelInPackages).toContain("@react-native");
-});
-
-test("native build --dry-run --json plans an iOS host build without executing xcodebuild", async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-build-ios-"));
-  const targetPath = path.join(tempRoot, "rn-bare-basic");
-
-  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
-  await mkdir(path.join(targetPath, "ios", "VifxHost.xcodeproj"), { recursive: true });
-  await writeFile(
-    path.join(targetPath, "ios", "VifxHost.xcodeproj", "project.pbxproj"),
-    "PRODUCT_BUNDLE_IDENTIFIER = dev.vifx.host;\n",
-  );
-
-  const result = await executeCli([
-    "native",
-    "build",
-    targetPath,
-    "--platform",
-    "ios",
-    "--dry-run",
-    "--json",
-  ]);
-  const parsed = JSON.parse(result.stdout) as {
-    dryRun: boolean;
-    execution: null;
-    plan: {
-      host: { scheme: string };
-      steps: Array<{ args: string[]; command: string }>;
-    };
-  };
-
-  expect(result.exitCode).toBe(0);
-  expect(parsed.dryRun).toBe(true);
-  expect(parsed.execution).toBeNull();
-  expect(parsed.plan.host.scheme).toBe("VifxHost");
-  expect(parsed.plan.steps[0]?.command).toBe("xcodebuild");
-  expect(parsed.plan.steps[0]?.args).toContain("build");
-});
-
-test("native launch --dry-run --json plans an Android launch without executing adb", async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-launch-android-"));
-  const targetPath = path.join(tempRoot, "rn-bare-basic");
-
-  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
-  await mkdir(path.join(targetPath, "android", "app"), { recursive: true });
-  await writeFile(path.join(targetPath, "android", "settings.gradle"), "pluginManagement {}\n");
-  await writeFile(
-    path.join(targetPath, "android", "app", "build.gradle"),
-    'android { defaultConfig { applicationId "dev.vifx.host" } }\n',
-  );
-
-  const result = await executeCli([
-    "native",
-    "launch",
-    targetPath,
-    "--platform",
-    "android",
-    "--dry-run",
-    "--json",
-  ]);
-  const parsed = JSON.parse(result.stdout) as {
-    dryRun: boolean;
-    execution: null;
-    plan: {
-      host: { androidApplicationId: string };
-      steps: Array<{ args: string[]; command: string }>;
-    };
-  };
-
-  expect(result.exitCode).toBe(0);
-  expect(parsed.dryRun).toBe(true);
-  expect(parsed.execution).toBeNull();
-  expect(parsed.plan.host.androidApplicationId).toBe("dev.vifx.host");
-  expect(parsed.plan.steps[0]?.command).toBe("adb");
-  expect(parsed.plan.steps[0]?.args).toContain("dev.vifx.host");
-});
-
-test("native doctor --json validates host, manifest, signing, and toolchain diagnostics", async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-doctor-"));
-  const targetPath = path.join(tempRoot, "rn-bare-basic");
-
-  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
-  await mkdir(path.join(targetPath, "ios", "VifxHost.xcodeproj"), { recursive: true });
-  await mkdir(path.join(targetPath, ".vifx", "native", "ios"), { recursive: true });
-  await writeFile(
-    path.join(targetPath, "ios", "VifxHost.xcodeproj", "project.pbxproj"),
-    [
-      "PRODUCT_BUNDLE_IDENTIFIER = dev.vifx.host;",
-      "DEVELOPMENT_TEAM = ABC123TEAM;",
-      "CODE_SIGN_STYLE = Automatic;",
-      "",
-    ].join("\n"),
-  );
-  await writeFile(
-    path.join(targetPath, ".vifx", "native", "ios", "vifx-native-manifest.json"),
-    "{}\n",
-  );
-
-  const result = await executeCli(["native", "doctor", targetPath, "--platform", "ios", "--json"]);
-  const parsed = JSON.parse(result.stdout) as {
-    host: {
-      checks: Array<{ name: string; status: string }>;
-      status: string;
-    };
-    status: string;
-    toolchain: { checks: Array<{ name: string; status: string }> };
-  };
-
-  expect(result.exitCode).toBe(0);
-  expect(parsed.host.status).toBe("pass");
-  expect(parsed.host.checks.map((check) => [check.name, check.status])).toEqual([
-    ["ios-host", "pass"],
-    ["ios-bundle-id", "pass"],
-    ["ios-signing-team", "pass"],
-    ["ios-code-sign-style", "pass"],
-    ["ios-provisioning-profile", "pass"],
-    ["native-manifest", "pass"],
-  ]);
-  expect(parsed.toolchain.checks.map((check) => check.name)).toContain("xcodebuild");
-  expect(["pass", "warn"]).toContain(parsed.status);
-});
-
-test("native run --dry-run --json prepares, diagnoses, and plans the full lifecycle", async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-run-"));
-  const targetPath = path.join(tempRoot, "rn-bare-basic");
-
-  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
-  await writeFile(
-    path.join(targetPath, "vifx.config.ts"),
-    [
-      "export default {",
-      "  vite: {",
-      '    mode: "react-native",',
-      "    targets: [",
-      "      {",
-      '        platform: "ios",',
-      '        entry: "./index.js",',
-      '        outDir: ".vifx/cli-run-build/ios",',
-      "        hermes: false,",
-      "      },",
-      "    ],",
-      "  },",
-      "};",
-      "",
-    ].join("\n"),
-  );
-  await mkdir(path.join(targetPath, "ios", "VifxHost.xcodeproj"), { recursive: true });
-  await writeFile(
-    path.join(targetPath, "ios", "VifxHost.xcodeproj", "project.pbxproj"),
-    [
-      "PRODUCT_BUNDLE_IDENTIFIER = dev.vifx.host;",
-      "DEVELOPMENT_TEAM = ABC123TEAM;",
-      "CODE_SIGN_STYLE = Automatic;",
-      "",
-    ].join("\n"),
-  );
-
-  const result = await executeCli([
-    "native",
-    "run",
-    targetPath,
-    "--platform",
-    "ios",
-    "--out-dir",
-    ".vifx/native-run/ios",
-    "--dry-run",
-    "--json",
-  ]);
-  const parsed = JSON.parse(result.stdout) as {
-    dryRun: boolean;
-    execution: null;
-    hostValidation: { status: string };
-    preparation: {
-      results: Array<{
-        manifest: { manifestPath: string; platform: string };
-      }>;
-    };
-    steps: {
-      build: { steps: Array<{ command: string }> };
-      install: { steps: Array<{ command: string }> };
-      launch: { steps: Array<{ command: string }> };
-    };
-  };
-
-  expect(result.exitCode).toBe(0);
-  expect(parsed.dryRun).toBe(true);
-  expect(parsed.execution).toBeNull();
-  expect(parsed.preparation.results[0]?.manifest.platform).toBe("ios");
-  expect(parsed.preparation.results[0]?.manifest.manifestPath).toBe(
-    ".vifx/native-run/ios/vifx-native-manifest.json",
-  );
-  expect(parsed.hostValidation.status).toBe("pass");
-  expect(parsed.steps.build.steps[0]?.command).toBe("xcodebuild");
-  expect(parsed.steps.install.steps[0]?.command).toBe("xcrun");
-  expect(parsed.steps.launch.steps[0]?.command).toBe("xcrun");
-});
-
-test("native run --dry-run uses the Expo iOS debug-server strategy when the host already exists", async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-run-expo-"));
-  const targetPath = path.join(tempRoot, "expo-basic");
-
-  await mkdir(targetPath, { recursive: true });
-  await writeFile(
-    path.join(targetPath, "package.json"),
-    JSON.stringify(
-      {
-        dependencies: {
-          expo: "~54.0.0",
-          "react-native": "0.81.0",
-        },
-        name: "native-run-expo",
-      },
-      null,
-      2,
-    ),
-  );
-  await writeFile(
-    path.join(targetPath, "app.json"),
-    JSON.stringify({ expo: { name: "Native Run Expo", slug: "native-run-expo" } }, null, 2),
-  );
-  await writeFile(path.join(targetPath, "index.js"), "console.log('native run expo');\n");
-  await mkdir(path.join(targetPath, "ios", "ExpoHost.xcodeproj"), { recursive: true });
-  await writeFile(
-    path.join(targetPath, "ios", "ExpoHost.xcodeproj", "project.pbxproj"),
-    [
-      "PRODUCT_BUNDLE_IDENTIFIER = dev.vifx.expo;",
-      "DEVELOPMENT_TEAM = ABC123TEAM;",
-      "CODE_SIGN_STYLE = Automatic;",
-      "",
-    ].join("\n"),
-  );
-  await writeFile(path.join(targetPath, "ios", "Podfile"), "platform :ios, '15.1'\n");
-  await writeFile(path.join(targetPath, "ios", "Podfile.lock"), "PODS:\n- React\n");
-  await mkdir(path.join(targetPath, "ios", "Pods"), { recursive: true });
-  await writeFile(path.join(targetPath, "ios", "Pods", "Manifest.lock"), "PODS:\n- React\n");
-
-  const result = await executeCli([
-    "native",
-    "run",
-    targetPath,
-    "--platform",
-    "ios",
-    "--out-dir",
-    ".vifx/native-run/ios",
-    "--dry-run",
-    "--json",
-  ]);
-  const parsed = JSON.parse(result.stdout) as {
-    bundleServer: { bundleUrl: string; statusUrl: string; url: string };
-    dryRun: boolean;
-    hostBootstrap: Array<{ command: string }>;
-    hostValidation: { status: string } | null;
-    preparation: {
-      configKind: string;
-      results: Array<{
-        manifest: { manifestPath: string; platform: string };
-      }>;
-      viteMode: string;
-    };
-    steps: {
-      build: { steps: Array<{ command: string }> };
-      install: { steps: Array<{ command: string }> };
-      launch: { steps: Array<{ command: string }> };
-    } | null;
-    strategy: string;
-  };
-
-  expect(result.exitCode).toBe(0);
-  expect(parsed.dryRun).toBe(true);
-  expect(parsed.strategy).toBe("expo-ios-debug-server");
-  expect(parsed.preparation.configKind).toBe("inferred-expo");
-  expect(parsed.preparation.viteMode).toBe("expo");
-  expect(parsed.hostBootstrap).toHaveLength(0);
-  expect(parsed.hostValidation?.status).toBe("pass");
-  expect(parsed.bundleServer.url).toBe("http://127.0.0.1:8081");
-  expect(parsed.bundleServer.statusUrl).toBe("http://127.0.0.1:8081/status");
-  expect(parsed.bundleServer.bundleUrl).toContain(".expo/.virtual-metro-entry.bundle");
-  expect(parsed.steps?.build.steps[0]?.command).toBe("xcodebuild");
-  expect(parsed.steps?.install.steps[0]?.command).toBe("xcrun");
-  expect(parsed.steps?.launch.steps[0]?.command).toBe("xcrun");
-});
-
-test("native run --dry-run defers host planning until Expo prebuild creates the iOS host", async () => {
-  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-native-run-expo-bootstrap-"));
-  await writeFile(
-    path.join(projectRoot, "package.json"),
-    JSON.stringify(
-      {
-        dependencies: {
-          "@expo/cli": "54.0.0",
-          expo: "~54.0.0",
-          "react-native": "0.81.0",
-        },
-        name: "native-run-expo-bootstrap",
-      },
-      null,
-      2,
-    ),
-  );
-  await writeFile(
-    path.join(projectRoot, "app.json"),
-    JSON.stringify(
-      { expo: { name: "Native Run Expo Bootstrap", slug: "native-run-expo-bootstrap" } },
-      null,
-      2,
-    ),
-  );
-  await writeFile(
-    path.join(projectRoot, "index.js"),
-    "console.log('native run expo bootstrap');\n",
-  );
-  await mkdir(path.join(projectRoot, "node_modules", "@expo", "cli", "build", "bin"), {
-    recursive: true,
-  });
-  await writeFile(
-    path.join(projectRoot, "node_modules", "@expo", "cli", "package.json"),
-    JSON.stringify({ name: "@expo/cli", version: "54.0.0" }, null, 2),
-  );
-  await writeFile(
-    path.join(projectRoot, "node_modules", "@expo", "cli", "build", "bin", "cli.js"),
-    "console.log('fake expo cli');\n",
-  );
-
-  const result = await executeCli([
-    "native",
-    "run",
-    projectRoot,
-    "--platform",
-    "ios",
-    "--out-dir",
-    ".vifx/native-run/ios",
-    "--dry-run",
-    "--json",
-  ]);
-  const parsed = JSON.parse(result.stdout) as {
-    dryRun: boolean;
-    hostBootstrap: Array<{ command: string; label: string }>;
-    hostValidation: null | { status: string };
-    steps: null | {
-      build: { steps: Array<{ command: string }> };
-    };
-    strategy: string;
-  };
-
-  expect(result.exitCode).toBe(0);
-  expect(parsed.dryRun).toBe(true);
-  expect(parsed.strategy).toBe("expo-ios-debug-server");
-  expect(parsed.hostBootstrap.map((step) => step.label)).toEqual([
-    "Generate iOS host with Expo prebuild",
-    "Install CocoaPods dependencies",
-  ]);
-  expect(parsed.hostValidation).toBeNull();
-  expect(parsed.steps).toBeNull();
-});
-
 test("run --help prints runtime usage", async () => {
   const result = await executeCli(["run", "--help"]);
 
@@ -953,10 +425,16 @@ test("setup --json returns the expected machine-readable preview shape", async (
   expect(parsed.withViteConfig).toBe(false);
   expect(parsed.changes.map((change) => change.path)).toEqual(["vifx.config.ts"]);
   expect(parsed.nextCommands).toContain(
-    `pnpm vifx expo audit ${path.join(FIXTURE_ROOT, "expo-router-basic")}`,
+    `pnpm vifx build ${path.join(FIXTURE_ROOT, "expo-router-basic")}`,
   );
   expect(parsed.nextCommands).toContain(
     `pnpm vifx expo dev ${path.join(FIXTURE_ROOT, "expo-router-basic")} --platform ios`,
+  );
+  expect(parsed.nextCommands).toContain(
+    `pnpm vifx expo export ${path.join(FIXTURE_ROOT, "expo-router-basic")} --out-dir dist/expo`,
+  );
+  expect(parsed.nextCommands).not.toContain(
+    `pnpm vifx native run ${path.join(FIXTURE_ROOT, "expo-router-basic")} --platform ios`,
   );
 });
 

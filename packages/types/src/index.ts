@@ -127,45 +127,24 @@ export interface VifxExpoExportInspectionResult {
   warnings: string[];
 }
 
-export interface VifxExpoUpdatesAsset {
-  contentType: string;
-  fileExtension?: string;
-  hash?: string;
-  key: string;
-  url: string;
-}
-
-export interface VifxExpoUpdatesManifest {
-  assets: VifxExpoUpdatesAsset[];
-  createdAt: string;
-  extra: VifxJsonObject;
-  id: string;
-  launchAsset: VifxExpoUpdatesAsset;
-  metadata: Record<string, string>;
-  runtimeVersion: string;
-}
-
 export interface VifxExpoExportGeneratedFile {
-  kind: "asset" | "bundle" | "manifest" | "metadata" | "source-map" | "updates-manifest";
+  kind: "asset" | "bundle" | "manifest" | "metadata" | "source-map";
   path: string;
   platform?: VifxBundlePlatform;
 }
 
 export interface VifxExpoExportGenerationResult extends VifxExpoExportInspectionResult {
   generatedFiles: VifxExpoExportGeneratedFile[];
-  updatesManifests: VifxExpoUpdatesManifest[];
 }
 
 export type VifxExpoNoMetroWorkflowId =
+  | "config"
   | "dev-server"
-  | "build"
-  | "export"
-  | "router"
-  | "native-ios"
-  | "native-android"
-  | "updates";
+  | "export-artifacts"
+  | "metro-parity"
+  | "vite-build";
 
-export type VifxExpoNoMetroWorkflowStatus = "blocked" | "inspect-only" | "partial" | "supported";
+export type VifxExpoNoMetroWorkflowStatus = "blocked" | "partial" | "supported";
 
 export interface VifxExpoNoMetroWorkflowReport {
   blockers: string[];

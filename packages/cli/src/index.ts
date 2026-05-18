@@ -7,17 +7,12 @@ import {
   runExpoAuditCommand,
   runExpoDevCommand,
   runExpoExportCommand,
-  runExpoServeCommand,
 } from "./commands/expo-audit.ts";
 import { runHermesCompileCommand } from "./commands/hermes-compile.ts";
 import { runInitCommand } from "./commands/init.ts";
 import { runInspectCommand } from "./commands/inspect.ts";
 import { runMetroInspectCommand } from "./commands/metro-inspect.ts";
 import { MIGRATE_HELP, runMigrateCommand } from "./commands/migrate.ts";
-import { runNativeDoctorCommand } from "./commands/native-doctor.ts";
-import { NATIVE_ROOT_HELP, runNativeLifecycleCommand } from "./commands/native-lifecycle.ts";
-import { runNativePrepareCommand } from "./commands/native-prepare.ts";
-import { runNativeRunCommand } from "./commands/native-run.ts";
 import { runRunCommand } from "./commands/run.ts";
 import { runSetupCommand } from "./commands/setup.ts";
 import type { CliResult, ExecuteCliOptions } from "./types.ts";
@@ -30,22 +25,18 @@ Usage:
 
 Commands:
   setup [path]                  Onboard an existing Expo project with Vifx config.
-  expo audit [path]             Audit the Expo without Metro support contract.
-  expo dev [path]               Start the Expo browser preview server.
-  native run [path]             Prepare, build, install, and launch the maintained native host path.
-  expo export [path]            Generate an Expo export from Vifx bundles.
-  expo serve [path]             Serve a Vifx-generated Expo Updates export locally.
+  expo audit [path]             Audit the Expo no-Metro Vite bundling contract.
+  expo dev [path]               Start the Expo Vite bundle dev server.
+  expo export [path]            Generate Expo bundle artifacts from Vifx builds.
   doctor [path]                 Check project readiness and support boundaries.
   build [path]                  Build Vifx bundle targets from vifx.config.*.
   run [path]                    Serve a built Vifx runtime locally.
   inspect [path]                Inspect project primitives.
-  native <command> [path]       Diagnose, prepare, build, install, or launch native hosts.
   compat run [options]          Run compatibility cases with the vifx adapter.
   metro inspect [path]          Inspect captured Metro reference artifacts.
   init [path]                   Generate a vifx.config.ts.
   vite init [path]              Generate a Vifx-owned vite.config.vifx.ts for advanced RN or Expo usage.
-  migrate expo <path>           Deprecated legacy manual Expo migration surface.
-  migrate react-native <path>   Deprecated legacy manual React Native migration surface.
+  migrate <kind> <path>         Deprecated legacy manual migration surface.
   hermes compile [options]      Compile a bundle to Hermes bytecode.
 
 Options:
@@ -194,35 +185,7 @@ export async function executeCli(
         return await runExpoExportCommand(argv.slice(2), cwd);
       }
 
-      if (argv[1] === "serve") {
-        return await runExpoServeCommand(argv.slice(2), cwd);
-      }
-
       return fail(`Unknown expo subcommand.\n\n${ROOT_HELP}`);
-    }
-
-    if (argv[0] === "native") {
-      if (argv[1] === undefined || argv[1] === "--help" || argv[1] === "-h") {
-        return ok(NATIVE_ROOT_HELP);
-      }
-
-      if (argv[1] === "prepare") {
-        return await runNativePrepareCommand(argv.slice(2), cwd);
-      }
-
-      if (argv[1] === "doctor") {
-        return await runNativeDoctorCommand(argv.slice(2), cwd);
-      }
-
-      if (argv[1] === "run") {
-        return await runNativeRunCommand(argv.slice(2), cwd);
-      }
-
-      if (argv[1] === "build" || argv[1] === "install" || argv[1] === "launch") {
-        return await runNativeLifecycleCommand(argv[1], argv.slice(2), cwd);
-      }
-
-      return fail(`Unknown native subcommand.\n\n${ROOT_HELP}`);
     }
 
     if (argv[0] === "hermes") {

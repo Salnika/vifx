@@ -2,73 +2,32 @@
 
 ## Metro
 
-The current reference implementation for React Native and Expo bundling behavior.
-
-### Strengths
-
-- Deep ecosystem integration.
-- Defines the behavior Vifx must understand in practice.
-
-### Tradeoffs
-
-- Much of the contract is implicit.
-- Comparing Metro behavior to alternatives is hard without dedicated inspection tools.
+Metro is the current reference implementation for React Native and Expo bundling behavior.
 
 ### Vifx Takeaway
 
-Use Metro as evidence and comparison input, not as an invisible implementation dependency.
+Use Metro as evidence and comparison input. Vifx should replace Metro bundle output only when the produced artifacts can be inspected and compared.
 
 ## Re.Pack
 
-A serious alternative path built around Webpack or Rspack rather than Vite.
-
-### Strengths
-
-- Shows that non-Metro approaches can be credible.
-- Provides a real-world alternative architecture.
-
-### Tradeoffs
-
-- It solves a different set of bundler tradeoffs than Vifx is exploring.
-- Adopting it wholesale would skip the docs-first compatibility layer Vifx wants to build.
+Re.Pack is a serious non-Metro path built around Webpack or Rspack rather than Vite.
 
 ### Vifx Takeaway
 
-Learn from its seriousness without duplicating it blindly.
+Learn from its production seriousness while keeping Vifx focused on the Vite plugin ecosystem and explicit compatibility evidence.
 
 ## Vite
 
-Appealing for its plugin model, dev server, and ecosystem leverage.
-
-### Strengths
-
-- Fast iteration.
-- Good plugin surface.
-- Strong Rollup and Rolldown adjacency.
-
-### Tradeoffs
-
-- It does not solve the React Native contract by default.
-- Too-early plugin work would risk a shallow demo instead of a trustworthy toolchain.
+Vite is the execution surface Vifx is targeting.
 
 ### Vifx Takeaway
 
-Treat Vite as the eventual execution surface, not the first milestone.
+Vite does not solve the React Native contract by default. Vifx owns the RN/Expo resolver, asset, source-map, and export artifact work needed to make Vite useful here.
 
-## Vifx
+## Expo CLI
 
-A compatibility toolkit and modern bundling alternative for React Native and Expo.
-
-### Strengths
-
-- Makes the contract explicit.
-- Phases work so primitives and reports come first.
-
-### Tradeoffs
-
-- Not a production Metro replacement in the first version.
-- Much of the catalog is still spec-defined at this docs stage.
+Expo CLI remains the owner of Expo project orchestration, Expo Go, native build/run flows, and EAS-adjacent workflows.
 
 ### Vifx Takeaway
 
-Earn trust through reports, docs, and conservative migration flows before claiming parity.
+Vifx does not replace Expo CLI. It provides a Metro-free Vite bundling path that can feed comparison and export artifact workflows.

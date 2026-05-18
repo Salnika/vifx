@@ -8,16 +8,8 @@
     "vifx:inspect": "vifx inspect .",
     "vifx:build:ios": "vifx build . --platform ios",
     "vifx:build:android": "vifx build . --platform android",
-    "vifx:native:prepare": "vifx native prepare . --platform all --out-dir .vifx/native",
-    "vifx:native:doctor:ios": "vifx native doctor . --platform ios --json",
-    "vifx:native:doctor:android": "vifx native doctor . --platform android --json",
-    "vifx:native:plan:ios": "vifx native build . --platform ios --dry-run && vifx native install . --platform ios --dry-run && vifx native launch . --platform ios --dry-run",
-    "vifx:native:plan:android": "vifx native build . --platform android --dry-run && vifx native install . --platform android --dry-run && vifx native launch . --platform android --dry-run",
-    "vifx:native:run:ios": "vifx native run . --platform ios --dry-run --json",
-    "vifx:native:run:android": "vifx native run . --platform android --dry-run --json",
     "vite:build:ios": "VIFX_PLATFORM=ios vp build --config vite.config.vifx.ts",
-    "native:validate": "pnpm run vifx:native:prepare && pnpm run vifx:native:doctor:ios && pnpm run vifx:native:doctor:android && pnpm run vifx:native:plan:ios && pnpm run vifx:native:plan:android && pnpm run vifx:native:run:ios && pnpm run vifx:native:run:android",
-    "validate": "pnpm run vifx:doctor && pnpm run vifx:inspect && pnpm run vifx:build:ios && pnpm run vifx:build:android && pnpm run vite:build:ios && pnpm run native:validate"
+    "validate": "pnpm run vifx:doctor && pnpm run vifx:inspect && pnpm run vifx:build:ios && pnpm run vifx:build:android && pnpm run vite:build:ios"
   },
   "dependencies": {
     "react-native": "file:./vendor/react-native",

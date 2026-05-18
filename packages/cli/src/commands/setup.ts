@@ -41,13 +41,13 @@ function formatChangeSummary(changes: PlannedFileChange[]) {
 
 function createNextCommands(options: { includeExpoDev: boolean; targetPath: string }) {
   const targetPath = formatShellArg(options.targetPath);
-  const nextCommands = [`pnpm vifx expo audit ${targetPath}`];
+  const nextCommands = [`pnpm vifx build ${targetPath}`, `pnpm vifx expo audit ${targetPath}`];
 
   if (options.includeExpoDev) {
     nextCommands.push(`pnpm vifx expo dev ${targetPath} --platform ios`);
   }
 
-  nextCommands.push(`pnpm vifx native run ${targetPath} --platform ios`);
+  nextCommands.push(`pnpm vifx expo export ${targetPath} --out-dir dist/expo`);
   return nextCommands;
 }
 
@@ -130,7 +130,8 @@ function renderTerminalSetup(options: {
     "  - This setup does not install Expo Go parity.",
     "  - This setup does not install React Native Fast Refresh parity.",
     "  - This setup does not install EAS parity.",
-    "  - This setup does not install Android runtime parity.",
+    "  - This setup does not install native build or runtime parity.",
+    "  - This setup does not install Expo Updates runtime support.",
     "",
     statusLine,
     "",

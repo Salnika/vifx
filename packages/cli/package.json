@@ -34,7 +34,6 @@
     "@vifx/expo-export": "workspace:*",
     "@vifx/hermes-tools": "workspace:*",
     "@vifx/metro-inspect": "workspace:*",
-    "@vifx/native-artifacts": "workspace:*",
     "@vifx/types": "workspace:*",
     "@vifx/vite-plugin-expo": "workspace:*",
     "@vifx/vite-plugin-react-native": "workspace:*",

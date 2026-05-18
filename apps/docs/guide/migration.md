@@ -1,53 +1,40 @@
 # Migration
 
-Migration now means two different things in this repository:
-
-- the supported Expo onboarding corridor driven by `vifx setup`
-- legacy manual surfaces kept for maintainers who want to inspect or patch files directly
+Migration means activating Vifx as a no-Metro bundle producer while keeping existing app workflows available.
 
 ## Principles
 
-- Preserve existing scripts and Metro config.
-- Keep rollback instructions visible and tested.
-- Keep existing Expo and bare React Native workflows available while migrating.
+- Preserve existing Metro, Expo CLI, EAS, and app scripts.
+- Add Vifx-owned config and build commands explicitly.
+- Compare Vifx output against Metro artifacts before widening claims.
+- Keep rollback guidance visible in legacy migration surfaces.
 
-## Expo Migration
+## Expo Activation
 
-Use [Expo Migration](/guide/expo-migration) as the recommended onboarding path for an existing Expo project.
+Use [Expo Migration](/guide/expo-migration) as the recommended path for an existing Expo project.
 
 ```sh
 pnpm vifx setup <expo-project-path> --yes
+pnpm vifx build <expo-project-path>
 pnpm vifx expo audit <expo-project-path>
 pnpm vifx expo dev <expo-project-path> --platform ios
-pnpm vifx native run <expo-project-path> --platform ios
+pnpm vifx expo export <expo-project-path> --out-dir dist/expo
 ```
 
-- `vifx setup` is Expo-only in v1 and is the preferred command for the repo-local onboarding flow.
-- Never replace `expo start` automatically.
-- Keep Router, EAS, Expo Go, Fast Refresh, and Android runtime gaps explicit.
+- `vifx setup` is Expo-only in v1 and creates Vifx-owned config.
+- It never replaces `expo start`, Expo Go, EAS, or app build/run commands.
+- Export output is bundle artifact output, not Expo Updates runtime support.
 
-### Legacy Manual Expo Migration
+## Legacy Manual Surfaces
 
-`vifx migrate expo` remains available when you explicitly want the older file-planning workflow.
+`vifx migrate expo` and `vifx migrate react-native` remain available when you explicitly want file-level planning instead of the setup flow.
 
 ```sh
 pnpm vifx migrate expo <expo-project-path> --write
+pnpm vifx migrate react-native <rn-project-path> --write
 ```
 
-- `vifx migrate expo` is the more manual path and should not be treated as the default onboarding surface.
-- Use `--dry-run` only when you explicitly want a preview mode.
-
-## React Native Migration
-
-Use `vifx migrate react-native` only after a reference report already exists.
-
-```sh
-vifx migrate react-native --write
-```
-
-- Preserve Metro config and scripts.
-- Use `--dry-run` only when you explicitly want a preview mode.
-- Keep rollback guidance prominent.
+Use these surfaces only after a project inspection or Metro reference report exists.
 
 ## Related Reference
 
