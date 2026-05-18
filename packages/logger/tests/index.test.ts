@@ -69,3 +69,33 @@ test("silent mode suppresses non-critical logs", () => {
   expect(chunks).toHaveLength(1);
   expect(chunks[0]).toContain("This should still be emitted");
 });
+
+test("environment variables override defaults", () => {
+  const { chunks, stream } = createMemoryStream();
+
+  const originalVerbose = process.env.VIFX_VERBOSE;
+  const originalDebug = process.env.VIFX_DEBUG;
+
+  try {
+    process.env.VIFX_VERBOSE = "true";
+    process.env.VIFX_DEBUG = "true";
+
+    const logger = createLogger({
+      name: "vifx",
+      stream,
+      errorStream: stream,
+    });
+
+    expect(logger.level).toBe("debug");
+
+    logger.debug("Debug message", { detail: "something" });
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toContain("[DEBUG] vifx Debug message");
+    expect(chunks[0]).toContain("Context: {");
+    expect(chunks[0]).toContain('"detail": "something"');
+  } finally {
+    process.env.VIFX_VERBOSE = originalVerbose;
+    process.env.VIFX_DEBUG = originalDebug;
+  }
+});

@@ -22,6 +22,7 @@ export interface ParseFlagsOptions {
   booleanFlags?: string[];
   stringFlags?: string[];
   aliases?: Record<string, string>;
+  ignoreUnknownFlags?: boolean;
 }
 
 export interface PlannedFileChange {

@@ -46,6 +46,8 @@ Commands:
   hermes compile [options]      Compile a bundle to Hermes bytecode.
 
 Options:
+  --verbose  Show detailed diagnostic information.
+  --debug    Show internal debug logs.
   --help     Show command help.
   --version  Print the CLI version.
 `;
@@ -72,11 +74,30 @@ function shouldRenderJsonError(argv: string[]) {
   return argv.includes("--json");
 }
 
+import { parseFlags } from "./lib/args.ts";
+
 export async function executeCli(
   argv: string[],
   options: ExecuteCliOptions = {},
 ): Promise<CliResult> {
   const cwd = options.cwd ?? options.env?.INIT_CWD ?? process.cwd();
+
+  const globalFlags = parseFlags(argv, {
+    booleanFlags: ["verbose", "debug"],
+    aliases: {
+      "-v": "--verbose",
+    },
+    ignoreUnknownFlags: true,
+  });
+
+  if (globalFlags.flags.verbose) {
+    process.env.VIFX_VERBOSE = "true";
+  }
+
+  if (globalFlags.flags.debug) {
+    process.env.VIFX_DEBUG = "true";
+  }
+
   try {
     if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
       return ok(ROOT_HELP);

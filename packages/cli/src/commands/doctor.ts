@@ -3,13 +3,14 @@ import { inspectProject } from "@vifx/compat-runner";
 import { parseFlags } from "../lib/args.ts";
 import type { CliResult } from "../types.ts";
 
-const DOCTOR_HELP = `Usage: vifx doctor [path] [--json]
+const DOCTOR_HELP = `Usage: vifx doctor [path] [--verbose] [--json]
 
 Checks project readiness for Vifx workflows.
 
 Options:
-  --json  Output machine-readable JSON with no extra logs.
-  --help  Show this message.
+  --verbose  Show detailed diagnostic information.
+  --json     Output machine-readable JSON with no extra logs.
+  --help     Show this message.
 `;
 
 function formatValue(label: string, value: string | null) {

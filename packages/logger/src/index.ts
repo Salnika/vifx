@@ -74,7 +74,7 @@ function resolveLoggerLevel(options: VifxLoggerOptions): VifxLoggerLevel {
     return "error";
   }
 
-  if (options.debug) {
+  if (options.debug || process.env.VIFX_DEBUG === "true") {
     return "debug";
   }
 
@@ -82,10 +82,12 @@ function resolveLoggerLevel(options: VifxLoggerOptions): VifxLoggerLevel {
 }
 
 function resolveLoggerOptions(options: VifxLoggerOptions): ResolvedLoggerOptions {
+  const verbose = options.verbose ?? process.env.VIFX_VERBOSE === "true";
+
   return {
     name: options.name,
     level: resolveLoggerLevel(options),
-    verbose: options.verbose ?? false,
+    verbose,
     json: options.json ?? false,
     stream: options.stream ?? defaultStream(),
     errorStream: options.errorStream ?? options.stream ?? defaultErrorStream(),

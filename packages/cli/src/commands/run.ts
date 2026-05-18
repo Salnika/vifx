@@ -12,7 +12,7 @@ const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 4173;
 const RUNTIME_HTML_FILE = "index.html";
 
-const RUN_HELP = `Usage: vifx run [path] [--platform ios|android] [--config <file>] [--host <host>] [--port <number>] [--no-build] [--json]
+const RUN_HELP = `Usage: vifx run [path] [--platform ios|android] [--config <file>] [--host <host>] [--port <number>] [--no-build] [--verbose] [--json]
 
 Builds a web-compatible Vifx target and serves the generated runtime locally.
 
@@ -22,6 +22,7 @@ Options:
   --host      Hostname to bind the local runtime server to. Default: 127.0.0.1.
   --port      Port to bind the local runtime server to. Default: 4173.
   --no-build  Reuse an existing runtime build instead of rebuilding first.
+  --verbose   Show detailed diagnostic information.
   --json      Output machine-readable server details.
   --help      Show this message.
 `;

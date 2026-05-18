@@ -1022,3 +1022,36 @@ test("hermes compile uses a provided fake compiler", async () => {
   expect(result.exitCode).toBe(0);
   expect(JSON.parse(result.stdout).outputBytecodePath).toBe(outputPath);
 });
+
+test("--verbose sets VIFX_VERBOSE environment variable", async () => {
+  const originalVerbose = process.env.VIFX_VERBOSE;
+  try {
+    delete process.env.VIFX_VERBOSE;
+    await executeCli(["doctor", "--verbose"]);
+    expect(process.env.VIFX_VERBOSE).toBe("true");
+  } finally {
+    process.env.VIFX_VERBOSE = originalVerbose;
+  }
+});
+
+test("-v alias sets VIFX_VERBOSE environment variable", async () => {
+  const originalVerbose = process.env.VIFX_VERBOSE;
+  try {
+    delete process.env.VIFX_VERBOSE;
+    await executeCli(["doctor", "-v"]);
+    expect(process.env.VIFX_VERBOSE).toBe("true");
+  } finally {
+    process.env.VIFX_VERBOSE = originalVerbose;
+  }
+});
+
+test("--debug sets VIFX_DEBUG environment variable", async () => {
+  const originalDebug = process.env.VIFX_DEBUG;
+  try {
+    delete process.env.VIFX_DEBUG;
+    await executeCli(["doctor", "--debug"]);
+    expect(process.env.VIFX_DEBUG).toBe("true");
+  } finally {
+    process.env.VIFX_DEBUG = originalDebug;
+  }
+});

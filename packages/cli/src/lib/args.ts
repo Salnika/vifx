@@ -26,7 +26,9 @@ export function parseFlags(argv: string[], options: ParseFlagsOptions = {}): Par
     }
 
     if (!argument.startsWith("--")) {
-      errors.push(`Unknown flag ${argument}.`);
+      if (!options.ignoreUnknownFlags) {
+        errors.push(`Unknown flag ${argument}.`);
+      }
       continue;
     }
 
@@ -57,7 +59,9 @@ export function parseFlags(argv: string[], options: ParseFlagsOptions = {}): Par
       continue;
     }
 
-    errors.push(`Unknown flag --${flagName}.`);
+    if (!options.ignoreUnknownFlags) {
+      errors.push(`Unknown flag --${flagName}.`);
+    }
   }
 
   return {

@@ -4,8 +4,8 @@ import { parseFlags } from "../lib/args.ts";
 import type { CliResult } from "../types.ts";
 
 export const MIGRATE_HELP = `Usage:
-  vifx migrate expo <path> [--dry-run] [--write] [--with-vite]
-  vifx migrate react-native <path> [--dry-run] [--write] [--with-vite]
+  vifx migrate expo <path> [--dry-run] [--write] [--with-vite] [--verbose]
+  vifx migrate react-native <path> [--dry-run] [--write] [--with-vite] [--verbose]
 
 Prepares an Expo or React Native project for Vifx experiments without overwriting files by default.
 
@@ -13,6 +13,7 @@ Options:
   --dry-run    Preview changes without writing files. This is the default.
   --write      Apply the planned changes.
   --with-vite  Generate a minimal experimental vite.config.vifx.ts when one does not exist.
+  --verbose    Show detailed diagnostic information.
   --help       Show this message.
 `;
 

@@ -5,13 +5,14 @@ import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 import { parseFlags } from "../lib/args.ts";
 import type { CliResult } from "../types.ts";
 
-const BUILD_HELP = `Usage: vifx build [path] [--platform ios|android|all] [--config <file>] [--json]
+const BUILD_HELP = `Usage: vifx build [path] [--platform ios|android|all] [--config <file>] [--verbose] [--json]
 
 Builds the configured Vifx bundle targets from vifx.config.*.
 
 Options:
   --platform  Restrict the build to one platform. Default: all configured targets.
   --config    Use a specific Vifx config file.
+  --verbose   Show detailed diagnostic information.
   --json      Output machine-readable build results.
   --help      Show this message.
 `;
