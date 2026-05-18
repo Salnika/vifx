@@ -20,7 +20,8 @@
     "prepare": "vp config",
     "ready": "pnpm check && pnpm test && pnpm build && pnpm playground:validate",
     "typecheck": "pnpm -r exec tsc --noEmit",
-    "test": "pnpm --filter @vifx/types run test && pnpm --filter @vifx/errors run test && pnpm --filter @vifx/logger run test && pnpm --filter @vifx/config run test && pnpm --filter @vifx/platform-resolver run test && pnpm --filter @vifx/asset-registry run test && pnpm --filter @vifx/core run test && pnpm --filter @vifx/compat run test && pnpm --filter @vifx/source-map-tools run test && pnpm --filter @vifx/hermes-tools run test && pnpm --filter @vifx/native-artifacts run test && pnpm --filter @vifx/metro-inspect run test && pnpm --filter @vifx/compat-runner run test && pnpm --filter @vifx/codemods run test && pnpm --filter @vifx/cli run test && pnpm --filter @vifx/expo-export run test && pnpm --filter @vifx/vite-plugin-react-native run test && pnpm --filter @vifx/vite-plugin-expo run test"
+    "test": "pnpm --filter @vifx/types run test && pnpm --filter @vifx/errors run test && pnpm --filter @vifx/logger run test && pnpm --filter @vifx/config run test && pnpm --filter @vifx/platform-resolver run test && pnpm --filter @vifx/asset-registry run test && pnpm --filter @vifx/core run test && pnpm --filter @vifx/compat run test && pnpm --filter @vifx/source-map-tools run test && pnpm --filter @vifx/hermes-tools run test && pnpm --filter @vifx/native-artifacts run test && pnpm --filter @vifx/metro-inspect run test && pnpm --filter @vifx/compat-runner run test && pnpm --filter @vifx/codemods run test && pnpm --filter @vifx/cli run test && pnpm --filter @vifx/expo-export run test && pnpm --filter @vifx/vite-plugin-react-native run test && pnpm --filter @vifx/vite-plugin-expo run test",
+    "vifx": "pnpm --filter @vifx/cli vifx"
   },
   "devDependencies": {
     "@types/node": "catalog:",

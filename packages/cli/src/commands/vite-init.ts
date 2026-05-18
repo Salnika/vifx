@@ -5,7 +5,7 @@ import type { CliResult } from "../types.ts";
 
 const VITE_INIT_HELP = `Usage: vifx vite init [path] [--write] [--force]
 
-Creates a Vifx-owned vite.config.vifx.ts that imports the real Vifx Vite plugin.
+Creates a Vifx-owned vite.config.vifx.ts for advanced direct Vite usage.
 
 Options:
   --write  Write the planned files instead of printing a preview.

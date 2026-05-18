@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@vifx/asset-registry": "workspace:*",
+    "@vifx/config": "workspace:*",
     "@vifx/errors": "workspace:*",
     "@vifx/source-map-tools": "workspace:*",
     "@vifx/types": "workspace:*"

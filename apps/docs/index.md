@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Vifx
-  text: React Native and Expo compatibility, inspected before it is claimed
-  tagline: A docs-first toolkit for understanding Metro behavior, validating compatibility, and running bounded Vite experiments.
+  text: React Native and Expo bundling without guesswork
+  tagline: A serious Vite-based alternative with a repo-local Expo onboarding corridor, compatibility evidence, and native iOS execution.
   actions:
     - theme: brand
       text: Getting Started
@@ -17,35 +17,35 @@ hero:
       link: /roadmap
 
 features:
-  - title: Inspect first
-    details: Start from evidence, reports, and fixture-backed comparisons before any migration or plugin work.
-  - title: Compatibility as a product
-    details: Treat parity as a long-lived contract with pass, warn, and todo states instead of a marketing checkbox.
-  - title: Experimental by default
-    details: Vite-facing work stays explicitly bounded until resolver, assets, source maps, Hermes, and Expo export understanding are proven.
+  - title: One corridor
+    details: The primary flow is `setup -> expo audit -> expo dev -> native run -> expo export/serve`.
+  - title: Compatibility as evidence
+    details: Metro comparison, fixtures, and executed validation remain visible so support claims stay tied to real artifacts.
+  - title: Explicit boundaries
+    details: Unsupported surfaces are called out as `not supported yet` instead of being buried behind vague wording.
 ---
 
 ## Snapshot
 
-- Date: `2026-05-16`
-- Current phase: `Milestone 7 Expo export inspection landed`
-- Current note: Milestones 0 through 7 are implemented here as bounded first-pass surfaces: shared packages, captured Metro inspection, resolver and asset primitives, compatibility reports, codemods, source-map tooling, Hermes compile support, `vifx build`, `vifx run`, `vifx vite init`, experimental React Native and Expo Vite plugins, a bounded `expo-router/entry` browser preview path, and inspect-only Expo export analysis. The controlled bundle smoke target remains `fixtures/rn-bare-basic`.
+- Date: `2026-05-18`
+- Current phase: `Repo-local Expo onboarding and iOS simulator execution corridor`
+- Current note: Milestones 0 through 7 now land as current surfaces in this repository: shared packages, captured Metro inspection, resolver and asset primitives, compatibility reports, codemods, source-map tooling, Hermes compile support, `vifx build`, `vifx run`, `vifx setup`, React Native and Expo Vite plugins, `expo-router/entry` browser preview support, Expo export generation, local Updates serving, and an executed Expo SDK 54 iOS simulator path through `vifx native run`.
 
 ## Start Here
 
-1. Read the [Getting Started guide](/guide/getting-started) for the inspect-first workflow.
+1. Read the [Getting Started guide](/guide/getting-started) for the supported Expo flow.
 2. Review the [Architecture page](/guide/architecture) to understand the package boundaries.
-3. Use the [CLI reference](/reference/cli) and [Support Matrix](/reference/support-matrix) before evaluating experiments.
+3. Use the [CLI reference](/reference/cli) and [Support Matrix](/reference/support-matrix) before widening support claims.
 
 ## Current Focus
 
 ::: info Repository posture
-Vifx is not presented here as a production Metro replacement. The current repository ships controlled bundle builds, a browser runtime preview for targets that opt into `reactNativeCompat: "web"`, and inspect-first Expo export understanding. Fast Refresh, HMR, Expo Go, device runtime parity, full Expo Router parity, Updates generation, and EAS remain out of scope.
+Vifx currently supports a repo-local Expo flow built around `vifx setup`, `vifx expo audit`, `vifx expo dev`, `vifx native run`, `vifx expo export`, and `vifx expo serve`. Expo Go, native dev-client protocol parity, Fast Refresh parity, Android native execution parity, and EAS remain not supported yet.
 :::
 
 ## Key Surfaces
 
-- [Packages](/reference/packages): package-by-package status, scope, limitations, and roadmap items.
+- [Packages](/reference/packages): package-by-package status, scope, limitations, and rollout notes.
 - [Config](/reference/config): the current config contract draft and a sample `vifx.config.ts`.
-- [Workflows](/guide/workflows): guided flows for Expo analysis, React Native analysis, compatibility runs, and experimental migration.
+- [Workflows](/guide/workflows): guided flows for Expo onboarding, React Native analysis, compatibility runs, and advanced manual surfaces.
 - [Roadmap](/roadmap): milestone-by-milestone deliverables and priorities.

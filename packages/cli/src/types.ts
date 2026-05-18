@@ -8,8 +8,10 @@ export interface CliResult {
 }
 
 export interface ExecuteCliOptions {
+  confirm?: (message: string) => Promise<boolean>;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  interactive?: boolean;
 }
 
 export interface ParsedFlags {

@@ -16,7 +16,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_CONFIG_MISSING`                       | Project inspection did not find a `vifx.config.*` file.                                                                  |
 | `VIFX_CONFIG_NOT_FOUND`                     | A required or explicitly requested config file was missing.                                                              |
 | `VIFX_CORE_MISSING_PRIMITIVE`               | A lazy core primitive could not be loaded from its package.                                                              |
-| `VIFX_EXPERIMENTAL_EXPO`                    | Expo support is experimental for the inspected workflow.                                                                 |
+| `VIFX_EXPERIMENTAL_EXPO`                    | Expo support falls outside the current supported corridor for the inspected workflow.                                    |
 | `VIFX_EXPO_CONFIG_NOT_FOUND`                | The Expo layer could not find or read app config metadata.                                                               |
 | `VIFX_EXPO_DEV_INVALID_PLATFORM`            | An Expo dev command received an unsupported platform value.                                                              |
 | `VIFX_EXPO_DEV_INVALID_PORT`                | An Expo dev command received a malformed port value.                                                                     |
@@ -41,7 +41,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_HERMES_OUTPUT_MISSING`                | Hermes completed without creating the requested bytecode output.                                                         |
 | `VIFX_HERMES_UNAVAILABLE`                   | No Hermes compiler was found through explicit path, env, workspace, or PATH.                                             |
 | `VIFX_MIGRATION_UNSAFE_CHANGE`              | A requested migration step was too risky or targeted the wrong project type.                                             |
-| `VIFX_MONOREPO_EXPERIMENTAL`                | Project inspection detected a workspace path with experimental monorepo support.                                         |
+| `VIFX_MONOREPO_EXPERIMENTAL`                | Project inspection detected a workspace path that still depends on the current monorepo-limited support corridor.        |
 | `VIFX_NATIVE_ARTIFACT_MISSING`              | Native artifact preparation could not find a required bundle, map, bytecode, or asset input.                             |
 | `VIFX_NATIVE_COMMAND_FAILED`                | An executed native host command returned a non-zero exit code or spawn failure, with output tail details when available. |
 | `VIFX_NATIVE_EXPO_IOS_DEBUG_REQUIRED`       | The current Expo iOS no-Metro path only supports Debug simulator builds.                                                 |
@@ -69,6 +69,8 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_RUN_TARGET_NOT_FOUND`                 | No configured runtime target matched the requested platform.                                                             |
 | `VIFX_RUN_TARGETS_MISSING`                  | The config does not contain any Vite runtime targets.                                                                    |
 | `VIFX_SOURCEMAP_INVALID`                    | A source map failed validation or comparison.                                                                            |
+| `VIFX_SETUP_CONFIRMATION_REQUIRED`          | `vifx setup` was run without `--yes` in a non-interactive session.                                                       |
+| `VIFX_SETUP_EXPO_ONLY`                      | `vifx setup` was pointed at a non-Expo project even though the v1 flow supports Expo only.                               |
 | `VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST`    | Project inspection found a custom Metro `resolveRequest` hook outside Vifx scope.                                        |
 | `VIFX_UNSUPPORTED_METRO_SERIALIZER`         | Project inspection found a custom Metro serializer outside Vifx scope.                                                   |
 | `VIFX_VITE_BUNDLE_MISSING`                  | A Vite bundle build finished without the expected JavaScript bundle artifact.                                            |

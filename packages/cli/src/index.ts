@@ -19,6 +19,7 @@ import { NATIVE_ROOT_HELP, runNativeLifecycleCommand } from "./commands/native-l
 import { runNativePrepareCommand } from "./commands/native-prepare.ts";
 import { runNativeRunCommand } from "./commands/native-run.ts";
 import { runRunCommand } from "./commands/run.ts";
+import { runSetupCommand } from "./commands/setup.ts";
 import type { CliResult, ExecuteCliOptions } from "./types.ts";
 import { runViteInitCommand } from "./commands/vite-init.ts";
 
@@ -28,21 +29,23 @@ Usage:
   vifx <command> [options]
 
 Commands:
+  setup [path]                  Onboard an existing Expo project with Vifx config.
+  expo audit [path]             Audit the Expo without Metro support contract.
+  expo dev [path]               Start the Expo browser preview server.
+  native run [path]             Prepare, build, install, and launch the maintained native host path.
+  expo export [path]            Generate an Expo export from Vifx bundles.
+  expo serve [path]             Serve a Vifx-generated Expo Updates export locally.
+  doctor [path]                 Check project readiness and support boundaries.
   build [path]                  Build Vifx bundle targets from vifx.config.*.
   run [path]                    Serve a built Vifx runtime locally.
-  doctor [path]                 Check project readiness.
-  init [path]                   Generate a vifx.config.ts.
   inspect [path]                Inspect project primitives.
+  native <command> [path]       Diagnose, prepare, build, install, or launch native hosts.
   compat run [options]          Run compatibility cases with the vifx adapter.
   metro inspect [path]          Inspect captured Metro reference artifacts.
-  vite init [path]              Generate a Vifx-owned vite.config.vifx.ts for RN or Expo.
-  migrate expo <path>           Prepare an Expo project for Vifx experiments.
-  migrate react-native <path>   Prepare a React Native project for Vifx experiments.
-  expo audit [path]             Audit the Expo without Metro support contract.
-  expo dev [path]               Start a bounded Expo browser dev server.
-  expo export [path]            Generate a bounded Expo export from Vifx bundles.
-  expo serve [path]             Serve a bounded Expo Updates v1 export locally.
-  native <command> [path]       Diagnose, prepare, build, install, or launch native hosts.
+  init [path]                   Generate a vifx.config.ts.
+  vite init [path]              Generate a Vifx-owned vite.config.vifx.ts for advanced RN or Expo usage.
+  migrate expo <path>           Deprecated legacy manual Expo migration surface.
+  migrate react-native <path>   Deprecated legacy manual React Native migration surface.
   hermes compile [options]      Compile a bundle to Hermes bytecode.
 
 Options:
@@ -109,6 +112,13 @@ export async function executeCli(
 
     if (argv[0] === "doctor") {
       return await runDoctorCommand(argv.slice(1), cwd);
+    }
+
+    if (argv[0] === "setup") {
+      return await runSetupCommand(argv.slice(1), cwd, {
+        confirm: options.confirm,
+        interactive: options.interactive,
+      });
     }
 
     if (argv[0] === "build") {

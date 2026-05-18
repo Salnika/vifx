@@ -3,6 +3,7 @@ import { access, copyFile, mkdir, readFile, readdir, stat, writeFile } from "nod
 import { createServer, type Server } from "node:http";
 import path from "node:path";
 import { collectAssetGroup, isSupportedAssetFile } from "@vifx/asset-registry";
+import { loadVifxConfig } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
 import { validateSourceMap } from "@vifx/source-map-tools";
 import type {
@@ -84,6 +85,12 @@ const VITE_CONFIG_NAMES = [
   "vite.config.vifx.js",
   "vite.config.vifx.mjs",
 ] as const;
+
+interface ConfiguredExpoSupport {
+  buildConfigured: boolean;
+  devConfigured: boolean;
+  loadWarning: string | null;
+}
 
 function toPosixPath(filePath: string) {
   return filePath.split(path.sep).join("/");
@@ -198,6 +205,45 @@ async function hasAnyFile(projectRoot: string, fileNames: readonly string[]) {
   }
 
   return false;
+}
+
+async function inspectConfiguredExpoSupport(projectRoot: string): Promise<ConfiguredExpoSupport> {
+  const hasVifxConfig = await hasAnyFile(projectRoot, VIFX_CONFIG_NAMES);
+  if (!hasVifxConfig) {
+    return {
+      buildConfigured: false,
+      devConfigured: false,
+      loadWarning: null,
+    };
+  }
+
+  try {
+    const loaded = await loadVifxConfig({
+      cwd: projectRoot,
+      optional: false,
+    });
+    const expoTargets =
+      loaded.config.vite.mode === "expo"
+        ? loaded.config.vite.targets.filter(
+            (target) => target.platform === "ios" || target.platform === "android",
+          )
+        : [];
+
+    return {
+      buildConfigured: expoTargets.length > 0,
+      devConfigured: expoTargets.some((target) => target.reactNativeCompat === "web"),
+      loadWarning: null,
+    };
+  } catch (error) {
+    return {
+      buildConfigured: false,
+      devConfigured: false,
+      loadWarning:
+        error instanceof Error
+          ? `Existing Vifx config could not be loaded: ${error.message}`
+          : "Existing Vifx config could not be loaded.",
+    };
+  }
 }
 
 function createWorkflow(options: VifxExpoNoMetroWorkflowReport): VifxExpoNoMetroWorkflowReport {
@@ -1056,6 +1102,9 @@ export async function evaluateExpoNoMetroContract(
   const appDirectory = await pathExists(path.join(projectRoot, "app"));
   const hasVifxConfig = await hasAnyFile(projectRoot, VIFX_CONFIG_NAMES);
   const hasViteConfig = await hasAnyFile(projectRoot, VITE_CONFIG_NAMES);
+  const configuredExpoSupport = await inspectConfiguredExpoSupport(projectRoot);
+  const hasConfiguredExpoBuildSupport = configuredExpoSupport.buildConfigured;
+  const hasConfiguredExpoDevSupport = configuredExpoSupport.devConfigured;
   const exportInspection = options.exportRoot
     ? await inspectExpoExport({
         exportRoot: options.exportRoot,
@@ -1080,42 +1129,60 @@ export async function evaluateExpoNoMetroContract(
     warnings.push("React Native dependency was not found in package.json.");
   }
 
+  if (configuredExpoSupport.loadWarning) {
+    warnings.push(configuredExpoSupport.loadWarning);
+  }
+
   const hasBoundedExpoNativeIosSupport = Boolean(expoVersion && reactNativeVersion);
 
   const workflows: VifxExpoNoMetroWorkflowReport[] = [
     createWorkflow({
-      blockers:
-        hasVifxConfig && hasViteConfig
+      blockers: hasConfiguredExpoDevSupport
+        ? [
+            "The Vifx Expo dev server is bounded to browser previews with Vite HMR; native dev-client protocol and React Native Fast Refresh parity remain unimplemented.",
+          ]
+        : hasConfiguredExpoBuildSupport
           ? [
-              "The Vifx Expo dev server is bounded to browser previews with Vite HMR; native dev-client protocol and React Native Fast Refresh parity remain unimplemented.",
+              'Add reactNativeCompat: "web" to one Expo target before claiming Expo dev-server coverage.',
             ]
-          : ["Add Vifx and Vite experiment configs before claiming Expo dev-server coverage."],
+          : hasVifxConfig
+            ? [
+                'Configure vite.mode "expo" and at least one Expo target before claiming Expo dev-server coverage.',
+              ]
+            : ["Add a Vifx config before claiming Expo dev-server coverage."],
       evidence: [
         ...(hasVifxConfig ? ["Vifx config detected."] : []),
         ...(hasViteConfig ? ["Vifx-owned Vite config detected."] : []),
-        ...(hasVifxConfig && hasViteConfig
+        ...(hasConfiguredExpoBuildSupport ? ["Expo Vifx targets detected."] : []),
+        ...(hasConfiguredExpoDevSupport
           ? ["`vifx expo dev` can start a bounded Vite browser dev server."]
           : []),
       ],
       id: "dev-server",
       notes: ["The bounded dev server does not replace `expo start`, Expo Go, or native devices."],
-      status: hasVifxConfig && hasViteConfig ? "partial" : "blocked",
+      status: hasConfiguredExpoDevSupport ? "partial" : "blocked",
       title: "Expo dev server without Metro",
     }),
     createWorkflow({
-      blockers:
-        hasVifxConfig && hasViteConfig
-          ? ["Native Expo build parity is not proven; only controlled bundle builds are covered."]
-          : ["Add Vifx and Vite experiment configs before claiming Expo build coverage."],
+      blockers: hasConfiguredExpoBuildSupport
+        ? ["Native Expo build parity is not proven; only controlled bundle builds are covered."]
+        : hasVifxConfig
+          ? [
+              'Configure vite.mode "expo" and at least one Expo target before claiming Expo build coverage.',
+            ]
+          : ["Add a Vifx config before claiming Expo build coverage."],
       evidence: [
         ...(hasVifxConfig ? ["Vifx config detected."] : []),
         ...(hasViteConfig ? ["Vifx-owned Vite config detected."] : []),
+        ...(hasConfiguredExpoBuildSupport
+          ? ["`vifx build` can produce bounded Expo bundle artifacts from configured targets."]
+          : []),
       ],
       id: "build",
       notes: [
         "`vifx build` can cover configured bundle targets but does not replace EAS or Expo native builds.",
       ],
-      status: hasVifxConfig && hasViteConfig ? "partial" : "blocked",
+      status: hasConfiguredExpoBuildSupport ? "partial" : "blocked",
       title: "Expo build without Metro",
     }),
     createWorkflow({

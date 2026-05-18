@@ -1,14 +1,43 @@
 # CLI
 
-The CLI is the main user-facing surface for inspection, compatibility, and bounded build or runtime experiments.
+The CLI is the main user-facing surface for inspection, onboarding, build, browser preview, native iOS execution, and Expo export workflows.
+
+For the recommended Expo onboarding path, run the CLI from this repository through:
+
+```sh
+pnpm vifx <command> ...
+```
+
+## `vifx setup`
+
+Status: Recommended Expo onboarding path.
+
+Onboard an existing Expo project with one setup command.
+
+- Use it for the v1 migration-first Expo path.
+- Use it before `vifx expo audit`, `vifx expo dev`, or `vifx native run`.
+
+```sh
+pnpm vifx setup <expo-project-path> --yes
+pnpm vifx setup <expo-project-path> --yes --with-vite-config
+pnpm vifx setup <expo-project-path> --json
+```
+
+- `vifx setup` is Expo-only in v1.
+- By default it creates only `vifx.config.ts`.
+- It does not edit `vite.config.ts`, `app.json`, Expo scripts, EAS scripts, or app source files.
+- It does not add `@vifx/*` dependencies to the target project's `package.json`.
+- `--with-vite-config` adds `vite.config.vifx.ts` as an advanced opt-in surface for direct Vite usage.
+- `--dry-run` remains available as an optional preview mode, but it is no longer part of the primary onboarding flow.
+- Combine `--json --yes` when you want machine-readable output after applying changes.
 
 ## `vifx init`
 
 Status: Current.
 
-Bootstrap a conservative `vifx.config.*` file and point the project toward the documented workflow.
+Bootstrap a conservative `vifx.config.*` file directly.
 
-- Use it when no Vifx config exists yet.
+- Use it for low-level config authoring.
 - Use it after doctor reports a missing config.
 
 ```sh
@@ -17,17 +46,18 @@ vifx init --help
 ```
 
 - The current command writes `vifx.config.ts` and should never overwrite user files silently.
-- Expo Router projects with an `app/` directory scaffold `entry: "expo-router/entry"` and `reactNativeCompat: "web"` for the bounded browser-preview path.
+- For existing Expo apps, prefer `vifx setup` as the recommended onboarding path.
+- Expo Router projects with an `app/` directory scaffold `entry: "expo-router/entry"` and `reactNativeCompat: "web"` for the current browser-preview path.
 - Other projects keep conservative `entry: "./index.js"` targets until the user opts into a runtime preview explicitly.
 
 ## `vifx doctor`
 
 Status: Current.
 
-Inspect readiness, versions, config presence, detected Vite plugin mode, and experimental support boundaries.
+Inspect readiness, versions, config presence, detected Vite plugin mode, and current support boundaries.
 
-- Use it before migration or plugin experiments.
-- Use it after changing config or adding experimental packages.
+- Use it before widening support claims.
+- Use it after changing config or plugin wiring.
 
 ```sh
 vifx doctor
@@ -83,7 +113,7 @@ Status: Current.
 Serve one configured target as a local browser runtime preview.
 
 - Use it after a target is configured for browser preview.
-- Use it to validate the bounded runtime path without replacing native workflows.
+- Use it to validate the current runtime path without replacing native workflows.
 
 ```sh
 vifx run --platform ios
@@ -94,7 +124,7 @@ vifx run --platform android --json
 - `vifx run` requires `vite.targets[].reactNativeCompat = "web"`.
 - If multiple targets exist, pass `--platform`.
 - `--no-build` reuses the existing runtime artifacts instead of rebuilding first.
-- Bounded `expo-router/entry` previews work on this path, but only as browser previews. Expo Go, device runtime parity, Fast Refresh, and HMR remain out of scope.
+- `expo-router/entry` previews work on this path, but only as browser previews. Expo Go, device runtime parity, Fast Refresh, and HMR remain out of scope.
 
 ## `vifx compat run`
 
@@ -134,103 +164,106 @@ vifx metro inspect ./fixtures/expo-basic --platform android --json > report.json
 
 ## `vifx migrate`
 
-Status: Experimental workflow.
+Status: Deprecated legacy manual surface.
 
-Umbrella migration command that points to the Expo and bare React Native flows.
+Umbrella migration command that points to the older Expo and bare React Native manual flows.
 
-- Use it to discover migration subcommands.
-- Use it to reinforce that migration is experimental and reversible.
+- Use it only when you explicitly want file-level planning instead of the main onboarding corridor.
+- Prefer `vifx setup` for Expo projects.
 
 ```sh
 vifx migrate --help
-vifx migrate expo --dry-run
-vifx migrate expo --dry-run --with-vite
-vifx migrate react-native --dry-run
-vifx migrate react-native --dry-run --with-vite
+vifx migrate expo --write
+vifx migrate expo --write --with-vite
+vifx migrate react-native --write
+vifx migrate react-native --write --with-vite
 ```
 
-- Dry-run should be the default mental model.
+- `--dry-run` remains available as an optional preview mode.
 - Existing Metro and Expo workflows must remain visible.
 
 ## `vifx migrate expo`
 
-Status: Experimental workflow.
+Status: Deprecated legacy manual surface.
 
-Prepare an Expo project for experiments without breaking existing workflows.
+Prepare an Expo project through the older, more manual migration surface.
 
 - Use it only after doctor and reference inspection.
-- Use it when you want config and helper scripts, not replacement behavior.
+- Use it when you explicitly do not want the newer `vifx setup` onboarding path.
 
 ```sh
-vifx migrate expo --dry-run
-vifx migrate expo --write
-vifx migrate expo --dry-run --with-vite
+pnpm vifx migrate expo <expo-project-path> --write
+pnpm vifx migrate expo <expo-project-path> --write --with-vite
 ```
 
 - Never replace `expo start` automatically.
+- Prefer `vifx setup` for the main Expo migration-first guide.
 - `--with-vite` reuses the same minimal plugin-backed Vite init plan as `vifx vite init`.
 - Expo Router projects with an `app/` directory reuse the same automatic browser-preview target detection as `vifx vite init`.
 - Rollback instructions should always be printed.
+- `--dry-run` remains available when you explicitly want a preview.
 
 ## `vifx migrate react-native`
 
-Status: Experimental workflow.
+Status: Deprecated legacy manual surface.
 
-Prepare a bare React Native project for bounded experiments.
+Prepare a bare React Native project through the legacy manual migration surface.
 
 - Use it when evaluating Vifx in a bare app without losing Metro.
 - Use it after a reference report already exists.
 
 ```sh
-vifx migrate react-native --dry-run
 vifx migrate react-native --write
-vifx migrate react-native --dry-run --with-vite
+vifx migrate react-native --write --with-vite
 ```
 
 - Preserve Metro config and scripts.
-- `--with-vite` adds the bounded Vifx-owned `vite.config.vifx.ts` without claiming runtime parity.
+- `--with-vite` adds the Vifx-owned `vite.config.vifx.ts` without claiming runtime parity.
 - Expo Router projects with an `app/` directory scaffold `expo-router/entry` and browser-preview targets automatically.
 - Keep rollback guidance prominent.
+- `--dry-run` remains available when you explicitly want a preview.
 
 ## `vifx expo audit`
 
-Status: Program C contract audit.
+Status: Current support report.
 
 Print the explicit Expo without Metro support matrix for a project. This command is intentionally an audit surface: it lists detected Expo and React Native versions, the fixture-backed SDK range, workflow statuses, evidence, and blockers.
 
 ```sh
-vifx expo audit ./path/to/expo-app
-vifx expo audit ./path/to/expo-app --export-root dist
-vifx expo audit ./path/to/expo-app --json
+pnpm vifx expo audit <expo-project-path>
+pnpm vifx expo audit <expo-project-path> --export-root dist
+pnpm vifx expo audit <expo-project-path> --json
 ```
 
 - Workflows currently reported: dev server, build, export, Expo Router, native iOS, native Android, and Updates.
+- Setup-generated `vifx.config.ts` is enough to remove the missing-config blockers for Expo build coverage, and for browser dev coverage when a web-compatible target is configured.
 - `--export-root` inspects an existing Expo export directory and can mark export support as inspect-only evidence.
 - The command does not replace `expo start`, `expo export`, EAS, Expo Router native parity, Updates multipart directives, or native Updates validation.
-- Use it before updating the support matrix so Program C claims stay tied to executable evidence.
+- Use it before updating support claims so they stay tied to executable evidence.
 
 ## `vifx expo dev`
 
-Status: Program C bounded browser dev server.
+Status: Current browser preview server.
 
 Start a Vite-powered browser dev server for one configured Expo target. This uses the Expo Vite plugin, the React Native web-compat shims, and Vite HMR for browser previews.
 
 ```sh
-vifx expo dev ./path/to/expo-app --platform ios
-vifx expo dev ./path/to/expo-app --platform android --port 5174
-vifx expo dev ./path/to/expo-app --platform ios --json
+pnpm vifx expo dev <expo-project-path> --platform ios
+pnpm vifx expo dev <expo-project-path> --platform android --port 5174
+pnpm vifx expo dev <expo-project-path> --platform ios --json
 ```
 
 - Requires `vite.mode = "expo"` and a single target with `reactNativeCompat = "web"`.
+- The recommended `vifx setup` command configures that browser-preview target only when Expo Router and `app/` are both detected.
 - Serves a generated dev HTML entry and virtual dev client from Vite; it does not write build output.
-- Supports Vite browser HMR for the bounded preview path.
+- Supports Vite browser HMR for the current preview path.
 - Does not implement Expo Go, native dev-client protocol, device runtime parity, or React Native Fast Refresh parity.
 
 ## `vifx expo export`
 
-Status: Program C bounded export generation.
+Status: Current export generation.
 
-Build configured Expo Vifx targets and write a bounded Expo export directory containing bundles, source maps, assets, `manifest.json`, `metadata.json`, and optional Expo Updates v1 manifest files.
+Build configured Expo Vifx targets and write an Expo export directory containing bundles, source maps, assets, `manifest.json`, `metadata.json`, and optional Expo Updates v1 manifest files.
 
 ```sh
 vifx expo export ./path/to/expo-app
@@ -242,13 +275,13 @@ vifx expo export ./path/to/expo-app --json
 - Requires `vite.mode = "expo"` and at least one configured iOS or Android target.
 - Uses Vifx bundle output; it does not call Metro or Expo CLI.
 - The output is inspectable by `inspectExpoExport` and `vifx expo audit --export-root`.
-- `--updates-url` and `--runtime-version` generate per-platform `updates/<platform>/manifest.json` files that reference the bounded export assets.
+- `--updates-url` and `--runtime-version` generate per-platform `updates/<platform>/manifest.json` files that reference the exported assets.
 - `--created-at` can pin the Updates manifest timestamp for reproducible fixtures and tests.
 - This is not full `expo export`, native Updates validation, or EAS parity yet; response signing is only available through `vifx expo serve` when configured.
 
 ## `vifx expo serve`
 
-Status: Program C bounded Updates serving.
+Status: Current local Updates serving.
 
 Serve a Vifx-generated Expo export directory with the Expo Updates v1 JSON or multipart manifest request shape and static asset responses.
 
@@ -262,19 +295,20 @@ vifx expo serve ./path/to/expo-app --json
 ```
 
 - Serves `GET /`, `/manifest`, or `/update` as an Updates v1 JSON manifest response, or as a `multipart/mixed` manifest part when requested, with `expo-protocol-version: 1`, `expo-platform`, and `expo-runtime-version`.
-- `--signing-key` enables bounded `expo-signature` response headers for clients that send `expo-expect-signature`.
+- `--signing-key` enables `expo-signature` response headers for clients that send `expo-expect-signature`.
 - `--signing-alg` currently supports `rsa-v1_5-sha256` only and defaults to that value when omitted.
 - Serves referenced bundles and assets from the same export root with stable content types and immutable cache headers for asset-like files.
 - Does not implement directive parts, rollback directives, native client execution, or EAS Update parity.
 
 ## `vifx vite init`
 
-Status: Experimental workflow.
+Status: Advanced manual surface.
 
-Scaffold a plugin-backed `vite.config.vifx.ts` once the team intentionally enters bounded Vite experimentation.
+Scaffold a plugin-backed `vite.config.vifx.ts` once the team intentionally enters advanced direct Vite work.
 
 - Use it after config and primitive work exist.
-- Use it when you want a bounded Vite experiment rather than a replacement claim.
+- Use it when you explicitly want a separate Vifx-owned Vite config file.
+- It is not required for the recommended `vifx setup -> expo audit -> expo dev/native run` flow.
 
 ```sh
 vifx vite init
@@ -284,7 +318,7 @@ vifx vite init --force --write
 ```
 
 - The current command supports `--write` and `--force`.
-- Generated output imports the real Vifx plugin and keeps experimental status obvious.
+- Generated output imports the real Vifx plugin and keeps the manual Vite surface separate from the main onboarding flow.
 - It preserves existing user `vite.config.ts` files and writes the Vifx-owned config separately.
 - Expo Router projects with an `app/` directory scaffold `entry: "expo-router/entry"` and `reactNativeCompat: "web"` in `vifx.config.ts`.
 
@@ -307,7 +341,7 @@ vifx hermes compile --help
 
 ## `vifx native prepare`
 
-Status: Program B started.
+Status: Current artifact preparation.
 
 Build configured Vifx targets and prepare native-ready bundle, source-map, Hermes, asset, and manifest files.
 
@@ -323,7 +357,7 @@ vifx native prepare --platform android --out-dir .vifx/native/android --json
 
 ## `vifx native doctor`
 
-Status: Program B host diagnostics.
+Status: Current host diagnostics.
 
 Validate native host markers, prepared Vifx manifests, signing hints, local toolchain readiness, and runtime target readiness.
 
@@ -340,9 +374,9 @@ vifx native doctor ./path/to/project --platform ios --manifest .vifx/native/ios/
 
 ## `vifx native build|install|launch`
 
-Status: Program B command planning plus bounded execution.
+Status: Advanced planning and execution.
 
-Detect an iOS or Android host and create deterministic native command plans. Use `--dry-run` to inspect the commands without executing local toolchains.
+Detect an iOS or Android host and create deterministic native command plans. Use `--dry-run` only when you explicitly want a preview without executing local toolchains.
 
 ```sh
 vifx native build ./path/to/project --platform ios --dry-run
@@ -355,18 +389,18 @@ vifx native launch ./path/to/project --platform ios --bundle-id dev.vifx.app --d
 - Android build and install plans use `android/gradlew` when available, otherwise `gradle`.
 - Android launch plans use `adb shell monkey -p <applicationId> 1`.
 - Without `--dry-run`, these commands execute the planned host command and fail with `VIFX_NATIVE_COMMAND_FAILED` if the toolchain returns a non-zero exit code or spawn failure. Error details include the exit code and available output tail metadata.
-- This is not yet full Program B completion because the repo still lacks production-grade Android coverage, device signing proof, and broader simulator, emulator, and device execution gates.
+- This is not yet full native parity because the repo still lacks production-grade Android coverage, device signing proof, and broader simulator, emulator, and device execution gates.
 
 ## `vifx native run`
 
-Status: Program B bounded execution orchestration.
+Status: Current native execution corridor.
 
-Prepare native artifacts, validate host and runtime readiness, and plan build, install, and launch in one command. Use `--dry-run` for the maintained validation path.
+Prepare native artifacts, validate host and runtime readiness, and plan build, install, and launch in one command.
 
 ```sh
-vifx native run ./path/to/project --platform ios --dry-run
-vifx native run ./path/to/project --platform android --dry-run --json
-vifx native run ./path/to/project --platform ios --no-prepare --dry-run
+pnpm vifx native run <expo-project-path> --platform ios
+vifx native run ./path/to/project --platform android --json
+vifx native run ./path/to/project --platform ios --no-prepare
 ```
 
 - By default, `native run` calls `native prepare` for the requested platform before host validation.
@@ -374,13 +408,14 @@ vifx native run ./path/to/project --platform ios --no-prepare --dry-run
 - The JSON output includes preparation results, host validation, runtime target diagnostics, and build/install/launch plans.
 - Without `--dry-run`, it executes the planned host commands in build, install, launch order.
 - On the current inferred Expo iOS no-Metro path, `native run` can prebuild the host, install CocoaPods, build the simulator app, install it, launch it, and keep the local bundle server alive until the process exits.
-- The current repository proof is bounded to Expo SDK 54 iOS Debug simulator builds; real signing, Android execution, device execution, and broader native parity remain Program B work.
+- `--dry-run` remains available as an advanced preview mode.
+- The current repository proof is Expo SDK 54 iOS Debug simulator builds; real signing, Android execution, device execution, and broader native parity remain not supported yet.
 
 ## Repository Playground Commands
 
 Status: Current.
 
-The root workspace keeps maintained validation commands for the bounded Vite paths:
+The root workspace keeps maintained validation commands for the current Vifx paths:
 
 ```sh
 pnpm native:validate
@@ -389,9 +424,9 @@ pnpm playground:expo
 pnpm playground:validate
 ```
 
-- `apps/playground-rn-bare` validates the experimental React Native Vite plugin path.
-- `pnpm native:validate` validates native artifact preparation, native doctor, dry-run lifecycle plans, and dry-run `native run` orchestration against the bare React Native playground host markers.
-- `apps/playground-expo` validates the experimental Expo layer, Expo config detection, bounded `vifx expo export`, `vifx expo audit`, and `EXPO_PUBLIC_*` injection.
+- `apps/playground-rn-bare` validates the React Native Vite path.
+- `pnpm native:validate` validates native artifact preparation, native doctor, lifecycle plans, and preview-mode `native run` orchestration against the bare React Native playground host markers.
+- `apps/playground-expo` validates the Expo layer, Expo config detection, `vifx expo export`, `vifx expo audit`, and `EXPO_PUBLIC_*` injection.
 - Each playground runs `vifx doctor`, `vifx inspect`, iOS and Android `vifx build`, and a direct Vite build through `vite.config.vifx.ts`.
 
 ## Example Report

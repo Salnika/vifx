@@ -31,13 +31,13 @@ const NATIVE_RUN_HELP = `Usage: vifx native run [path] --platform ios|android [o
 Prepares native artifacts, validates host and runtime readiness, then builds, installs, and launches a native host.
 
 Expo iOS note:
-  When Vifx detects an Expo project on iOS, it uses a bounded Debug simulator path:
+  When Vifx detects an Expo project on iOS, it uses the current Debug simulator path:
   Expo prebuild (when needed), pod install (when needed), a local Vifx bundle server on port 8081,
   then xcodebuild + simctl without Metro.
 
 Options:
   --platform        Native platform. Required: ios or android.
-  --dry-run         Prepare artifacts and print native command plans without executing host commands.
+  --dry-run         Optional preview mode without executing host commands.
   --no-prepare      Skip artifact preparation and use the existing manifest.
   --config          Use a specific Vifx config file during preparation.
   --out-dir         Write prepared native artifacts to this directory.

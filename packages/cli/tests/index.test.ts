@@ -19,6 +19,16 @@ test("package manifest exposes the public vifx binary", async () => {
   expect(manifest.bin?.vifx).toBe("./dist/bin.mjs");
 });
 
+test("root package exposes a pnpm vifx script", async () => {
+  const manifest = JSON.parse(
+    await readFile(path.resolve(import.meta.dirname, "../../../package.json"), "utf8"),
+  ) as {
+    scripts?: Record<string, string>;
+  };
+
+  expect(manifest.scripts?.vifx).toBe("pnpm --filter @vifx/cli vifx");
+});
+
 test("migrate parent command prints migration help", async () => {
   const result = await executeCli(["migrate"]);
 
@@ -46,12 +56,12 @@ test("expo parent command prints Expo audit help", async () => {
   expect(result.stdout).toContain("Expo without Metro support contract");
 });
 
-test("expo dev --help prints bounded dev server usage", async () => {
+test("expo dev --help prints browser preview server usage", async () => {
   const result = await executeCli(["expo", "dev", "--help"]);
 
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Usage: vifx expo dev");
-  expect(result.stdout).toContain("Vite-powered Expo browser dev server");
+  expect(result.stdout).toContain("Vite-powered Expo browser preview server");
 });
 
 test("expo serve --help prints Updates server usage", async () => {
@@ -888,6 +898,99 @@ test("compat run supports the all adapter shortcut", async () => {
   expect(JSON.parse(result.stdout)).toHaveLength(2);
 });
 
+test("setup --dry-run previews the Expo onboarding plan without writing files", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-setup-dry-run-"));
+  const targetPath = path.join(tempRoot, "expo-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-basic"), targetPath, { recursive: true });
+
+  const result = await executeCli(["setup", targetPath, "--dry-run"]);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("Vifx Setup");
+  expect(result.stdout).toContain("[create] vifx.config.ts");
+  expect(result.stdout).toContain("Dry run only. No files were written.");
+  await expect(readFile(path.join(targetPath, "vifx.config.ts"), "utf8")).rejects.toThrow();
+});
+
+test("setup --yes writes an importless vifx.config.ts for Expo projects", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-setup-write-"));
+  const targetPath = path.join(tempRoot, "expo-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-basic"), targetPath, { recursive: true });
+
+  const result = await executeCli(["setup", targetPath, "--yes"]);
+  const vifxConfig = await readFile(path.join(targetPath, "vifx.config.ts"), "utf8");
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("Files written.");
+  expect(vifxConfig).toContain("export default {");
+  expect(vifxConfig).not.toContain("defineVifxConfig");
+  await expect(readFile(path.join(targetPath, "vite.config.vifx.ts"), "utf8")).rejects.toThrow();
+});
+
+test("setup --json returns the expected machine-readable preview shape", async () => {
+  const result = await executeCli([
+    "setup",
+    path.join(FIXTURE_ROOT, "expo-router-basic"),
+    "--json",
+  ]);
+  const parsed = JSON.parse(result.stdout) as {
+    appDirectory: boolean;
+    applied: boolean;
+    changes: Array<{ kind: string; path: string }>;
+    detectedProjectType: string;
+    expoRouter: boolean;
+    nextCommands: string[];
+    withViteConfig: boolean;
+  };
+
+  expect(result.exitCode).toBe(0);
+  expect(parsed.detectedProjectType).toBe("expo");
+  expect(parsed.expoRouter).toBe(true);
+  expect(parsed.appDirectory).toBe(true);
+  expect(parsed.applied).toBe(false);
+  expect(parsed.withViteConfig).toBe(false);
+  expect(parsed.changes.map((change) => change.path)).toEqual(["vifx.config.ts"]);
+  expect(parsed.nextCommands).toContain(
+    `pnpm vifx expo audit ${path.join(FIXTURE_ROOT, "expo-router-basic")}`,
+  );
+  expect(parsed.nextCommands).toContain(
+    `pnpm vifx expo dev ${path.join(FIXTURE_ROOT, "expo-router-basic")} --platform ios`,
+  );
+});
+
+test("setup without a TTY requires --yes for non-interactive apply mode", async () => {
+  const result = await executeCli(["setup", path.join(FIXTURE_ROOT, "expo-basic")], {
+    interactive: false,
+  });
+
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("[VIFX_SETUP_CONFIRMATION_REQUIRED]");
+});
+
+test("setup rejects non-Expo targets with a dedicated hint", async () => {
+  const result = await executeCli(["setup", path.join(FIXTURE_ROOT, "rn-bare-basic"), "--dry-run"]);
+
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("[VIFX_SETUP_EXPO_ONLY]");
+  expect(result.stderr).toContain("migrate react-native");
+});
+
+test("setup --with-vite-config writes the optional Vifx-owned Vite config explicitly", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-setup-vite-"));
+  const targetPath = path.join(tempRoot, "expo-router-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-router-basic"), targetPath, { recursive: true });
+
+  const result = await executeCli(["setup", targetPath, "--yes", "--with-vite-config"]);
+
+  expect(result.exitCode).toBe(0);
+  expect(await readFile(path.join(targetPath, "vite.config.vifx.ts"), "utf8")).toContain(
+    "@vifx/vite-plugin-expo",
+  );
+});
+
 test("migrate expo previews package.json and vifx.config.ts changes", async () => {
   const result = await executeCli([
     "migrate",
@@ -897,6 +1000,8 @@ test("migrate expo previews package.json and vifx.config.ts changes", async () =
   ]);
 
   expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("Deprecated surface:");
+  expect(result.stdout).toContain("pnpm vifx setup <expo-project-path> --yes");
   expect(result.stdout).toContain("[update] package.json");
   expect(result.stdout).toContain("[create] vifx.config.ts");
   expect(result.stdout).toContain("Dry run only. No files were written.");
@@ -963,6 +1068,7 @@ test("migrate react-native --write preserves existing scripts while adding vifx 
   };
 
   expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("Deprecated surface:");
   expect(migratedPackageJson.scripts?.custom).toBe("node custom.js");
   expect(migratedPackageJson.scripts?.["vifx:doctor"]).toBe("vifx doctor");
   expect(migratedPackageJson.scripts?.["vifx:metro"]).toBe("vifx metro inspect . --platform ios");

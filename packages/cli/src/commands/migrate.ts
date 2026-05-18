@@ -7,15 +7,34 @@ export const MIGRATE_HELP = `Usage:
   vifx migrate expo <path> [--dry-run] [--write] [--with-vite] [--verbose]
   vifx migrate react-native <path> [--dry-run] [--write] [--with-vite] [--verbose]
 
-Prepares an Expo or React Native project for Vifx experiments without overwriting files by default.
+Deprecated legacy manual migration surface. Prefer:
+  - pnpm vifx setup <expo-project-path> --yes
+  - vifx init <react-native-project-path> --write
+  - vifx vite init <project-path> --write
+
+This command prepares an Expo or React Native project through the older file-planning workflow.
 
 Options:
-  --dry-run    Preview changes without writing files. This is the default.
+  --dry-run    Optional preview mode without writing files.
   --write      Apply the planned changes.
-  --with-vite  Generate a minimal experimental vite.config.vifx.ts when one does not exist.
+  --with-vite  Generate a minimal vite.config.vifx.ts when one does not exist.
   --verbose    Show detailed diagnostic information.
   --help       Show this message.
 `;
+
+function createDeprecationNotice(kind: "expo" | "react-native") {
+  const preferredCommand =
+    kind === "expo"
+      ? "pnpm vifx setup <expo-project-path> --yes"
+      : "vifx init <react-native-project-path> --write";
+
+  return [
+    "Deprecated surface:",
+    `- Prefer ${preferredCommand}`,
+    "- Use --dry-run only when you explicitly want a preview.",
+    "",
+  ].join("\n");
+}
 
 export async function runMigrateCommand(
   kind: "expo" | "react-native",
@@ -76,6 +95,7 @@ export async function runMigrateCommand(
   return {
     exitCode: 0,
     stdout: [
+      createDeprecationNotice(kind),
       `Vifx Migrate ${kind === "expo" ? "Expo" : "React Native"}`,
       "",
       formatPlannedChanges(plan.changes),

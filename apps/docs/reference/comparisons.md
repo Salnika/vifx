@@ -57,7 +57,7 @@ Treat Vite as the eventual execution surface, not the first milestone.
 
 ## Vifx
 
-A compatibility toolkit and experimental modern bundling layer for React Native and Expo.
+A compatibility toolkit and modern bundling alternative for React Native and Expo.
 
 ### Strengths
 

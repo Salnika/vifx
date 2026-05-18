@@ -5,6 +5,7 @@ import { expect, test } from "vite-plus/test";
 import {
   applyPlannedChanges,
   formatPlannedChanges,
+  planExpoSetup,
   planInit,
   planMigration,
   planViteInit,
@@ -28,6 +29,22 @@ test("planMigration previews package.json and Vifx config changes for Expo fixtu
   expect(plan.changes.map((change) => change.path)).toContain("package.json");
   expect(plan.changes.map((change) => change.path)).toContain("vifx.config.ts");
   expect(plan.nextSteps[0]).toContain("pnpm install");
+});
+
+test("planExpoSetup creates an importless Expo config without mutating package.json", async () => {
+  const plan = await planExpoSetup(path.join(FIXTURE_ROOT, "expo-basic"));
+  const plannedPaths = plan.changes.map((change) => change.path);
+  const vifxConfigChange = plan.changes.find((change) => change.path === "vifx.config.ts");
+
+  expect(plan.detectedProjectType).toBe("expo");
+  expect(plan.expoRouter).toBe(false);
+  expect(plan.appDirectory).toBe(false);
+  expect(plan.webPreviewConfigured).toBe(false);
+  expect(plannedPaths).toEqual(["vifx.config.ts"]);
+  expect(vifxConfigChange?.after).toContain("export default {");
+  expect(vifxConfigChange?.after).not.toContain("defineVifxConfig");
+  expect(vifxConfigChange?.after).toContain("projectRoot: process.cwd()");
+  expect(vifxConfigChange?.after).toContain('mode: "expo"');
 });
 
 test("planMigration reports invalid package.json as a structured project error", async () => {
@@ -63,6 +80,38 @@ test("planViteInit detects Expo Router entries for browser preview targets", asy
   expect(vifxConfigChange?.after).toContain('entry: "expo-router/entry"');
   expect(vifxConfigChange?.after).toContain('reactNativeCompat: "web"');
   expect(viteConfigChange?.after).toContain('entry: "expo-router/entry"');
+});
+
+test("planExpoSetup detects Expo Router browser preview targets and opt-in Vite config", async () => {
+  const plan = await planExpoSetup(path.join(FIXTURE_ROOT, "expo-router-basic"), {
+    withViteConfig: true,
+  });
+  const vifxConfigChange = plan.changes.find((change) => change.path === "vifx.config.ts");
+  const viteConfigChange = plan.changes.find((change) => change.path === "vite.config.vifx.ts");
+
+  expect(plan.expoRouter).toBe(true);
+  expect(plan.appDirectory).toBe(true);
+  expect(plan.webPreviewConfigured).toBe(true);
+  expect(vifxConfigChange?.after).toContain('entry: "expo-router/entry"');
+  expect(vifxConfigChange?.after).toContain('reactNativeCompat: "web"');
+  expect(viteConfigChange?.after).toContain('entry: "expo-router/entry"');
+});
+
+test("planExpoSetup preserves package.json and existing vite.config.ts by default", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-codemods-setup-"));
+  const targetPath = path.join(tempRoot, "expo-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-basic"), targetPath, { recursive: true });
+  const originalPackageJson = await readFile(path.join(targetPath, "package.json"), "utf8");
+  const originalViteConfig = "export default { define: { __HNEWS__: true } };\n";
+
+  await writeFile(path.join(targetPath, "vite.config.ts"), originalViteConfig, "utf8");
+
+  const plan = await planExpoSetup(targetPath);
+  await applyPlannedChanges(targetPath, plan.changes);
+
+  expect(await readFile(path.join(targetPath, "package.json"), "utf8")).toBe(originalPackageJson);
+  expect(await readFile(path.join(targetPath, "vite.config.ts"), "utf8")).toBe(originalViteConfig);
 });
 
 test("applyPlannedChanges writes the generated files into a copied fixture", async () => {

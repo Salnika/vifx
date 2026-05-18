@@ -324,6 +324,9 @@ importers:
       '@vifx/asset-registry':
         specifier: workspace:*
         version: link:../asset-registry
+      '@vifx/config':
+        specifier: workspace:*
+        version: link:../config
       '@vifx/errors':
         specifier: workspace:*
         version: link:../errors

@@ -1,6 +1,6 @@
 # Config
 
-The config surface carries the explicit Vite mode and target contract used by the CLI templates and bounded plugin workflows.
+The config surface carries the explicit Vite mode and target contract used by the CLI templates and current plugin workflows.
 
 ## Supported Entry Files
 
@@ -54,7 +54,7 @@ export default defineVifxConfig({
 ## Config Intent
 
 - Use `defineVifxConfig` from `@vifx/config` as the shared entrypoint.
-- Keep defaults conservative while primitives, CLI workflows, and plugin boundaries remain experimental.
+- Keep defaults conservative while the public corridor and advanced plugin surfaces continue to harden.
 - Prefer explicit `vite.mode`, `vite.targets`, resolver settings, and `expoOptions` over inferred behavior.
 - `resolver.mainFields` controls package entry fallback order after `exports` resolution. The default is `react-native`, then `module`, then `main`.
 
@@ -62,7 +62,7 @@ export default defineVifxConfig({
 
 - `vite.targets[]` drives `vifx build` and `vifx run`.
 - Set `reactNativeCompat: "web"` when you want browser runtime preview artifacts and local serving through `vifx run`.
-- `entry` can be a local file like `./index.js` or a package-style entry such as `expo-router/entry` on the bounded browser-preview path.
+- `entry` can be a local file like `./index.js` or a package-style entry such as `expo-router/entry` on the current browser-preview path.
 - `outDir` stays explicit in docs because the current phase favors inspectable output over hidden conventions.
 
 ## Notes

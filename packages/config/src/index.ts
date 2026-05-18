@@ -203,7 +203,7 @@ export async function loadVifxConfig(
   }
 
   try {
-    const moduleExports = await import(`${pathToFileURL(filePath).href}?t=${Date.now()}`);
+    const moduleExports = await importConfigModule(filePath, cwd);
     const exportedConfig = resolveConfigExport(moduleExports, filePath);
     const configValue =
       typeof exportedConfig === "object" &&
@@ -232,6 +232,23 @@ export async function loadVifxConfig(
         filePath,
       },
     });
+  }
+}
+
+async function importConfigModule(filePath: string, cwd: string) {
+  const previousCwd = process.cwd();
+  const shouldRestoreCwd = previousCwd !== cwd;
+
+  if (shouldRestoreCwd) {
+    process.chdir(cwd);
+  }
+
+  try {
+    return await import(`${pathToFileURL(filePath).href}?t=${Date.now()}`);
+  } finally {
+    if (shouldRestoreCwd) {
+      process.chdir(previousCwd);
+    }
   }
 }
 

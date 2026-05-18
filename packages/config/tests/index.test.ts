@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -156,6 +156,39 @@ test("loadVifxConfig supports every SPECS config filename", async () => {
     expect(loaded.config.projectRoot).toBe(directory);
     expect(loaded.config.projectType).toBe("react-native");
     expect(loaded.config.reactNative).toBe(true);
+  }
+});
+
+test("loadVifxConfig evaluates process.cwd() relative to the requested project root", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "vifx-config-cwd-"));
+  tempDirectories.push(directory);
+  const callerDirectory = join(directory, "caller");
+
+  await mkdir(callerDirectory, { recursive: true });
+  await writeFile(
+    join(directory, "vifx.config.ts"),
+    [
+      "export default {",
+      "  projectRoot: process.cwd(),",
+      '  projectType: "expo",',
+      "  expo: true,",
+      "};",
+      "",
+    ].join("\n"),
+  );
+
+  const previousCwd = process.cwd();
+  process.chdir(callerDirectory);
+
+  try {
+    const loaded = await loadVifxConfig({
+      cwd: directory,
+      optional: false,
+    });
+
+    expect(await realpath(loaded.config.projectRoot)).toBe(await realpath(directory));
+  } finally {
+    process.chdir(previousCwd);
   }
 });
 

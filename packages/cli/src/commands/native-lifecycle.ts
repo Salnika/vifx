@@ -22,7 +22,7 @@ Commands:
 
 Lifecycle options:
   --platform ios|android      Native platform to operate on. Required for build/install/launch/run.
-  --dry-run                   Print the native command plan without executing it.
+  --dry-run                   Optional preview mode without executing native commands.
   --json                      Output machine-readable command plans.
 
 Run vifx native prepare --help or vifx native build --help for command-specific options.
@@ -34,7 +34,7 @@ Plans and optionally executes native host lifecycle commands.
 
 Options:
   --platform        Native platform. Required: ios or android.
-  --dry-run         Print the native command plan without executing it.
+  --dry-run         Optional preview mode without executing native commands.
   --json            Output machine-readable command plan and execution status.
   --scheme          iOS scheme override.
   --configuration   iOS build configuration. Default: Debug.

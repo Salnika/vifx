@@ -1,43 +1,51 @@
 # Vifx
 
-> Status: experimental research toolkit. Not a production Metro replacement yet.
+> Status: current focus is a repo-local Expo onboarding and execution corridor.
 
-A compatibility toolkit and experimental modern bundling layer for React Native and Expo.
+A React Native and Expo toolchain alternative built around explicit compatibility, deterministic artifacts, and a Vifx-owned setup flow.
 
 ## Why Vifx exists
 
-React Native bundling is more than JavaScript bundling. Platform file resolution, asset metadata, source maps, Hermes workflows, and Expo-specific output shape are all part of the contract. Vifx starts by making that contract observable, testable, and reusable before attempting a full Metro replacement.
+React Native bundling is more than JavaScript bundling. Platform file resolution, asset metadata, source maps, Hermes workflows, and Expo-specific output shape are all part of the contract. Vifx makes that contract observable, testable, and reusable so teams can move away from Metro with explicit evidence instead of guesswork.
 
-## Current status
+## Current support
 
-The current repository pass now covers the first full experimental slice through bounded Expo dev and export generation:
+This repository currently supports one concrete corridor:
 
 - monorepo packages for Vifx primitives, compatibility tooling, and the CLI
 - a documentation app in `apps/docs`
 - fixtures for Expo, bare React Native, assets, workspace resolution, captured Metro artifacts, and Expo export output
 - compatibility runners and reference inspection for Metro and Vifx, including package entry fields, package exports, and asset metadata cases
 - codemods, source-map tools, and Hermes workflows
-- an experimental React Native Vite plugin with a controlled bundle build path
+- a React Native Vite plugin with a controlled bundle build path
 - dedicated `vifx build` and `vifx run` commands for configured Vifx targets
 - a browser runtime preview for Vifx targets that opt into `reactNativeCompat: "web"`
 - formal bare React Native and Expo playgrounds under `apps/playground-*` with maintained validation commands
-- native artifact preparation, formal playground native host markers, native doctor checks, and dry-run build/install/launch command planning for iOS and Android
-- a bounded Expo Router browser preview for `expo-router/entry` on that web runtime path
-- a bounded `vifx expo dev` browser dev server with Vite HMR for configured Expo web-compat targets
-- an experimental Expo Vite layer with app config detection and `EXPO_PUBLIC_*` injection
-- an Expo export package for inspection plus bounded Vifx-generated bundles, source maps, manifests, metadata, assets, optional Expo Updates v1 manifests, and a local Updates server with optional response signing
+- native artifact preparation, formal playground native host markers, native doctor checks, native build/install/launch planning, and an executed Expo SDK 54 iOS simulator path
+- an Expo Router browser preview for `expo-router/entry` on that web runtime path
+- `vifx expo dev` browser serving with Vite HMR for configured Expo web-compatible targets
+- an Expo Vite layer with app config detection and `EXPO_PUBLIC_*` injection
+- an Expo export package for inspection plus Vifx-generated bundles, source maps, manifests, metadata, assets, optional Expo Updates v1 manifests, and a local Updates server with optional response signing
 
-Still out of scope for this pass:
+The supported repo-local Expo flow is:
 
-- Metro replacement or Expo CLI replacement
-- React Native Fast Refresh parity, Expo Go, native dev-client protocol, or device runtime parity
-- full Expo Router parity, Updates multipart directives/native validation, and EAS integration
+```bash
+pnpm vifx setup <expo-project-path> --yes
+pnpm vifx expo audit <expo-project-path>
+pnpm vifx expo dev <expo-project-path> --platform ios
+pnpm vifx native run <expo-project-path> --platform ios
+pnpm vifx expo export <expo-project-path> --out-dir dist/expo
+pnpm vifx expo serve <expo-project-path> --export-root dist/expo
+```
 
-Known gaps in the current first pass:
+Not supported yet:
 
-- `vifx init` still writes a conservative `vifx.config.ts` for non-router projects and does not turn every target into a browser runtime preview
-- native device runtime parity still requires the later native support program
-- `loadVifxConfig()` imports the target config directly, so external projects need Vifx packages installed where the config resolves them
+- Expo Go
+- native dev-client protocol parity
+- React Native Fast Refresh parity
+- Android native execution parity
+- EAS parity
+- broad Expo Router native parity beyond the current browser preview and iOS simulator corridor
 
 Common validation entrypoints in this repository:
 
@@ -66,9 +74,9 @@ pnpm playground:validate
 - `@vifx/hermes-tools`: Hermes compiler detection and bytecode orchestration
 - `@vifx/native-artifacts`: native-ready artifact directories and manifests
 - `@vifx/cli`: `vifx` command surface
-- `@vifx/expo-export`: Expo export inspection and bounded generation, including optional Updates v1 manifests and local serving
-- `@vifx/vite-plugin-react-native`: experimental controlled React Native Vite builds
-- `@vifx/vite-plugin-expo`: experimental Expo layer on top of the RN Vite plugin
+- `@vifx/expo-export`: Expo export inspection and generation, including optional Updates v1 manifests and local serving
+- `@vifx/vite-plugin-react-native`: controlled React Native Vite builds
+- `@vifx/vite-plugin-expo`: Expo layer on top of the RN Vite plugin
 
 ## Quick start
 
@@ -94,13 +102,20 @@ pnpm --filter @vifx/cli vifx build ./fixtures/rn-bare-basic --platform ios
 pnpm --filter @vifx/cli vifx run ./fixtures/rn-bare-basic --platform ios
 ```
 
-## Start a bounded Expo browser dev server
+## Start the Expo browser preview server
 
 ```bash
 pnpm --filter @vifx/cli vifx expo dev ./apps/playground-expo --platform ios
 ```
 
-## Prepare native artifacts
+## Run native iOS
+
+```bash
+pnpm vifx setup ./apps/playground-expo --yes
+pnpm vifx native run ./apps/playground-expo --platform ios
+```
+
+## Advanced native inspection
 
 ```bash
 pnpm --filter @vifx/cli vifx native prepare ./apps/playground-rn-bare --platform ios
@@ -115,10 +130,10 @@ pnpm native:validate
 pnpm --filter @vifx/cli vifx compat run --adapter vifx
 ```
 
-## Migrate an Expo project experimentally
+## Legacy manual migration
 
 ```bash
-pnpm --filter @vifx/cli vifx migrate expo ./fixtures/expo-basic --dry-run
+pnpm --filter @vifx/cli vifx migrate expo ./fixtures/expo-basic --write
 ```
 
 ## Documentation

@@ -41,7 +41,7 @@ const DEFAULT_EXPO_UPDATES_PORT = 8081;
 
 const EXPO_DEV_HELP = `Usage: vifx expo dev [path] [--platform ios|android] [--config <file>] [--host <host>] [--port <number>] [--json]
 
-Starts a bounded Vite-powered Expo browser dev server for a configured web-compatible Expo target.
+Starts a Vite-powered Expo browser preview server for a configured web-compatible Expo target.
 
 Options:
   --platform  Restrict the dev server to one platform target.
@@ -54,7 +54,7 @@ Options:
 
 const EXPO_EXPORT_HELP = `Usage: vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--updates-url <url>] [--runtime-version <version>] [--created-at <timestamp>] [--json]
 
-Builds configured Expo Vifx targets and writes a bounded Expo export directory with bundles, source maps, assets, manifest, metadata, and optional Expo Updates v1 manifests.
+Builds configured Expo Vifx targets and writes an Expo export directory with bundles, source maps, assets, manifest, metadata, and optional Expo Updates v1 manifests.
 
 Options:
   --platform         Restrict the export to one platform. Default: all configured targets.
@@ -69,7 +69,7 @@ Options:
 
 const EXPO_SERVE_HELP = `Usage: vifx expo serve [path] [--export-root <dir>] [--host <host>] [--port <number>] [--signing-key <file>] [--signing-key-id <id>] [--signing-alg <alg>] [--json]
 
-Serves a bounded Vifx-generated Expo export directory using the Expo Updates v1 JSON or multipart manifest request shape.
+Serves a Vifx-generated Expo export directory using the Expo Updates v1 JSON or multipart manifest request shape.
 
 Options:
   --export-root     Existing generated export directory to serve. Default: dist/expo.
@@ -360,7 +360,7 @@ function resolveUpdatesOptions(
       code: "VIFX_EXPO_EXPORT_UPDATES_OPTIONS_MISSING",
       message:
         "Expo Updates manifest generation requires both --updates-url and --runtime-version.",
-      hint: "Pass both flags, or omit all Updates flags to generate only bounded export artifacts.",
+      hint: "Pass both flags, or omit all Updates flags to generate only export artifacts.",
       docsPath: "/reference/cli#vifx-expo-export",
     });
   }
@@ -528,7 +528,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
     throw new VifxError({
       code: "VIFX_EXPO_DEV_REQUIRES_WEB_COMPAT",
       message: `Target "${target.platform}" cannot be served by vifx expo dev because reactNativeCompat is not set to "web".`,
-      hint: 'Set vite.targets[].reactNativeCompat to "web" for bounded browser dev previews.',
+      hint: 'Set vite.targets[].reactNativeCompat to "web" for browser dev previews.',
       docsPath: "/reference/config#vite-targets",
     });
   }
@@ -702,7 +702,7 @@ export async function runExpoExportCommand(argv: string[], cwd: string): Promise
         (file) => `  - ${file.path}${file.platform ? ` (${file.platform})` : ""}`,
       ),
       "",
-      "Boundary: generated output covers bounded Vifx bundles, assets, manifests, metadata, and optional Updates v1 manifests only; Updates serving, response signing, native validation, directives, and EAS parity remain separate Program C work.",
+      "Boundary: generated output covers Vifx bundles, assets, manifests, metadata, and optional Updates v1 manifests only; Updates serving, response signing, native validation, directives, and EAS parity remain separate work.",
     ].join("\n"),
     stderr: "",
   };

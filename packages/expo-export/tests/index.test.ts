@@ -47,7 +47,40 @@ test("evaluateExpoNoMetroContract records bounded Vifx, router, and export evide
   const projectRoot = path.join(tempRoot, "expo-basic");
 
   await cp(path.join(FIXTURE_ROOT, "expo-basic"), projectRoot, { recursive: true });
-  await writeFile(path.join(projectRoot, "vifx.config.ts"), "export default {};\n");
+  await writeFile(
+    path.join(projectRoot, "vifx.config.ts"),
+    [
+      "export default {",
+      "  projectRoot: process.cwd(),",
+      '  projectType: "expo",',
+      "  expo: true,",
+      "  reactNative: true,",
+      "  vite: {",
+      '    mode: "expo",',
+      "    targets: [",
+      "      {",
+      '        platform: "ios",',
+      '        entry: "expo-router/entry",',
+      "        hermes: false,",
+      '        outDir: "dist/vite/ios",',
+      '        reactNativeCompat: "web",',
+      "      },",
+      "      {",
+      '        platform: "android",',
+      '        entry: "expo-router/entry",',
+      "        hermes: false,",
+      '        outDir: "dist/vite/android",',
+      '        reactNativeCompat: "web",',
+      "      },",
+      "    ],",
+      "  },",
+      "  expoOptions: {",
+      '    publicEnvPrefix: "EXPO_PUBLIC_",',
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
   await writeFile(path.join(projectRoot, "vite.config.vifx.ts"), "export default {};\n");
   await writeFile(
     path.join(projectRoot, "package.json"),
@@ -93,6 +126,55 @@ test("evaluateExpoNoMetroContract records bounded Vifx, router, and export evide
   ).toContain(
     "`vifx native run` can infer Expo iOS bundle targets, generate a prebuild host when needed, build a Debug simulator app, install it with simctl, launch it, and keep a local bundle server alive.",
   );
+});
+
+test("evaluateExpoNoMetroContract treats setup-generated Expo config as sufficient for build and dev audits", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-expo-setup-audit-"));
+  const projectRoot = path.join(tempRoot, "expo-router-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-router-basic"), projectRoot, { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "vifx.config.ts"),
+    [
+      "export default {",
+      "  projectRoot: process.cwd(),",
+      '  projectType: "expo",',
+      "  expo: true,",
+      "  reactNative: true,",
+      "  vite: {",
+      '    mode: "expo",',
+      "    targets: [",
+      "      {",
+      '        platform: "ios",',
+      '        entry: "expo-router/entry",',
+      "        hermes: false,",
+      '        outDir: "dist/vite/ios",',
+      '        reactNativeCompat: "web",',
+      "      },",
+      "      {",
+      '        platform: "android",',
+      '        entry: "expo-router/entry",',
+      "        hermes: false,",
+      '        outDir: "dist/vite/android",',
+      '        reactNativeCompat: "web",',
+      "      },",
+      "    ],",
+      "  },",
+      "  expoOptions: {",
+      '    publicEnvPrefix: "EXPO_PUBLIC_",',
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
+
+  const result = await evaluateExpoNoMetroContract({
+    projectRoot,
+  });
+
+  expect(result.workflows.find((workflow) => workflow.id === "dev-server")?.status).toBe("partial");
+  expect(result.workflows.find((workflow) => workflow.id === "build")?.status).toBe("partial");
+  expect(result.workflows.find((workflow) => workflow.id === "router")?.status).toBe("partial");
 });
 
 test("writeExpoExport generates inspectable bundles, manifests, metadata, and assets", async () => {
