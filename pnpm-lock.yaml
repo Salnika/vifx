@@ -441,9 +441,15 @@ importers:
 
   packages/vite-plugin-expo:
     dependencies:
+      '@vifx/asset-registry':
+        specifier: workspace:*
+        version: link:../asset-registry
       '@vifx/errors':
         specifier: workspace:*
         version: link:../errors
+      '@vifx/source-map-tools':
+        specifier: workspace:*
+        version: link:../source-map-tools
       '@vifx/types':
         specifier: workspace:*
         version: link:../types

@@ -31,6 +31,9 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_EXPO_EXPORT_REQUIRES_EXPO_MODE`    | Expo export generation was run without `vite.mode = "expo"`.                                                      |
 | `VIFX_EXPO_EXPORT_TARGET_NOT_FOUND`      | No configured Expo export target matched the requested platform.                                                  |
 | `VIFX_EXPO_EXPORT_TARGETS_MISSING`       | Expo export generation did not receive any Vifx bundle artifacts.                                                 |
+| `VIFX_EXPO_SMOKE_INVALID_ASSET_LIMIT`    | An Expo smoke command received a malformed asset sampling limit.                                                  |
+| `VIFX_EXPO_SMOKE_REQUIRES_EXPO_MODE`     | Expo Go smoke validation was run without `vite.mode = "expo"`.                                                    |
+| `VIFX_EXPO_SMOKE_WEBSOCKET_UNAVAILABLE`  | The current Node.js runtime cannot open the WebSocket loop required by Expo Go smoke validation.                  |
 | `VIFX_HERMES_COMPILE_FAILED`             | Hermes compiler execution failed.                                                                                 |
 | `VIFX_HERMES_INPUT_MISSING`              | The requested Hermes input bundle does not exist.                                                                 |
 | `VIFX_HERMES_OUTPUT_MISSING`             | Hermes completed without creating the requested bytecode output.                                                  |

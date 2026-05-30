@@ -18,7 +18,9 @@
     "test": "vp test run"
   },
   "dependencies": {
+    "@vifx/asset-registry": "workspace:*",
     "@vifx/errors": "workspace:*",
+    "@vifx/source-map-tools": "workspace:*",
     "@vifx/types": "workspace:*",
     "@vifx/vite-plugin-react-native": "workspace:*",
     "vite": "catalog:"

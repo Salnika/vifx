@@ -14,12 +14,14 @@ Onboard an existing Expo project with a Vifx-owned config.
 
 ```sh
 pnpm vifx setup <expo-project-path> --yes
+pnpm vifx setup <expo-project-path> --yes --expo-go
 pnpm vifx setup <expo-project-path> --yes --with-vite-config
 pnpm vifx setup <expo-project-path> --json
 ```
 
 - Expo-only in v1.
 - Creates `vifx.config.ts` by default.
+- `--expo-go` generates native Expo targets for `vifx expo dev --expo-go`.
 - Does not edit Expo-owned app files, EAS scripts, or app source files.
 - Prints next commands for `build`, `expo audit`, optional `expo dev`, and `expo export`.
 
@@ -62,12 +64,29 @@ Start a Vite bundle/dev server for one configured Expo target.
 ```sh
 pnpm vifx expo dev <expo-project-path> --platform ios
 pnpm vifx expo dev <expo-project-path> --platform android --port 5174
+pnpm vifx expo dev <expo-project-path> --platform ios --expo-go
+pnpm vifx expo dev <expo-project-path> --platform ios --expo-go --host 0.0.0.0 --public-host 192.168.1.25
 pnpm vifx expo dev <expo-project-path> --platform ios --json
 ```
 
 - Requires `vite.mode = "expo"`.
-- Requires one selected target with `reactNativeCompat = "web"`.
-- Does not replace Expo CLI, Expo Go, native dev-client protocol, or full Fast Refresh.
+- Browser preview mode requires one selected target with `reactNativeCompat = "web"`.
+- `--expo-go` serves native manifest, bundle, source-map, status, symbolication, `/message`, `/events`, and an `exp://` Expo Go URL from Vifx/Vite artifacts.
+- Use `--host 0.0.0.0 --public-host <lan-ip>` when testing from a physical device and the bind host is not the host Expo Go should fetch.
+- Does not yet provide full Expo CLI parity, native binary replacement, or full Fast Refresh.
+
+## `vifx expo smoke`
+
+Start a temporary Expo Go server, fetch its Vifx-backed endpoints, and shut it down.
+
+```sh
+pnpm vifx expo smoke <expo-project-path> --platform ios
+pnpm vifx expo smoke <expo-project-path> --platform android --asset-limit 10
+pnpm vifx expo smoke <expo-project-path> --platform ios --host 0.0.0.0 --public-host 192.168.1.25
+pnpm vifx expo smoke <expo-project-path> --platform ios --json
+```
+
+The smoke report checks the manifest, bundle, source map, `/status`, sampled manifest assets, `/symbolicate`, and `/message` plus `/events` WebSocket reload loop. It exits non-zero when any check fails.
 
 ## `vifx expo export`
 

@@ -247,6 +247,7 @@ export interface VifxReactNativePluginOptions {
   hermes?: boolean;
   hermesCompilerPath?: string;
   jsxInPackages?: string[];
+  mainFields?: string[];
   outDir?: string;
   platform: VifxBundlePlatform;
   projectRoot?: string;

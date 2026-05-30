@@ -133,6 +133,7 @@ export async function runBuildCommand(argv: string[], cwd: string): Promise<CliR
       env: process.env,
       hermes: target.hermes,
       jsxInPackages: target.jsxInPackages,
+      mainFields: loaded.config.resolver.mainFields,
       outDir: target.outDir,
       platform: target.platform,
       projectRoot: loaded.config.projectRoot,

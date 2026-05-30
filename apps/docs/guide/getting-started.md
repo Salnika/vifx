@@ -1,6 +1,6 @@
 # Getting Started
 
-Vifx is a Vite bundling engine for React Native and Expo projects. The current goal is to produce and compare bundle artifacts without Metro.
+Vifx is a Vite bundling engine for React Native and Expo projects. The current V2 goal is to replace Metro in Expo development by serving Vifx bundles through an Expo Go compatible dev server.
 
 ## Why Vifx Exists
 
@@ -11,17 +11,17 @@ Vifx is a Vite bundling engine for React Native and Expo projects. The current g
 ## Supported Flow
 
 ```sh
-pnpm vifx setup <expo-project-path> --yes
+pnpm vifx setup <expo-project-path> --yes --expo-go
 pnpm vifx build <expo-project-path>
 pnpm vifx expo audit <expo-project-path>
-pnpm vifx expo dev <expo-project-path> --platform ios
+pnpm vifx expo dev <expo-project-path> --platform ios --expo-go
 pnpm vifx expo export <expo-project-path> --out-dir dist/expo
 ```
 
-- `setup` creates the Vifx-owned config for an Expo project.
+- `setup --expo-go` creates the Vifx-owned config for native Expo targets.
 - `build` produces configured Vite bundle artifacts.
 - `expo audit` reports only bundling workflows: config, Vite build, Metro parity, dev server, and export artifacts.
-- `expo dev` starts a bounded Vite bundle/dev server for a configured target.
+- `expo dev --expo-go` starts the early Vifx native manifest and bundle server for Expo Go.
 - `expo export` writes bundles, source maps, assets, `manifest.json`, and `metadata.json`.
 
 ## Validate The Maintained Playgrounds
@@ -70,7 +70,7 @@ export default {
 
 ## Boundaries
 
-Vifx does not replace Expo CLI, Expo Go, EAS, app build/run workflows, Expo Updates runtime, or full Fast Refresh. Keep those tools in place while comparing Vifx bundle output against Metro.
+Vifx does not replace EAS, app build/run workflows, Expo Updates runtime, or full Fast Refresh. Full Expo CLI and Expo Go parity is still in progress beyond the initial `--expo-go` server, so keep Expo tooling in place while comparing Vifx bundle output against Metro.
 
 ## Read Next
 

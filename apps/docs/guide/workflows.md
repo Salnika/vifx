@@ -6,14 +6,14 @@ Audience: Expo maintainers and bundler authors.
 
 ```sh
 pnpm vifx doctor <expo-project-path>
-pnpm vifx setup <expo-project-path> --yes
+pnpm vifx setup <expo-project-path> --yes --expo-go
 pnpm vifx build <expo-project-path>
 pnpm vifx expo audit <expo-project-path>
-pnpm vifx expo dev <expo-project-path> --platform ios
+pnpm vifx expo dev <expo-project-path> --platform ios --expo-go
 pnpm vifx expo export <expo-project-path> --out-dir dist/expo
 ```
 
-Use this flow to move from config to Vite bundle production, audit evidence, dev-server proof, and export artifacts. Keep Expo CLI and native app workflows unchanged.
+Use this flow to move from config to Vite bundle production, audit evidence, Expo Go dev-server proof, and export artifacts. Keep EAS and native app binary workflows unchanged.
 
 ## Analyze A React Native Project
 
@@ -82,9 +82,10 @@ Audience: maintainers working on Expo dev-server proof.
 ```sh
 pnpm vifx expo dev <expo-project-path> --platform ios
 pnpm vifx expo dev <expo-project-path> --platform android --port 5174
+pnpm vifx expo dev <expo-project-path> --platform ios --expo-go
 ```
 
-This workflow requires a configured Expo target with `reactNativeCompat: "web"`. It is a Vite bundle/dev server, not Expo CLI, Expo Go, native dev-client protocol parity, or full Fast Refresh.
+The default workflow requires a configured Expo target with `reactNativeCompat: "web"` and serves the browser preview path. The `--expo-go` workflow serves the first native Expo Go manifest and bundle endpoints from Vifx/Vite artifacts; full Expo CLI parity and Fast Refresh are still incomplete.
 
 ## Generate Expo Export Artifacts
 

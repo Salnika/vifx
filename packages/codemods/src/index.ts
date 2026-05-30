@@ -28,6 +28,7 @@ export interface SetupPlan {
   detectedExpoVersion: string | null;
   detectedProjectType: "expo" | "react-native" | "unknown";
   detectedReactNativeVersion: string | null;
+  expoGo: boolean;
   expoRouter: boolean;
   iosHostPresent: boolean;
   projectRoot: string;
@@ -44,6 +45,7 @@ interface PackageJson {
 }
 
 interface ExpoSetupTemplateOptions {
+  aliases?: Record<string, string>;
   appDirectory: boolean;
   babelInPackages?: string[];
   entry: string;
@@ -70,6 +72,7 @@ const VIFX_VITE_CONFIG_FILE_NAMES = [
 ] as const;
 
 function createTargetsSection(options: {
+  aliases?: Record<string, string>;
   babelInPackages?: string[];
   entry: string;
   jsxInPackages?: string[];
@@ -78,6 +81,10 @@ function createTargetsSection(options: {
   shimReact?: boolean;
   shimReactNative?: boolean;
 }) {
+  const aliasesLine =
+    options.aliases && Object.keys(options.aliases).length > 0
+      ? [`        aliases: ${JSON.stringify(options.aliases)},`]
+      : [];
   const babelInPackagesLine = options.babelInPackages
     ? [`        babelInPackages: ${JSON.stringify(options.babelInPackages)},`]
     : [];
@@ -102,6 +109,7 @@ function createTargetsSection(options: {
 
   return [
     "      {",
+    ...aliasesLine,
     ...babelInPackagesLine,
     '        platform: "ios",',
     `        entry: ${JSON.stringify(options.entry)},`,
@@ -114,6 +122,7 @@ function createTargetsSection(options: {
     ...shimReactNativeLine,
     "      },",
     "      {",
+    ...aliasesLine,
     ...babelInPackagesLine,
     '        platform: "android",',
     `        entry: ${JSON.stringify(options.entry)},`,
@@ -131,6 +140,7 @@ function createTargetsSection(options: {
 export function buildVifxConfigTemplate(
   projectType: "expo" | "react-native" | "unknown",
   options: {
+    aliases?: Record<string, string>;
     babelInPackages?: string[];
     entry?: string;
     jsxInPackages?: string[];
@@ -152,6 +162,7 @@ export function buildVifxConfigTemplate(
       : [
           "    targets: [",
           ...createTargetsSection({
+            aliases: options.aliases,
             babelInPackages: options.babelInPackages,
             entry: options.entry ?? "./index.js",
             jsxInPackages: options.jsxInPackages,
@@ -188,6 +199,7 @@ export function buildVifxConfigTemplate(
 }
 
 export function buildExpoSetupVifxConfigTemplate(options: {
+  aliases?: Record<string, string>;
   babelInPackages?: string[];
   entry: string;
   jsxInPackages?: string[];
@@ -208,6 +220,7 @@ export function buildExpoSetupVifxConfigTemplate(options: {
       '    mode: "expo",',
       "    targets: [",
       ...createTargetsSection({
+        aliases: options.aliases,
         babelInPackages: options.babelInPackages,
         entry: options.entry,
         jsxInPackages: options.jsxInPackages,
@@ -466,6 +479,133 @@ async function findExistingVifxViteConfigPath(projectRoot: string) {
   return null;
 }
 
+function stripJsonComments(contents: string) {
+  let output = "";
+  let inBlockComment = false;
+  let inLineComment = false;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < contents.length; index += 1) {
+    const current = contents[index]!;
+    const next = contents[index + 1];
+
+    if (inLineComment) {
+      if (current === "\n" || current === "\r") {
+        inLineComment = false;
+        output += current;
+      }
+
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (current === "*" && next === "/") {
+        inBlockComment = false;
+        index += 1;
+      }
+
+      continue;
+    }
+
+    if (!inString && current === "/" && next === "/") {
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (!inString && current === "/" && next === "*") {
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
+
+    output += current;
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (current === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (current === '"') {
+      inString = !inString;
+    }
+  }
+
+  return output;
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+async function readJsonRecordIfExists(filePath: string) {
+  if (!(await pathExists(filePath))) {
+    return null;
+  }
+
+  const contents = await fs.readFile(filePath, "utf8");
+  return JSON.parse(stripJsonComments(contents)) as Record<string, unknown>;
+}
+
+function stripAliasWildcard(value: string) {
+  return value.replace(/\/\*$/u, "").replace(/\*$/u, "");
+}
+
+function normalizeAliasTarget(value: string) {
+  const withoutWildcard = stripAliasWildcard(value);
+  const normalized = withoutWildcard === "" ? "." : withoutWildcard;
+
+  if (
+    normalized === "." ||
+    normalized.startsWith("./") ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("/")
+  ) {
+    return normalized;
+  }
+
+  return `./${normalized}`;
+}
+
+async function detectTypeScriptPathAliases(projectRoot: string) {
+  const tsconfig = await readJsonRecordIfExists(path.join(projectRoot, "tsconfig.json")).catch(
+    () => null,
+  );
+  const compilerOptions = isJsonRecord(tsconfig?.compilerOptions) ? tsconfig.compilerOptions : null;
+  const paths = isJsonRecord(compilerOptions?.paths) ? compilerOptions.paths : null;
+
+  if (!paths) {
+    return undefined;
+  }
+
+  const aliasEntries: Array<[string, string]> = [];
+
+  for (const [from, targets] of Object.entries(paths)) {
+    if (!Array.isArray(targets) || typeof targets[0] !== "string") {
+      continue;
+    }
+
+    const aliasFrom = stripAliasWildcard(from);
+    if (!aliasFrom) {
+      continue;
+    }
+
+    aliasEntries.push([aliasFrom, normalizeAliasTarget(targets[0])]);
+  }
+
+  const aliases = Object.fromEntries(
+    aliasEntries.sort(([left], [right]) => left.localeCompare(right)),
+  );
+
+  return Object.keys(aliases).length > 0 ? aliases : undefined;
+}
+
 async function detectExpoSetupTemplateOptions(
   projectRoot: string,
 ): Promise<ExpoSetupTemplateOptions> {
@@ -493,6 +633,7 @@ async function detectExpoSetupTemplateOptions(
     : ["react-native-"];
 
   return {
+    aliases: await detectTypeScriptPathAliases(projectRoot),
     appDirectory,
     babelInPackages,
     entry: webPreviewConfigured ? "expo-router/entry" : "./index.js",
@@ -598,7 +739,7 @@ function createSetupProjectTypeHint(projectRoot: string, detectedProjectType: st
 
 export async function planExpoSetup(
   projectRoot: string,
-  options: { force?: boolean; withViteConfig?: boolean } = {},
+  options: { expoGo?: boolean; force?: boolean; withViteConfig?: boolean } = {},
 ): Promise<SetupPlan> {
   const inspection = await inspectProject(projectRoot);
 
@@ -625,10 +766,11 @@ export async function planExpoSetup(
       : null;
     const change = createPlannedFileChange({
       after: buildExpoSetupVifxConfigTemplate({
+        aliases: templateOptions.aliases,
         babelInPackages: templateOptions.babelInPackages,
         entry: templateOptions.entry,
         jsxInPackages: templateOptions.jsxInPackages,
-        reactNativeCompat: templateOptions.reactNativeCompat,
+        reactNativeCompat: options.expoGo ? undefined : templateOptions.reactNativeCompat,
         shimJsxRuntime: templateOptions.shimJsxRuntime,
         shimReact: templateOptions.shimReact,
         shimReactNative: templateOptions.shimReactNative,
@@ -673,6 +815,7 @@ export async function planExpoSetup(
     detectedExpoVersion: inspection.expoVersion,
     detectedProjectType: inspection.projectType,
     detectedReactNativeVersion: inspection.reactNativeVersion,
+    expoGo: Boolean(options.expoGo),
     expoRouter: templateOptions.expoRouter,
     iosHostPresent: templateOptions.iosHostPresent,
     projectRoot,

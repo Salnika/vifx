@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { chmod } from "node:fs/promises";
@@ -7,6 +7,58 @@ import { expect, test } from "vite-plus/test";
 import { executeCli } from "../src/index.ts";
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "../../../fixtures");
+
+async function writeTestPackage(
+  projectRoot: string,
+  packageName: string,
+  files: Record<string, string>,
+) {
+  const packageRoot = path.join(projectRoot, "node_modules", packageName);
+
+  await mkdir(packageRoot, { recursive: true });
+  await writeFile(
+    path.join(packageRoot, "package.json"),
+    JSON.stringify({ main: "index.js", name: packageName, version: "0.0.0" }, null, 2),
+  );
+
+  for (const [fileName, contents] of Object.entries(files)) {
+    const filePath = path.join(packageRoot, fileName);
+
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, contents, "utf8");
+  }
+}
+
+async function writeNativeReactNativePackage(projectRoot: string) {
+  await writeTestPackage(projectRoot, "react-native", {
+    "index.js": [
+      "export const AppRegistry = {",
+      "  registerComponent(name, loadComponent) {",
+      "    return { loadComponent, name };",
+      "  },",
+      "  runApplication() {},",
+      "};",
+      'export const Platform = { OS: "ios", select(options) { return options?.ios ?? options?.native ?? options?.default; } };',
+      "export default { AppRegistry, Platform };",
+      "",
+    ].join("\n"),
+  });
+}
+
+async function writeNativeExpoPackage(projectRoot: string) {
+  await writeTestPackage(projectRoot, "expo", {
+    "index.js": [
+      'import { AppRegistry } from "react-native";',
+      "export function registerRootComponent(component) {",
+      '  AppRegistry.registerComponent("main", () => component);',
+      "  return component;",
+      "}",
+      "const Expo = { registerRootComponent };",
+      "export default Expo;",
+      "",
+    ].join("\n"),
+  });
+}
 
 test("package manifest exposes the public vifx binary", async () => {
   const manifest = JSON.parse(
@@ -52,11 +104,11 @@ test("expo parent command prints Expo audit help", async () => {
   expect(result.stdout).toContain("vifx expo audit");
   expect(result.stdout).toContain("vifx expo dev");
   expect(result.stdout).toContain("vifx expo export");
+  expect(result.stdout).toContain("vifx expo smoke");
   expect(result.stdout).toContain("no-Metro Vite bundling corridor");
-  expect(result.stdout).not.toContain("serve");
-  expect(result.stdout).not.toContain("updates");
+  expect(result.stdout).toContain("--expo-go");
+  expect(result.stdout).not.toContain("expo serve");
   expect(result.stdout).not.toContain("signing");
-  expect(result.stdout).not.toContain("native");
 });
 
 test("root help does not expose native or Expo Updates commands", async () => {
@@ -65,6 +117,7 @@ test("root help does not expose native or Expo Updates commands", async () => {
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("vifx <command>");
   expect(result.stdout).toContain("expo export");
+  expect(result.stdout).toContain("expo smoke");
   expect(result.stdout).not.toContain("native");
   expect(result.stdout).not.toContain("expo serve");
 });
@@ -74,8 +127,19 @@ test("expo dev --help prints Vite bundle dev server usage", async () => {
 
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Usage: vifx expo dev");
-  expect(result.stdout).toContain("Vite-powered Expo bundle dev server");
-  expect(result.stdout).not.toContain("native");
+  expect(result.stdout).toContain("--expo-go");
+  expect(result.stdout).toContain("--public-host");
+  expect(result.stdout).toContain("native Expo Go manifest and bundle server");
+});
+
+test("expo smoke --help prints Expo Go smoke usage", async () => {
+  const result = await executeCli(["expo", "smoke", "--help"]);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("Usage: vifx expo smoke");
+  expect(result.stdout).toContain("--asset-limit");
+  expect(result.stdout).toContain("--public-host");
+  expect(result.stdout).toContain("message/event WebSocket loop");
 });
 
 test("expo audit --json returns the no-Metro contract matrix", async () => {
@@ -363,6 +427,56 @@ test("compat run uses the vifx adapter", async () => {
   expect(JSON.parse(result.stdout).status).toBe("PASS");
 });
 
+test("expo smoke --json returns Vifx Expo Go endpoint evidence", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-expo-smoke-"));
+  const targetPath = path.join(tempRoot, "expo-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-basic"), targetPath, { recursive: true });
+  await writeNativeReactNativePackage(targetPath);
+  await writeNativeExpoPackage(targetPath);
+  await executeCli(["setup", targetPath, "--yes", "--expo-go"]);
+
+  const result = await executeCli([
+    "expo",
+    "smoke",
+    targetPath,
+    "--platform",
+    "ios",
+    "--asset-limit",
+    "0",
+    "--json",
+  ]);
+
+  expect(result.exitCode).toBe(0);
+
+  const report = JSON.parse(result.stdout) as {
+    bundle: { hasReactNativeWeb: boolean; hasWebRuntime: boolean; status: number };
+    manifest: { launchAssetUrlMatchesServer: boolean; nativeRuntime: boolean; status: number };
+    metro: { serverReported: boolean; spawnedByVifx: boolean };
+    passed: boolean;
+    platform: string;
+    server: { expoGoUrl: string; hostUri: string };
+    status: { body: string };
+    websocket: { identityResult: string | null; reloadMethod: string | null };
+  };
+
+  expect(report.passed).toBe(true);
+  expect(report.platform).toBe("ios");
+  expect(report.manifest.status).toBe(200);
+  expect(report.manifest.nativeRuntime).toBe(true);
+  expect(report.manifest.launchAssetUrlMatchesServer).toBe(true);
+  expect(report.bundle.status).toBe(200);
+  expect(report.bundle.hasReactNativeWeb).toBe(false);
+  expect(report.bundle.hasWebRuntime).toBe(false);
+  expect(report.status.body).toBe("packager-status:running");
+  expect(report.server.hostUri).toContain(":");
+  expect(report.server.expoGoUrl).toBe(`exp://${report.server.hostUri}`);
+  expect(report.websocket.identityResult).toMatch(/^vifx-/u);
+  expect(report.websocket.reloadMethod).toBe("reload");
+  expect(report.metro.serverReported).toBe(false);
+  expect(report.metro.spawnedByVifx).toBe(false);
+});
+
 test("compat run supports the all adapter shortcut", async () => {
   const result = await executeCli(["compat", "run", "--adapter", "all", "--report", "json"]);
 
@@ -412,6 +526,7 @@ test("setup --json returns the expected machine-readable preview shape", async (
     applied: boolean;
     changes: Array<{ kind: string; path: string }>;
     detectedProjectType: string;
+    expoGo: boolean;
     expoRouter: boolean;
     nextCommands: string[];
     withViteConfig: boolean;
@@ -419,6 +534,7 @@ test("setup --json returns the expected machine-readable preview shape", async (
 
   expect(result.exitCode).toBe(0);
   expect(parsed.detectedProjectType).toBe("expo");
+  expect(parsed.expoGo).toBe(false);
   expect(parsed.expoRouter).toBe(true);
   expect(parsed.appDirectory).toBe(true);
   expect(parsed.applied).toBe(false);
@@ -436,6 +552,37 @@ test("setup --json returns the expected machine-readable preview shape", async (
   expect(parsed.nextCommands).not.toContain(
     `pnpm vifx native run ${path.join(FIXTURE_ROOT, "expo-router-basic")} --platform ios`,
   );
+});
+
+test("setup --expo-go generates native Expo targets and next command", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-setup-expo-go-"));
+  const targetPath = path.join(tempRoot, "expo-router-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-router-basic"), targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          paths: {
+            "@/*": ["./*"],
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  const result = await executeCli(["setup", targetPath, "--yes", "--expo-go"]);
+  const vifxConfig = await readFile(path.join(targetPath, "vifx.config.ts"), "utf8");
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("Expo Go server: requested");
+  expect(result.stdout).toContain(`pnpm vifx expo dev ${targetPath} --platform ios --expo-go`);
+  expect(vifxConfig).toContain('aliases: {"@":"."}');
+  expect(vifxConfig).toContain('entry: "expo-router/entry"');
+  expect(vifxConfig).not.toContain("reactNativeCompat");
 });
 
 test("setup without a TTY requires --yes for non-interactive apply mode", async () => {

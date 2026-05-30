@@ -14,15 +14,16 @@ Migration means activating Vifx as a no-Metro bundle producer while keeping exis
 Use [Expo Migration](/guide/expo-migration) as the recommended path for an existing Expo project.
 
 ```sh
-pnpm vifx setup <expo-project-path> --yes
+pnpm vifx setup <expo-project-path> --yes --expo-go
 pnpm vifx build <expo-project-path>
 pnpm vifx expo audit <expo-project-path>
-pnpm vifx expo dev <expo-project-path> --platform ios
+pnpm vifx expo dev <expo-project-path> --platform ios --expo-go
 pnpm vifx expo export <expo-project-path> --out-dir dist/expo
 ```
 
-- `vifx setup` is Expo-only in v1 and creates Vifx-owned config.
-- It never replaces `expo start`, Expo Go, EAS, or app build/run commands.
+- `vifx setup` is Expo-only and creates Vifx-owned config.
+- `--expo-go` enables the early Vifx native manifest and bundle server path.
+- It does not replace EAS or app build/run commands.
 - Export output is bundle artifact output, not Expo Updates runtime support.
 
 ## Legacy Manual Surfaces

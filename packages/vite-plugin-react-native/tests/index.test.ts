@@ -150,6 +150,92 @@ test("buildReactNativeBundle resolves project aliases when configured", async ()
   expect(bundleSource).toContain("rn ios bundle");
 });
 
+test("buildReactNativeBundle resolves React singletons from the project root", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+  const reactRoot = path.join(projectRoot, "node_modules", "react");
+  const libraryRoot = path.join(projectRoot, "node_modules", "uses-react");
+  const nestedReactRoot = path.join(libraryRoot, "node_modules", "react");
+
+  await mkdir(reactRoot, { recursive: true });
+  await mkdir(libraryRoot, { recursive: true });
+  await mkdir(nestedReactRoot, { recursive: true });
+  await writeFile(
+    path.join(reactRoot, "package.json"),
+    JSON.stringify({ main: "index.js", name: "react", type: "module" }, null, 2),
+  );
+  await writeFile(
+    path.join(reactRoot, "index.js"),
+    ['export const marker = "root react singleton";', "export default { marker };", ""].join("\n"),
+  );
+  await writeFile(
+    path.join(libraryRoot, "package.json"),
+    JSON.stringify({ main: "index.js", name: "uses-react", type: "module" }, null, 2),
+  );
+  await writeFile(
+    path.join(libraryRoot, "index.js"),
+    [
+      'import React from "react";',
+      "export function readMarker() {",
+      "  return React.marker;",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(nestedReactRoot, "package.json"),
+    JSON.stringify({ main: "index.js", name: "react", type: "module" }, null, 2),
+  );
+  await writeFile(
+    path.join(nestedReactRoot, "index.js"),
+    ['export const marker = "nested react copy";', "export default { marker };", ""].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import React from "react";',
+      'import { readMarker } from "uses-react";',
+      'console.log("markers", React.marker, readMarker());',
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    outDir: ".vifx/helper-ios-react-singleton",
+    platform: "ios",
+    projectRoot,
+    shimReact: false,
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+
+  expect(bundleSource).toContain("root react singleton");
+  expect(bundleSource).not.toContain("nested react copy");
+});
+
+test("buildReactNativeBundle keeps JSON imports as JavaScript modules by default", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+
+  await writeFile(
+    path.join(projectRoot, "icons.json"),
+    JSON.stringify({ home: 59648, search: 59649 }, null, 2),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    ['import icons from "./icons.json";', 'console.log("icon home", icons.home);', ""].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    outDir: ".vifx/helper-ios-json-module",
+    platform: "ios",
+    projectRoot,
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+
+  expect(bundleSource).toContain("59648");
+  expect(bundleSource).not.toContain("/assets/icons.json");
+});
+
 test("buildReactNativeBundle can use the built-in react-native-web compat layer", async () => {
   const projectRoot = await copyFixture("rn-bare-basic");
   const packageRoot = path.join(projectRoot, "node_modules", "react-native-web");
@@ -224,11 +310,15 @@ test("buildReactNativeBundle can use the built-in react-native-web compat layer"
 test("buildReactNativeBundle generates an Expo Router context for web runtime previews", async () => {
   const projectRoot = await copyFixture("expo-router-basic");
   const packageRoot = path.join(projectRoot, "node_modules", "expo-router");
+  const metroRuntimeRoot = path.join(projectRoot, "node_modules", "@expo", "metro-runtime");
   const reactPackageRoot = path.join(projectRoot, "node_modules", "react");
+  const expoPackageRoot = path.join(projectRoot, "node_modules", "expo");
   const expoRouterBuildRoot = path.join(packageRoot, "build");
 
   await mkdir(packageRoot, { recursive: true });
+  await mkdir(path.join(metroRuntimeRoot, "src"), { recursive: true });
   await mkdir(reactPackageRoot, { recursive: true });
+  await mkdir(expoPackageRoot, { recursive: true });
   await mkdir(expoRouterBuildRoot, { recursive: true });
   await writeFile(
     path.join(reactPackageRoot, "package.json"),
@@ -260,6 +350,26 @@ test("buildReactNativeBundle generates an Expo Router context for web runtime pr
     ].join("\n"),
   );
   await writeFile(
+    path.join(expoPackageRoot, "package.json"),
+    JSON.stringify(
+      {
+        name: "expo",
+        main: "index.js",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(expoPackageRoot, "index.js"),
+    [
+      "export function registerRootComponent(Component) {",
+      "  globalThis.__vifxRegisteredRootComponent = Component;",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
     path.join(packageRoot, "package.json"),
     JSON.stringify(
       {
@@ -280,6 +390,21 @@ test("buildReactNativeBundle generates an Expo Router context for web runtime pr
       null,
       2,
     ),
+  );
+  await writeFile(
+    path.join(metroRuntimeRoot, "package.json"),
+    JSON.stringify(
+      {
+        main: "src/index.ts",
+        name: "@expo/metro-runtime",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(metroRuntimeRoot, "src/index.ts"),
+    ['console.log("metro runtime bootstrap");', "export {};", ""].join("\n"),
   );
   await writeFile(
     path.join(packageRoot, "entry.js"),
@@ -307,6 +432,10 @@ test("buildReactNativeBundle generates an Expo Router context for web runtime pr
   await writeFile(
     path.join(expoRouterBuildRoot, "renderRootComponent.js"),
     ["export function renderRootComponent(Component) {", "  return Component;", "}", ""].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "fast-refresh.js"),
+    ['console.log("fast-refresh loaded");', "export {};", ""].join("\n"),
   );
   await writeFile(
     path.join(expoRouterBuildRoot, "qualified-entry.js"),
@@ -385,6 +514,550 @@ test("buildReactNativeBundle generates an Expo Router context for web runtime pr
   expect(previewBundleSource).not.toContain('routeName = "android route"');
 });
 
+test("buildReactNativeBundle generates a native Expo Router context without require.context", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+  const packageRoot = path.join(projectRoot, "node_modules", "expo-router");
+  const metroRuntimeRoot = path.join(projectRoot, "node_modules", "@expo", "metro-runtime");
+  const reactPackageRoot = path.join(projectRoot, "node_modules", "react");
+  const expoRouterBuildRoot = path.join(packageRoot, "build");
+
+  await mkdir(path.join(projectRoot, "app"), { recursive: true });
+  await mkdir(path.join(metroRuntimeRoot, "src"), { recursive: true });
+  await mkdir(reactPackageRoot, { recursive: true });
+  await mkdir(expoRouterBuildRoot, { recursive: true });
+  await writeFile(
+    path.join(reactPackageRoot, "package.json"),
+    JSON.stringify(
+      {
+        name: "react",
+        main: "index.js",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(reactPackageRoot, "index.js"),
+    [
+      "const React = {",
+      "  Fragment: Symbol.for('react.fragment'),",
+      "  createElement(type, props, ...children) {",
+      "    return {",
+      "      props: { ...(props ?? {}), children },",
+      "      type,",
+      "    };",
+      "  },",
+      "};",
+      "",
+      "module.exports = React;",
+      "module.exports.default = React;",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(packageRoot, "package.json"),
+    JSON.stringify(
+      {
+        name: "expo-router",
+        main: "entry.js",
+        exports: {
+          "./_ctx": {
+            default: "./_ctx.js",
+          },
+          "./build/ExpoRoot": "./build/ExpoRoot.js",
+          "./build/head": "./build/head.js",
+          "./build/qualified-entry": "./build/qualified-entry.js",
+          "./build/renderRootComponent": "./build/renderRootComponent.js",
+          "./entry": "./entry.js",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(metroRuntimeRoot, "package.json"),
+    JSON.stringify(
+      {
+        main: "src/index.ts",
+        name: "@expo/metro-runtime",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(metroRuntimeRoot, "src/index.ts"),
+    ['console.log("metro runtime bootstrap");', "export {};", ""].join("\n"),
+  );
+  await writeFile(
+    path.join(packageRoot, "_ctx.js"),
+    [
+      "export const ctx = Object.assign(() => ({}), {",
+      "  keys() {",
+      "    return [];",
+      "  },",
+      "});",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "ExpoRoot.js"),
+    ["export function ExpoRoot(props) {", "  return props.context;", "}", ""].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "head.js"),
+    [
+      "export const Head = {",
+      "  Provider({ children }) {",
+      "    return children;",
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "renderRootComponent.js"),
+    ["export function renderRootComponent(Component) {", "  return Component;", "}", ""].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "fast-refresh.js"),
+    ['console.log("fast-refresh loaded");', "export {};", ""].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "qualified-entry.js"),
+    [
+      'const { ctx } = require("expo-router/_ctx");',
+      "exports.App = function App() {",
+      '  return ctx("./post.tsx");',
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "entry.js"),
+    [
+      'import { App } from "expo-router/build/qualified-entry";',
+      'console.log("expo-router app", App);',
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import { App } from "expo-router/build/qualified-entry";',
+      'console.log("expo-router app", App);',
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "app", "post.tsx"),
+    [
+      'export const routeName = "base route";',
+      "export default function PostRoute() {",
+      "  return null;",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "app", "post.ios.tsx"),
+    [
+      'export const routeName = "ios route";',
+      "export default function PostIosRoute() {",
+      "  return null;",
+      "}",
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    outDir: ".vifx/helper-ios-expo-router-native",
+    platform: "ios",
+    projectRoot,
+  });
+  const bundleSource = await readFile(
+    path.join(projectRoot, ".vifx/helper-ios-expo-router-native/index.bundle"),
+    "utf8",
+  );
+
+  expect(bundle.runtime).toBeNull();
+  expect(bundleSource).toContain("vifx-expo-router-context");
+  expect(bundleSource).toContain("fast-refresh loaded");
+  expect(bundleSource).toContain("./post.tsx");
+  expect(bundleSource).not.toContain("__require.context");
+  expect(bundleSource).toContain("ios route");
+  expect(bundleSource).not.toContain('routeName = "android route"');
+});
+
+test("buildReactNativeBundle keeps the Expo Router native bootstrap aligned with Metro", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+  const packageRoot = path.join(projectRoot, "node_modules", "expo-router");
+  const metroRuntimeRoot = path.join(projectRoot, "node_modules", "@expo", "metro-runtime");
+  const sqlitePackageRoot = path.join(projectRoot, "node_modules", "expo-sqlite");
+  const sqliteBuildRoot = path.join(sqlitePackageRoot, "build");
+  const reactPackageRoot = path.join(projectRoot, "node_modules", "react");
+  const expoPackageRoot = path.join(projectRoot, "node_modules", "expo");
+  const expoConstantsRoot = path.join(projectRoot, "node_modules", "expo-constants");
+  const expoRouterBuildRoot = path.join(packageRoot, "build");
+
+  await mkdir(path.join(projectRoot, "app"), { recursive: true });
+  await mkdir(path.join(metroRuntimeRoot, "src"), { recursive: true });
+  await mkdir(reactPackageRoot, { recursive: true });
+  await mkdir(expoPackageRoot, { recursive: true });
+  await mkdir(expoConstantsRoot, { recursive: true });
+  await mkdir(expoRouterBuildRoot, { recursive: true });
+  await writeFile(
+    path.join(reactPackageRoot, "package.json"),
+    JSON.stringify(
+      {
+        name: "react",
+        main: "index.js",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(reactPackageRoot, "index.js"),
+    [
+      "const React = {",
+      "  Fragment: Symbol.for('react.fragment'),",
+      "  createElement(type, props, ...children) {",
+      "    return {",
+      "      props: { ...(props ?? {}), children },",
+      "      type,",
+      "    };",
+      "  },",
+      "};",
+      "",
+      "module.exports = React;",
+      "module.exports.default = React;",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(expoPackageRoot, "package.json"),
+    JSON.stringify(
+      {
+        name: "expo",
+        main: "index.js",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(expoPackageRoot, "index.js"),
+    [
+      "export function registerRootComponent(Component) {",
+      "  globalThis.__vifxRegisteredRootComponent = Component;",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(expoConstantsRoot, "package.json"),
+    JSON.stringify(
+      {
+        main: "index.js",
+        name: "expo-constants",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(expoConstantsRoot, "index.js"),
+    [
+      "export default {",
+      "  __unsafeNoWarnManifest2: {",
+      "    launchAsset: { url: 'http://127.0.0.1:55888/expo-router/entry.bundle' },",
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(packageRoot, "package.json"),
+    JSON.stringify(
+      {
+        name: "expo-router",
+        main: "entry.js",
+        exports: {
+          "./_ctx": {
+            default: "./_ctx.js",
+          },
+          "./build/ExpoRoot": "./build/ExpoRoot.js",
+          "./build/fast-refresh": "./build/fast-refresh.js",
+          "./build/head": "./build/head.js",
+          "./build/qualified-entry": "./build/qualified-entry.js",
+          "./build/renderRootComponent": "./build/renderRootComponent.js",
+          "./entry": "./entry.js",
+          "./entry-classic": "./entry-classic.js",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(metroRuntimeRoot, "package.json"),
+    JSON.stringify(
+      {
+        main: "src/index.ts",
+        name: "@expo/metro-runtime",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(metroRuntimeRoot, "src/index.ts"),
+    ['console.log("metro runtime bootstrap");', "export {};", ""].join("\n"),
+  );
+  await writeFile(
+    path.join(packageRoot, "_ctx.js"),
+    [
+      "export const ctx = Object.assign(() => ({}), {",
+      "  keys() {",
+      "    return [];",
+      "  },",
+      "});",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "ExpoRoot.js"),
+    ["export function ExpoRoot(props) {", "  return props.context;", "}", ""].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "head.js"),
+    [
+      "export const Head = {",
+      "  Provider({ children }) {",
+      "    return children;",
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "renderRootComponent.js"),
+    ["export function renderRootComponent(Component) {", "  return Component;", "}", ""].join("\n"),
+  );
+  await writeFile(
+    path.join(expoRouterBuildRoot, "fast-refresh.js"),
+    ['console.log("fast-refresh loaded");', "export {};", ""].join("\n"),
+  );
+  await mkdir(sqliteBuildRoot, { recursive: true });
+  await writeFile(
+    path.join(sqlitePackageRoot, "package.json"),
+    JSON.stringify(
+      {
+        name: "expo-sqlite",
+        main: "index.js",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(sqlitePackageRoot, "index.js"),
+    [
+      'export { SQLiteProvider } from "./build/hooks.js";',
+      'export { openDatabaseAsync } from "./build/SQLiteDatabase.js";',
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(sqliteBuildRoot, "SQLiteDatabase.js"),
+    [
+      "export async function openDatabaseAsync() {",
+      "  return {",
+      "    closeAsync() {},",
+      "    execAsync() {},",
+      "    getAllAsync() {},",
+      "    getEachAsync() {},",
+      "    getFirstAsync() {},",
+      "    isInTransactionAsync() { return false; },",
+      "    loadExtensionAsync() {},",
+      "    prepareAsync() {},",
+      "    runAsync() {},",
+      "    serializeAsync() {},",
+      "    withExclusiveTransactionAsync() {},",
+      "    withTransactionAsync() {},",
+      "  };",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(path.join(sqliteBuildRoot, "hooks.js"), "export {};\n");
+  await writeFile(
+    path.join(expoRouterBuildRoot, "qualified-entry.js"),
+    [
+      'const { ctx } = require("expo-router/_ctx");',
+      'require("expo-router/build/fast-refresh");',
+      "exports.App = function App() {",
+      '  return ctx("./post.tsx");',
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(packageRoot, "entry.js"),
+    ['import "expo-router/entry-classic";', ""].join("\n"),
+  );
+  await writeFile(
+    path.join(packageRoot, "entry-classic.js"),
+    [
+      'import "@expo/metro-runtime";',
+      'import { App } from "expo-router/build/qualified-entry";',
+      'import { renderRootComponent } from "expo-router/build/renderRootComponent";',
+      "",
+      "renderRootComponent(App);",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "app", "post.tsx"),
+    [
+      'export const routeName = "base route";',
+      "export default function PostRoute() {",
+      "  return null;",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "app", "post.ios.tsx"),
+    [
+      'export const routeName = "ios route";',
+      "export default function PostIosRoute() {",
+      "  return null;",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await mkdir(path.join(projectRoot, "src", "db"), { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "src", "db", "SQLiteProvider.tsx"),
+    [
+      'import { SQLiteProvider as ExpoSQLiteProvider } from "expo-sqlite";',
+      "",
+      "export function SQLiteProvider(props) {",
+      "  return ExpoSQLiteProvider(props);",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await mkdir(path.join(projectRoot, "node_modules", "react-native-worklets", "src"), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(projectRoot, "node_modules", "react-native-worklets", "package.json"),
+    JSON.stringify(
+      {
+        name: "react-native-worklets",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(projectRoot, "node_modules", "react-native-worklets", "src", "bundleUnpacker.ts"),
+    [
+      "export function bundleValueUnpacker() {",
+      "  return globalThis.__r(1).default({});",
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(
+      projectRoot,
+      "node_modules",
+      "react-native-worklets",
+      "src",
+      "workletRuntimeEntry.ts",
+    ),
+    [
+      "export function bundleModeInit() {",
+      "  globalThis._WORKLETS_BUNDLE_MODE = true;",
+      "}",
+      "",
+      "bundleModeInit();",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "node_modules", "react-native-worklets", "src", "index.ts"),
+    [
+      "import './workletRuntimeEntry';",
+      "export { bundleValueUnpacker } from './bundleUnpacker';",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "app", "_layout.tsx"),
+    [
+      'import { createElement } from "react";',
+      'import getDevServer from "react-native/Libraries/Core/Devtools/getDevServer";',
+      'import { bundleModeInit } from "react-native-worklets/src/workletRuntimeEntry";',
+      'import { bundleValueUnpacker } from "react-native-worklets/src/bundleUnpacker";',
+      'import { SQLiteProvider } from "../src/db/SQLiteProvider";',
+      "",
+      "(globalThis as any).__vifxGetDevServer = getDevServer;",
+      "(globalThis as any).__vifxBundleModeInit = bundleModeInit;",
+      "(globalThis as any).__vifxWorkletsUnpacker = bundleValueUnpacker;",
+      "",
+      "export default function RootLayout() {",
+      "  return createElement(SQLiteProvider, {",
+      '    databaseName: "rn-bare-basic.db",',
+      "    onInit: async () => {},",
+      "  }, null);",
+      "}",
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "expo-router/entry",
+    outDir: ".vifx/helper-ios-expo-router-bootstrap",
+    platform: "ios",
+    projectRoot,
+  });
+  const bundleSource = await readFile(
+    path.join(projectRoot, ".vifx/helper-ios-expo-router-bootstrap/index.bundle"),
+    "utf8",
+  );
+
+  expect(bundle.runtime).toBeNull();
+  expect(bundleSource).toContain("metro runtime bootstrap");
+  expect(bundleSource).toContain("fast-refresh loaded");
+  expect(bundleSource).toContain("registerRootComponent(App)");
+  expect(bundleSource).toContain("const [loading, setLoading] = React.useState(true);");
+  expect(bundleSource).toContain("SQLiteContext.Provider");
+  expect(bundleSource).toContain("databaseRef.current = database");
+  expect(bundleSource).toContain("loading || !databaseRef.current");
+  expect(bundleSource.indexOf("vifx:transformed:")).toBeGreaterThan(-1);
+  expect(bundleSource.indexOf("expo-sqlite/build/SQLiteDatabase.js")).toBeGreaterThan(-1);
+  expect(bundleSource.indexOf("vifx:compat:expo-sqlite/build/SQLiteDatabase")).toBeGreaterThan(
+    bundleSource.indexOf("vifx:transformed:"),
+  );
+  expect(bundleSource).toContain("vifx:compat:react-native-worklets/src/bundleUnpacker");
+  expect(bundleSource).toContain("vifx:compat:react-native-worklets/src/workletRuntimeEntry");
+  expect(bundleSource).not.toContain("const windowLocation = typeof window !==");
+  expect(bundleSource).toContain('SourceCode.getConstants().scriptURL ?? ""');
+  expect(bundleSource).toContain("Vifx could not resolve a Worklets bundle-mode worklet");
+  expect(bundleSource).not.toContain("return globalThis.__r(1).default({});");
+  expect(bundleSource).not.toContain("globalThis._WORKLETS_BUNDLE_MODE = true;");
+  expect(bundleSource).not.toContain("init_SQLiteDatabase();");
+  expect(bundleSource).not.toContain("__require.context");
+  expect(bundleSource).toContain("vifx-expo-router-context");
+});
+
 test("buildReactNativeBundle uses captured browser globals for Expo winter URL compat", async () => {
   const projectRoot = await copyFixture("rn-bare-basic");
   const expoWinterRoot = path.join(projectRoot, "node_modules", "expo", "src", "winter");
@@ -400,7 +1073,10 @@ test("buildReactNativeBundle uses captured browser globals for Expo winter URL c
       2,
     ),
   );
-  await writeFile(path.join(expoWinterRoot, "url.ts"), "export const placeholder = true;\n");
+  await writeFile(
+    path.join(expoWinterRoot, "url.ts"),
+    ["export function URL() {}", "export function URLSearchParams() {}", ""].join("\n"),
+  );
   await writeFile(
     path.join(projectRoot, "index.js"),
     [
@@ -427,6 +1103,59 @@ test("buildReactNativeBundle uses captured browser globals for Expo winter URL c
   expect(previewBundleSource).toContain("globalThis.__VIFX_BROWSER_GLOBALS__ ?? {}");
   expect(previewBundleSource).toContain("browserGlobals.URL ??");
   expect(previewBundleSource).toContain("browserGlobals.URLSearchParams ??");
+});
+
+test("buildReactNativeBundle keeps the native Expo winter URL implementation", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+  const expoWinterRoot = path.join(projectRoot, "node_modules", "expo", "src", "winter");
+
+  await mkdir(expoWinterRoot, { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "node_modules", "expo", "package.json"),
+    JSON.stringify(
+      {
+        name: "expo",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(expoWinterRoot, "url.ts"),
+    [
+      "export function URL() {}",
+      "export function URLSearchParams() {}",
+      "URL.createObjectURL = () => 'blob:vifx';",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import { URL, URLSearchParams } from "expo/src/winter/url";',
+      'console.log("expo winter url", typeof URL, typeof URLSearchParams);',
+      "export default { URL, URLSearchParams };",
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    outDir: ".vifx/helper-ios-expo-winter-url-native",
+    platform: "ios",
+    projectRoot,
+  });
+  const bundleSource = await readFile(
+    path.join(projectRoot, ".vifx/helper-ios-expo-winter-url-native/index.bundle"),
+    "utf8",
+  );
+
+  expect(bundle.runtime).toBeNull();
+  expect(bundleSource).toContain("URL.createObjectURL");
+  expect(bundleSource).not.toContain("vifx:compat:expo/src/winter/url");
+  expect(bundleSource).not.toContain(
+    "browserGlobals.URLSearchParams ?? globalThis.URLSearchParams",
+  );
 });
 
 test("buildReactNativeBundle accepts a package-style entry and transforms JSX in configured packages", async () => {
@@ -467,6 +1196,81 @@ test("buildReactNativeBundle accepts a package-style entry and transforms JSX in
   const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
 
   expect(bundleSource).toContain("package jsx entry");
+});
+
+test("buildReactNativeBundle applies project Babel to native node_modules transitively", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-rn-plugin-babel-native-"));
+  const babelCoreRoot = path.join(projectRoot, "node_modules", "@babel", "core");
+  const babelPresetRoot = path.join(projectRoot, "node_modules", "@react-native", "babel-preset");
+  const dependencyRoot = path.join(projectRoot, "node_modules", "unlisted-native-dependency");
+
+  await mkdir(babelCoreRoot, { recursive: true });
+  await mkdir(babelPresetRoot, { recursive: true });
+  await mkdir(dependencyRoot, { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify(
+      {
+        dependencies: {
+          "unlisted-native-dependency": "1.0.0",
+        },
+        name: "native-babel-project",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(babelCoreRoot, "index.js"),
+    [
+      "exports.transformAsync = async function transformAsync(code, options) {",
+      "  const scope = options.caller?.isNodeModule ? 'node' : 'project';",
+      "  const transformed = code.replace('class NativeDependency {}', 'function NativeDependency() {}');",
+      "  return {",
+      "    code: `console.log(\"babel:${scope}:${options.filename.includes('unlisted-native-dependency')}\");\\n${transformed}`,",
+      "    map: null,",
+      "  };",
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(babelPresetRoot, "index.js"),
+    "module.exports = function preset() {};\n",
+  );
+  await writeFile(
+    path.join(dependencyRoot, "package.json"),
+    JSON.stringify({ main: "index.js", name: "unlisted-native-dependency" }, null, 2),
+  );
+  await writeFile(
+    path.join(dependencyRoot, "index.js"),
+    [
+      "export const marker = class NativeDependency {};",
+      'console.log("native dependency", marker.name);',
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import { marker } from "unlisted-native-dependency";',
+      'console.log("native entry", marker.name);',
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    jsxInPackages: ["unlisted-native-dependency"],
+    outDir: ".vifx/helper-ios-babel-native",
+    platform: "ios",
+    projectRoot,
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+
+  expect(bundleSource).toContain("babel:node:true");
+  expect(bundleSource).toContain("babel:project:false");
+  expect(bundleSource).not.toContain("class NativeDependency");
 });
 
 test("buildReactNativeBundle can opt out of React and React Native shims", async () => {

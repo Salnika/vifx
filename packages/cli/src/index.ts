@@ -7,6 +7,7 @@ import {
   runExpoAuditCommand,
   runExpoDevCommand,
   runExpoExportCommand,
+  runExpoSmokeCommand,
 } from "./commands/expo-audit.ts";
 import { runHermesCompileCommand } from "./commands/hermes-compile.ts";
 import { runInitCommand } from "./commands/init.ts";
@@ -28,6 +29,7 @@ Commands:
   expo audit [path]             Audit the Expo no-Metro Vite bundling contract.
   expo dev [path]               Start the Expo Vite bundle dev server.
   expo export [path]            Generate Expo bundle artifacts from Vifx builds.
+  expo smoke [path]             Smoke-test the Vifx Expo Go server endpoints.
   doctor [path]                 Check project readiness and support boundaries.
   build [path]                  Build Vifx bundle targets from vifx.config.*.
   run [path]                    Serve a built Vifx runtime locally.
@@ -183,6 +185,10 @@ export async function executeCli(
 
       if (argv[1] === "export") {
         return await runExpoExportCommand(argv.slice(2), cwd);
+      }
+
+      if (argv[1] === "smoke") {
+        return await runExpoSmokeCommand(argv.slice(2), cwd);
       }
 
       return fail(`Unknown expo subcommand.\n\n${ROOT_HELP}`);

@@ -26,14 +26,25 @@ import type {
 } from "@vifx/types";
 
 const DEFAULT_EXTENSIONS = ["tsx", "ts", "jsx", "js", "json"] as const;
+const DEFAULT_NATIVE_MAIN_FIELDS = ["react-native", "main", "module"] as const;
+const DEFAULT_WEB_MAIN_FIELDS = ["react-native", "module", "main"] as const;
+const DEFAULT_ASSET_EXTENSIONS = supportedAssetExtensions.filter(
+  (extension) => extension !== "json",
+);
 const COMPAT_PREFIX = "\0vifx:compat:";
 const EXPO_ROUTER_ENTRY_ID = "expo-router/entry";
 const EXPO_ROUTER_CONTEXT_ID = "expo-router/_ctx";
 const EXPO_ROUTER_QUALIFIED_ENTRY_ID = "expo-router/build/qualified-entry";
+const EXPO_SQLITE_HOOKS_ID = "expo-sqlite/build/hooks";
+const EXPO_SQLITE_SQLITE_DATABASE_ID = "expo-sqlite/build/SQLiteDatabase";
 const EXPO_STATUS_BAR_MODULE_ID = "expo-status-bar/src/StatusBar";
 const EXPO_WINTER_URL_ID = "expo/src/winter/url";
 const REANIMATED_VALIDATE_WORKLETS_VERSION_ID =
   "react-native-reanimated/scripts/validate-worklets-version";
+const REACT_NATIVE_WORKLETS_BUNDLE_UNPACKER_ID = "react-native-worklets/src/bundleUnpacker";
+const REACT_NATIVE_WORKLETS_RUNTIME_ENTRY_ID = "react-native-worklets/src/workletRuntimeEntry";
+const NATIVE_SINGLETON_PACKAGES = ["react", "react-native"] as const;
+const NATIVE_SINGLETON_PACKAGE_SET = new Set<string>(NATIVE_SINGLETON_PACKAGES);
 const SHIM_PREFIX = "\0vifx:shim:";
 const TRANSFORM_PREFIX = "\0vifx:transformed:";
 const WEB_RUNTIME_BUNDLE_FILE = "bundle.js";
@@ -67,6 +78,7 @@ interface ReactNativePluginState {
   entry: string;
   extensions: string[];
   jsxInPackages: string[];
+  mainFields: string[];
   platform: VifxReactNativePluginOptions["platform"];
   projectRoot: string;
   reactNativeCompat: NonNullable<VifxReactNativePluginOptions["reactNativeCompat"]>;
@@ -106,7 +118,7 @@ function dedupe(items: readonly string[]) {
 }
 
 function normalizeAssetExtensions(extensions?: string[]) {
-  return dedupe((extensions ?? [...supportedAssetExtensions]).map((extension) => extension.trim()));
+  return dedupe((extensions ?? DEFAULT_ASSET_EXTENSIONS).map((extension) => extension.trim()));
 }
 
 function normalizeConditions(platform: VifxPlatform, extraConditions?: string[]) {
@@ -142,6 +154,164 @@ function createCompatId(name: string) {
   return `${COMPAT_PREFIX}${name}`;
 }
 
+function createNativeURLSearchParamsPolyfillLines() {
+  return [
+    "if (typeof globalThis.URLSearchParams !== 'function') {",
+    "  function URLSearchParamsPolyfill(init) {",
+    "    this._entries = [];",
+    "    var source = init == null ? '' : init;",
+    "",
+    "    if (typeof source === 'string') {",
+    "      var query = source.charAt(0) === '?' ? source.slice(1) : source;",
+    "      if (query) {",
+    "        var pairs = query.split('&');",
+    "        for (var pairIndex = 0; pairIndex < pairs.length; pairIndex++) {",
+    "          var pair = pairs[pairIndex];",
+    "          if (!pair) continue;",
+    "          var parts = pair.split('=');",
+    "          var rawKey = parts[0];",
+    "          var rawValue = parts.length > 1 ? parts.slice(1).join('=') : '';",
+    "          this.append(decodeURIComponent(rawKey.replace(/\\+/g, ' ')), decodeURIComponent(rawValue.replace(/\\+/g, ' ')));",
+    "        }",
+    "      }",
+    "      return;",
+    "    }",
+    "",
+    "    if (source instanceof URLSearchParamsPolyfill || Array.isArray(source)) {",
+    "      for (var entryIndex = 0; entryIndex < source.length; entryIndex++) {",
+    "        var entry = source[entryIndex];",
+    "        if (!entry) continue;",
+    "        this.append(entry[0], entry.length > 1 ? entry[1] : '');",
+    "      }",
+    "      return;",
+    "    }",
+    "",
+    "    if (source && typeof source === 'object') {",
+    "      var names = Object.keys(source);",
+    "      for (var nameIndex = 0; nameIndex < names.length; nameIndex++) {",
+    "        var name = names[nameIndex];",
+    "        var value = source[name];",
+    "        if (Array.isArray(value)) {",
+    "          for (var valueIndex = 0; valueIndex < value.length; valueIndex++) {",
+    "            this.append(name, value[valueIndex]);",
+    "          }",
+    "        } else {",
+    "          this.append(name, value);",
+    "        }",
+    "      }",
+    "    }",
+    "  }",
+    "",
+    "  URLSearchParamsPolyfill.prototype.append = function append(name, value) {",
+    "    this._entries.push([String(name), String(value)]);",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.delete = function deleteEntry(name) {",
+    "    var key = String(name);",
+    "    var nextEntries = [];",
+    "    for (var index = 0; index < this._entries.length; index++) {",
+    "      if (this._entries[index][0] !== key) {",
+    "        nextEntries.push(this._entries[index]);",
+    "      }",
+    "    }",
+    "    this._entries = nextEntries;",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.get = function get(name) {",
+    "    var key = String(name);",
+    "    for (var index = 0; index < this._entries.length; index++) {",
+    "      if (this._entries[index][0] === key) {",
+    "        return this._entries[index][1];",
+    "      }",
+    "    }",
+    "    return null;",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.getAll = function getAll(name) {",
+    "    var key = String(name);",
+    "    var values = [];",
+    "    for (var index = 0; index < this._entries.length; index++) {",
+    "      if (this._entries[index][0] === key) {",
+    "        values.push(this._entries[index][1]);",
+    "      }",
+    "    }",
+    "    return values;",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.has = function has(name) {",
+    "    var key = String(name);",
+    "    for (var index = 0; index < this._entries.length; index++) {",
+    "      if (this._entries[index][0] === key) {",
+    "        return true;",
+    "      }",
+    "    }",
+    "    return false;",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.set = function set(name, value) {",
+    "    var key = String(name);",
+    "    var nextValue = String(value);",
+    "    var replaced = false;",
+    "    var nextEntries = [];",
+    "    for (var index = 0; index < this._entries.length; index++) {",
+    "      var entry = this._entries[index];",
+    "      if (entry[0] === key) {",
+    "        if (!replaced) {",
+    "          nextEntries.push([key, nextValue]);",
+    "          replaced = true;",
+    "        }",
+    "      } else {",
+    "        nextEntries.push(entry);",
+    "      }",
+    "    }",
+    "    if (!replaced) {",
+    "      nextEntries.push([key, nextValue]);",
+    "    }",
+    "    this._entries = nextEntries;",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.sort = function sort() {",
+    "    this._entries.sort(function compare(left, right) {",
+    "      return left[0].localeCompare(right[0]);",
+    "    });",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.toString = function toString() {",
+    "    var parts = [];",
+    "    for (var index = 0; index < this._entries.length; index++) {",
+    "      parts.push(encodeURIComponent(this._entries[index][0]) + '=' + encodeURIComponent(this._entries[index][1]));",
+    "    }",
+    "    return parts.join('&');",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.keys = function keys() {",
+    "    return this._entries.map(function mapKey(entry) { return entry[0]; })[Symbol.iterator]();",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.values = function values() {",
+    "    return this._entries.map(function mapValue(entry) { return entry[1]; })[Symbol.iterator]();",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.entries = function entries() {",
+    "    return this._entries[Symbol.iterator]();",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype.forEach = function forEach(callback, thisArg) {",
+    "    for (var index = 0; index < this._entries.length; index++) {",
+    "      callback.call(thisArg, this._entries[index][1], this._entries[index][0], this);",
+    "    }",
+    "  };",
+    "",
+    "  URLSearchParamsPolyfill.prototype[Symbol.iterator] = function iterator() {",
+    "    return this.entries();",
+    "  };",
+    "",
+    "  globalThis.URLSearchParams = URLSearchParamsPolyfill;",
+    "}",
+    "",
+  ];
+}
+
 function createTransformId(filePath: string) {
   return `${TRANSFORM_PREFIX}${filePath}`;
 }
@@ -154,7 +324,14 @@ function resolveCompatId(
     return createCompatId(source);
   }
 
-  if (state.resolvePlatform === "web" && source === EXPO_ROUTER_CONTEXT_ID) {
+  if (
+    source === "react-native/Libraries/Core/Devtools/getDevServer" ||
+    source === "react-native/Libraries/NativeModules/specs/NativeSourceCode"
+  ) {
+    return createCompatId(source);
+  }
+
+  if (source === EXPO_ROUTER_CONTEXT_ID) {
     return createCompatId(source);
   }
 
@@ -166,11 +343,23 @@ function resolveCompatId(
     return createCompatId(source);
   }
 
+  if (state.resolvePlatform !== "web" && source === REACT_NATIVE_WORKLETS_BUNDLE_UNPACKER_ID) {
+    return createCompatId(source);
+  }
+
   if (state.resolvePlatform === "web" && source === EXPO_ROUTER_ENTRY_ID) {
     return createCompatId(source);
   }
 
   if (state.resolvePlatform === "web" && source === EXPO_ROUTER_QUALIFIED_ENTRY_ID) {
+    return createCompatId(source);
+  }
+
+  if (state.resolvePlatform !== "web" && source === EXPO_SQLITE_SQLITE_DATABASE_ID) {
+    return createCompatId(source);
+  }
+
+  if (state.resolvePlatform !== "web" && source === EXPO_SQLITE_HOOKS_ID) {
     return createCompatId(source);
   }
 
@@ -181,20 +370,30 @@ function resolveCompatId(
   return null;
 }
 
-function resolveCompatPath(
-  filePath: string,
-  state: Pick<ReactNativePluginState, "reactNativeCompat">,
-) {
-  if (state.reactNativeCompat !== "web") {
-    return null;
-  }
-
+function resolveCompatPath(filePath: string) {
   const normalizedPath = toPosixPath(stripQuery(filePath));
   if (
     normalizedPath.endsWith("/node_modules/expo-router/_ctx.js") ||
     normalizedPath.endsWith("/node_modules/expo-router/_ctx.web.js")
   ) {
     return createCompatId(EXPO_ROUTER_CONTEXT_ID);
+  }
+
+  if (
+    normalizedPath.endsWith("/node_modules/react-native/Libraries/Core/Devtools/getDevServer.js")
+  ) {
+    return createCompatId("react-native/Libraries/Core/Devtools/getDevServer");
+  }
+
+  if (
+    normalizedPath.endsWith(
+      "/node_modules/react-native/Libraries/NativeModules/specs/NativeSourceCode.js",
+    ) ||
+    normalizedPath.endsWith(
+      "/node_modules/react-native/src/private/specs_DEPRECATED/modules/NativeSourceCode.js",
+    )
+  ) {
+    return createCompatId("react-native/Libraries/NativeModules/specs/NativeSourceCode");
   }
 
   if (normalizedPath.endsWith("/node_modules/expo-status-bar/src/StatusBar.ts")) {
@@ -214,10 +413,32 @@ function resolveCompatPath(
   }
 
   if (
+    normalizedPath.endsWith("/node_modules/react-native-worklets/src/bundleUnpacker.ts") ||
+    normalizedPath.endsWith("/node_modules/react-native-worklets/lib/module/bundleUnpacker.js")
+  ) {
+    return createCompatId(REACT_NATIVE_WORKLETS_BUNDLE_UNPACKER_ID);
+  }
+
+  if (
+    normalizedPath.endsWith("/node_modules/react-native-worklets/src/workletRuntimeEntry.ts") ||
+    normalizedPath.endsWith("/node_modules/react-native-worklets/lib/module/workletRuntimeEntry.js")
+  ) {
+    return createCompatId(REACT_NATIVE_WORKLETS_RUNTIME_ENTRY_ID);
+  }
+
+  if (
     normalizedPath.endsWith("/node_modules/expo-router/entry.js") ||
     normalizedPath.endsWith("/node_modules/expo-router/entry-classic.js")
   ) {
     return createCompatId(EXPO_ROUTER_ENTRY_ID);
+  }
+
+  if (normalizedPath.endsWith("/node_modules/expo-sqlite/build/SQLiteDatabase.js")) {
+    return createCompatId(EXPO_SQLITE_SQLITE_DATABASE_ID);
+  }
+
+  if (normalizedPath.endsWith("/node_modules/expo-sqlite/build/hooks.js")) {
+    return createCompatId(EXPO_SQLITE_HOOKS_ID);
   }
 
   if (normalizedPath.endsWith("/node_modules/expo-router/build/qualified-entry.js")) {
@@ -507,9 +728,30 @@ async function renderExpoRouterContext(
   ].join("\n");
 }
 
+async function resolveRawTransformedModuleId(options: {
+  specifier: string;
+  state: Pick<ReactNativePluginState, "platform" | "projectRoot">;
+}) {
+  return createTransformId(
+    stripQuery(
+      (
+        await resolveReactNativeModule({
+          conditions: normalizeConditions(options.state.platform, []),
+          extensions: normalizeExtensions(),
+          fromFile: path.join(options.state.projectRoot, "index.js"),
+          mainFields: normalizeMainFields(options.state.platform, []),
+          platform: options.state.platform,
+          projectRoot: options.state.projectRoot,
+          specifier: options.specifier,
+        })
+      ).filePath,
+    ),
+  );
+}
+
 async function renderCompat(
   id: string,
-  state: Pick<ReactNativePluginState, "platform" | "projectRoot">,
+  state: Pick<ReactNativePluginState, "platform" | "projectRoot" | "resolvePlatform">,
 ) {
   const compatName = id.slice(COMPAT_PREFIX.length);
 
@@ -676,17 +918,36 @@ async function renderCompat(
       ].join("\n");
     case "react-native/Libraries/Core/Devtools/getDevServer":
       return [
+        'import SourceCode from "react-native/Libraries/NativeModules/specs/NativeSourceCode";',
+        "",
+        "let cachedDevServerURL;",
+        "let cachedFullBundleURL;",
+        "",
         "export default function getDevServer() {",
-        "  if (typeof window !== 'undefined') {",
-        "    return {",
-        "      bundleLoadedFromServer: false,",
-        "      url: window.location.origin,",
-        "    };",
+        ...(state.resolvePlatform === "web"
+          ? [
+              "  const windowLocation = typeof window !== 'undefined' ? window.location : undefined;",
+              "  if (windowLocation?.href && windowLocation?.origin) {",
+              "    return {",
+              "      bundleLoadedFromServer: false,",
+              "      fullBundleUrl: windowLocation.href,",
+              "      url: windowLocation.origin,",
+              "    };",
+              "  }",
+              "",
+            ]
+          : []),
+        "  if (cachedDevServerURL === undefined) {",
+        "    const scriptURL = SourceCode.getConstants().scriptURL ?? '';",
+        "    const match = scriptURL.match(/^https?:\\/\\/.*?\\//);",
+        "    cachedDevServerURL = match ? match[0] : null;",
+        "    cachedFullBundleURL = match ? scriptURL : null;",
         "  }",
         "",
         "  return {",
-        "    bundleLoadedFromServer: false,",
-        "    url: '',",
+        "    bundleLoadedFromServer: cachedDevServerURL !== null,",
+        "    fullBundleUrl: cachedFullBundleURL,",
+        "    url: cachedDevServerURL ?? '',",
         "  };",
         "}",
       ].join("\n");
@@ -697,6 +958,53 @@ async function renderCompat(
         "export default NativeEventEmitter;",
       ].join("\n");
     case "react-native/Libraries/NativeModules/specs/NativeSourceCode":
+      if (state.resolvePlatform !== "web") {
+        return [
+          'import Constants from "expo-constants";',
+          "",
+          `const platform = ${JSON.stringify(state.platform)};`,
+          "",
+          "function readManifest() {",
+          "  return Constants.__unsafeNoWarnManifest2 ?? Constants.manifest2 ?? null;",
+          "}",
+          "",
+          "function readExpoClient(manifest) {",
+          "  return Constants.expoConfig ?? manifest?.extra?.expoClient ?? null;",
+          "}",
+          "",
+          "function readHostUri(manifest) {",
+          "  return manifest?.extra?.expoGo?.debuggerHost ?? readExpoClient(manifest)?.hostUri ?? null;",
+          "}",
+          "",
+          "function readMainModuleName(manifest) {",
+          "  return manifest?.extra?.expoGo?.mainModuleName ?? 'index';",
+          "}",
+          "",
+          "function readScriptURL() {",
+          "  const manifest = readManifest();",
+          "  const launchAsset = manifest?.launchAsset;",
+          "  if (typeof launchAsset?.url === 'string') {",
+          "    return launchAsset.url;",
+          "  }",
+          "",
+          "  const hostUri = readHostUri(manifest);",
+          "  if (!hostUri) {",
+          "    return '';",
+          "  }",
+          "",
+          "  return `http://${hostUri}/${encodeURI(readMainModuleName(manifest))}.bundle?dev=true&hot=false&platform=${platform}`;",
+          "}",
+          "",
+          "export const SourceCode = {",
+          "  getConstants() {",
+          "    return { scriptURL: readScriptURL() };",
+          "  },",
+          "};",
+          "",
+          "export default SourceCode;",
+        ].join("\n");
+      }
+
       return [
         "export const SourceCode = {",
         "  getConstants() {",
@@ -749,14 +1057,51 @@ async function renderCompat(
         "export default HMRClient;",
       ].join("\n");
     case "@expo/metro-runtime":
-      return ["export {};", ""].join("\n");
+      if (state.resolvePlatform === "web") {
+        return ["export {};", ""].join("\n");
+      }
+
+      return [
+        `import ${JSON.stringify(
+          stripQuery(
+            (
+              await resolveReactNativeModule({
+                conditions: normalizeConditions(state.platform, []),
+                extensions: normalizeExtensions(),
+                fromFile: path.join(state.projectRoot, "index.js"),
+                mainFields: normalizeMainFields(state.platform, []),
+                platform: state.platform,
+                projectRoot: state.projectRoot,
+                specifier: "@expo/metro-runtime",
+              })
+            ).filePath,
+          ),
+        )};`,
+        "",
+      ].join("\n");
     case EXPO_ROUTER_ENTRY_ID:
       return [
+        ...(state.resolvePlatform === "web" ? [] : createNativeURLSearchParamsPolyfillLines()),
+        'import "@expo/metro-runtime";',
+        'import { App } from "expo-router/build/qualified-entry";',
+        ...(state.resolvePlatform === "web"
+          ? [
+              'import { renderRootComponent } from "expo-router/build/renderRootComponent";',
+              "renderRootComponent(App);",
+            ]
+          : ['import { registerRootComponent } from "expo";', "registerRootComponent(App);"]),
+        "",
+      ].join("\n");
+    case EXPO_ROUTER_CONTEXT_ID:
+      return await renderExpoRouterContext(state);
+    case EXPO_ROUTER_QUALIFIED_ENTRY_ID:
+      return [
+        ...(state.resolvePlatform === "web" ? [] : createNativeURLSearchParamsPolyfillLines()),
         'import React from "react";',
         'import { ExpoRoot } from "expo-router/build/ExpoRoot";',
         'import { Head } from "expo-router/build/head";',
-        'import { renderRootComponent } from "expo-router/build/renderRootComponent";',
         'import { ctx } from "expo-router/_ctx";',
+        'import "expo-router/build/fast-refresh";',
         "",
         "export function App() {",
         "  return React.createElement(",
@@ -766,24 +1111,143 @@ async function renderCompat(
         "  );",
         "}",
         "",
-        "renderRootComponent(App);",
+      ].join("\n");
+    case EXPO_SQLITE_SQLITE_DATABASE_ID:
+      return [
+        `import * as SQLiteDatabaseNamespace from ${JSON.stringify(
+          await resolveRawTransformedModuleId({
+            specifier: "expo-sqlite/build/SQLiteDatabase",
+            state,
+          }),
+        )};`,
+        "",
+        "const SQLiteDatabaseModule = { ...SQLiteDatabaseNamespace };",
+        "",
+        "const originalOpenDatabaseAsync = SQLiteDatabaseModule.openDatabaseAsync;",
+        "",
+        "SQLiteDatabaseModule.openDatabaseAsync = async function openDatabaseAsync(...args) {",
+        "  return await originalOpenDatabaseAsync(...args);",
+        "};",
+        "",
+        "export const {",
+        "  SQLiteDatabase,",
+        "  addDatabaseChangeListener,",
+        "  backupDatabaseAsync,",
+        "  backupDatabaseSync,",
+        "  bundledExtensions,",
+        "  defaultDatabaseDirectory,",
+        "  deleteDatabaseAsync,",
+        "  deleteDatabaseSync,",
+        "  deserializeDatabaseAsync,",
+        "  deserializeDatabaseSync,",
+        "  openDatabaseAsync,",
+        "  openDatabaseSync,",
+        "} = SQLiteDatabaseModule;",
+        "",
+        "export default SQLiteDatabaseModule;",
         "",
       ].join("\n");
-    case EXPO_ROUTER_CONTEXT_ID:
-      return await renderExpoRouterContext(state);
-    case EXPO_ROUTER_QUALIFIED_ENTRY_ID:
+    case EXPO_SQLITE_HOOKS_ID:
       return [
-        'import React from "react";',
-        'import { ExpoRoot } from "expo-router/build/ExpoRoot";',
-        'import { Head } from "expo-router/build/head";',
-        'import { ctx } from "expo-router/_ctx";',
+        `import React from "react";`,
+        `import * as SQLiteDatabaseModule from ${JSON.stringify(
+          await resolveRawTransformedModuleId({
+            specifier: "expo-sqlite/build/SQLiteDatabase",
+            state,
+          }),
+        )};`,
         "",
-        "export function App() {",
-        "  return React.createElement(",
-        "    Head.Provider,",
-        "    null,",
-        "    React.createElement(ExpoRoot, { context: ctx }),",
-        "  );",
+        "const SQLiteContext = React.createContext(null);",
+        "",
+        "export function deepEqual(a, b) {",
+        "  if (a === b) {",
+        "    return true;",
+        "  }",
+        "",
+        "  if (a == null || b == null) {",
+        "    return false;",
+        "  }",
+        "",
+        '  if (typeof a !== "object" || typeof b !== "object") {',
+        "    return false;",
+        "  }",
+        "",
+        "  return Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((key) => deepEqual(a[key], b[key]));",
+        "}",
+        "",
+        "export function useSQLiteContext() {",
+        "  const context = React.useContext(SQLiteContext);",
+        "",
+        "  if (context == null) {",
+        '    throw new Error("useSQLiteContext must be used within a <SQLiteProvider>");',
+        "  }",
+        "",
+        "  return context;",
+        "}",
+        "",
+        "export function importDatabaseFromAssetAsync() {",
+        '  throw new Error("importDatabaseFromAssetAsync is not supported in the Vifx SQLite hooks compat.");',
+        "}",
+        "",
+        "function SQLiteProviderNonSuspense(props) {",
+        "  const { children, databaseName, directory, onError, onInit, options, assetSource } = props;",
+        "  const databaseRef = React.useRef(null);",
+        "  const [loading, setLoading] = React.useState(true);",
+        "  const [error, setError] = React.useState(null);",
+        "",
+        "  React.useEffect(() => {",
+        "    let cancelled = false;",
+        "    async function setup() {",
+        "      try {",
+        "        const database = await SQLiteDatabaseModule.openDatabaseAsync(databaseName, options, directory);",
+        "",
+        "        if (cancelled) {",
+        "          await database.closeAsync();",
+        "          return;",
+        "        }",
+        "",
+        "        if (onInit) {",
+        "          await onInit(database);",
+        "        }",
+        "",
+        "        databaseRef.current = database;",
+        "        setLoading(false);",
+        "      } catch (setupError) {",
+        "        if (!cancelled) {",
+        "          setError(setupError);",
+        "        }",
+        "      }",
+        "    }",
+        "",
+        "    void setup();",
+        "",
+        "    return () => {",
+        "      cancelled = true;",
+        "      const database = databaseRef.current;",
+        "",
+        "      if (database) {",
+        "        void database.closeAsync().catch(() => {});",
+        "      }",
+        "    };",
+        "  }, [assetSource, databaseName, directory, onInit, options]);",
+        "",
+        "  if (error) {",
+        "    if (onError) {",
+        "      onError(error);",
+        "    } else {",
+        "      throw error;",
+        "    }",
+        "  }",
+        "",
+        "  if (loading || !databaseRef.current) {",
+        "    return null;",
+        "  }",
+        "",
+        "  return React.createElement(SQLiteContext.Provider, { value: databaseRef.current }, children);",
+        "}",
+        "",
+        "export function SQLiteProvider(props) {",
+        "  return React.createElement(SQLiteProviderNonSuspense, props);",
         "}",
         "",
       ].join("\n");
@@ -793,6 +1257,18 @@ async function renderCompat(
         "",
       ].join("\n");
     case EXPO_WINTER_URL_ID:
+      if (state.resolvePlatform !== "web") {
+        return [
+          `export { URL, URLSearchParams } from ${JSON.stringify(
+            await resolveRawTransformedModuleId({
+              specifier: EXPO_WINTER_URL_ID,
+              state,
+            }),
+          )};`,
+          "",
+        ].join("\n");
+      }
+
       return [
         `const browserGlobals = globalThis.${WEB_RUNTIME_BROWSER_GLOBALS_KEY} ?? {};`,
         "export const URL = browserGlobals.URL ?? globalThis.URL ?? (typeof window !== 'undefined' ? window.URL : undefined);",
@@ -804,6 +1280,96 @@ async function renderCompat(
         "export default function validateWorkletsVersion() {",
         "  return { ok: true };",
         "}",
+        "",
+      ].join("\n");
+    case REACT_NATIVE_WORKLETS_BUNDLE_UNPACKER_ID:
+      if (state.resolvePlatform === "web") {
+        return null;
+      }
+
+      return [
+        "function createWorkletFromInitData(objectToUnpack, closureVariables) {",
+        "  const initData = objectToUnpack?.__initData;",
+        "  if (!initData || typeof initData.code !== 'string') {",
+        "    return null;",
+        "  }",
+        "",
+        "  const worklet = (0, eval)(`(${initData.code})`);",
+        "  if (typeof worklet !== 'function') {",
+        "    throw new Error('Vifx could not evaluate a Worklets bundle-mode worklet.');",
+        "  }",
+        "",
+        "  worklet.__closure = closureVariables ?? objectToUnpack.__closure ?? {};",
+        "  worklet.__workletHash = objectToUnpack.__workletHash;",
+        "  worklet.__initData = initData;",
+        "  return worklet;",
+        "}",
+        "",
+        "function getWorkletFromMetroRequire(workletHash, closureVariables, objectToUnpack) {",
+        "  const metroRequire = globalThis.__r;",
+        "  if (typeof metroRequire === 'function') {",
+        "    try {",
+        "      const metroModule = metroRequire(workletHash);",
+        "      const metroFactory = metroModule?.default ?? metroModule;",
+        "      if (typeof metroFactory === 'function') {",
+        "        return metroFactory(closureVariables);",
+        "      }",
+        "    } catch (error) {",
+        "      const fallbackWorklet = createWorkletFromInitData(objectToUnpack, closureVariables);",
+        "      if (fallbackWorklet) {",
+        "        return fallbackWorklet;",
+        "      }",
+        "      throw error;",
+        "    }",
+        "  }",
+        "",
+        "  const fallbackWorklet = createWorkletFromInitData(objectToUnpack, closureVariables);",
+        "  if (fallbackWorklet) {",
+        "    return fallbackWorklet;",
+        "  }",
+        "",
+        "  throw new Error('Vifx could not resolve a Worklets bundle-mode worklet without Metro __r.');",
+        "}",
+        "",
+        "function getWorklet(workletHash, closureVariables, objectToUnpack) {",
+        "  return getWorkletFromMetroRequire(workletHash, closureVariables, objectToUnpack);",
+        "}",
+        "",
+        "export function bundleValueUnpacker(objectToUnpack, category, remoteFunctionName) {",
+        "  const workletHash = objectToUnpack?.__workletHash;",
+        "  if (workletHash !== undefined) {",
+        "    return getWorklet(workletHash, objectToUnpack.__closure, objectToUnpack);",
+        "  }",
+        "",
+        "  if (objectToUnpack?.__init !== undefined) {",
+        "    return objectToUnpack.__init();",
+        "  }",
+        "",
+        "  if (category === 'RemoteFunction') {",
+        "    const remoteFunctionHolder = function remoteFunctionHolder() {",
+        "      const label = remoteFunctionName ? `function \\`${remoteFunctionName}\\`` : 'anonymous function';",
+        "      throw new Error(`Tried to synchronously call a non-worklet ${label} on the UI thread.`);",
+        "    };",
+        "    remoteFunctionHolder.__remoteFunction = objectToUnpack;",
+        "    return remoteFunctionHolder;",
+        "  }",
+        "",
+        '  throw new Error(`Data type in category "${category}" not recognized by Vifx Worklets unpacker.`);',
+        "}",
+        "",
+      ].join("\n");
+    case REACT_NATIVE_WORKLETS_RUNTIME_ENTRY_ID:
+      if (state.resolvePlatform === "web") {
+        return null;
+      }
+
+      return [
+        "export function bundleModeInit() {",
+        "  // Vifx native bundles do not use Metro's module registry, so Worklets",
+        "  // must stay on the legacy init-data path instead of bundle mode.",
+        "}",
+        "",
+        "bundleModeInit();",
         "",
       ].join("\n");
     case EXPO_MODULES_CORE_DANGEROUS_INTERNAL_ID:
@@ -882,6 +1448,21 @@ function normalizeBabelInPackages(packages?: string[]) {
   return dedupe((packages ?? []).map((value) => value.trim()).filter(Boolean));
 }
 
+function normalizeMainFields(resolvePlatform: VifxPlatform, mainFields?: readonly string[]) {
+  const normalized = dedupe((mainFields ?? []).map((value) => value.trim()).filter(Boolean));
+  const defaults = resolvePlatform === "web" ? DEFAULT_WEB_MAIN_FIELDS : DEFAULT_NATIVE_MAIN_FIELDS;
+
+  if (normalized.length === 0) {
+    return [...defaults];
+  }
+
+  if (resolvePlatform !== "web" && normalized.join("\0") === DEFAULT_WEB_MAIN_FIELDS.join("\0")) {
+    return [...DEFAULT_NATIVE_MAIN_FIELDS];
+  }
+
+  return normalized;
+}
+
 function matchesNodeModulePackagePattern(id: string, packagePatterns: string[]) {
   const normalizedId = toPosixPath(stripQuery(id));
 
@@ -896,6 +1477,10 @@ function matchesNodeModulePackagePattern(id: string, packagePatterns: string[]) 
 
     return normalizedId.includes(`/node_modules/${packagePattern}/`);
   });
+}
+
+function isTransformableJavaScriptPath(id: string) {
+  return /\.[cm]?[jt]sx?$/u.test(stripQuery(id));
 }
 
 async function pathExists(filePath: string) {
@@ -917,6 +1502,29 @@ function joinSpecifier(base: string, suffix: string) {
   }
 
   return `${base}/${suffix}`;
+}
+
+function readBareSpecifierPackageName(specifier: string) {
+  if (
+    isPathLikeSpecifier(specifier) ||
+    specifier.startsWith("\0") ||
+    specifier.startsWith("data:")
+  ) {
+    return null;
+  }
+
+  const segments = specifier.split("/");
+  if (specifier.startsWith("@")) {
+    const [scope, name] = segments;
+    return scope && name ? `${scope}/${name}` : null;
+  }
+
+  return segments[0] ?? null;
+}
+
+function shouldResolveFromProjectRoot(specifier: string) {
+  const packageName = readBareSpecifierPackageName(specifier);
+  return packageName ? NATIVE_SINGLETON_PACKAGE_SET.has(packageName) : false;
 }
 
 function applyAliases(source: string, aliases: Record<string, string>, projectRoot: string) {
@@ -1004,12 +1612,36 @@ function createOxcTransformOptions(id: string) {
   };
 }
 
-function shouldTransformWithProjectBabel(id: string, babelInPackages: string[]) {
-  if (!id.includes("/node_modules/")) {
+function shouldTransformWithProjectBabel(
+  id: string,
+  state: Pick<ReactNativePluginState, "babelInPackages" | "resolvePlatform">,
+) {
+  if (id.includes("\0") || !id.includes("/node_modules/") || !isTransformableJavaScriptPath(id)) {
     return false;
   }
 
-  return matchesNodeModulePackagePattern(id, babelInPackages);
+  if (state.resolvePlatform !== "web") {
+    return true;
+  }
+
+  return matchesNodeModulePackagePattern(id, state.babelInPackages);
+}
+
+function shouldTransformProjectSourceWithBabel(
+  id: string,
+  state: Pick<ReactNativePluginState, "projectRoot" | "resolvePlatform">,
+) {
+  if (state.resolvePlatform === "web" || id.includes("\0") || id.includes("/node_modules/")) {
+    return false;
+  }
+
+  if (!isTransformableJavaScriptPath(id)) {
+    return false;
+  }
+
+  const normalizedId = stripQuery(id);
+  const relativePath = path.relative(state.projectRoot, normalizedId);
+  return relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
 }
 
 async function loadProjectBabelRuntime(projectRoot: string): Promise<ProjectBabelRuntime | null> {
@@ -1050,6 +1682,41 @@ async function loadProjectBabelRuntime(projectRoot: string): Promise<ProjectBabe
 }
 
 function createReactNativePlugin(state: ReactNativePluginState): Plugin {
+  const transformWithProjectBabel = async (code: string, id: string, isNodeModule: boolean) => {
+    const runtime = await loadProjectBabelRuntime(state.projectRoot);
+
+    if (!runtime) {
+      return null;
+    }
+
+    const transformed = await runtime.transformAsync(code, {
+      babelrc: false,
+      caller: {
+        bundler: "metro",
+        isDev: true,
+        isHMREnabled: false,
+        isNodeModule,
+        name: "vifx",
+        platform: state.resolvePlatform,
+        projectRoot: state.projectRoot,
+        supportsStaticESM: !isNodeModule,
+      },
+      configFile: false,
+      filename: id,
+      presets: [runtime.presetPath],
+      sourceMaps: true,
+    });
+
+    if (!transformed?.code) {
+      return null;
+    }
+
+    return {
+      code: transformed.code,
+      map: (transformed.map as TransformResult["map"]) ?? null,
+    } satisfies TransformResult;
+  };
+
   return {
     name: "vifx:react-native",
     enforce: "pre",
@@ -1057,11 +1724,15 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       return {
         assetsInclude: state.assetExtensions.map((extension) => `**/*.${extension}`),
         define: {
-          __DEV__: "false",
+          __DEV__: state.resolvePlatform === "web" ? "false" : "true",
           global: "globalThis",
+          "process.env.NODE_ENV": JSON.stringify(
+            state.resolvePlatform === "web" ? "production" : "development",
+          ),
         },
         resolve: {
           conditions: state.conditions,
+          dedupe: [...NATIVE_SINGLETON_PACKAGES],
         },
       };
     },
@@ -1072,8 +1743,16 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
 
       if (id.startsWith(TRANSFORM_PREFIX)) {
         const originalId = id.slice(TRANSFORM_PREFIX.length);
+        const source = await readFile(originalId, "utf8");
+        if (shouldTransformWithProjectBabel(originalId, state)) {
+          const transformed = await transformWithProjectBabel(source, originalId, true);
+          if (transformed) {
+            return transformed.code;
+          }
+        }
+
         const transformed = await transformWithOxc(
-          await readFile(originalId, "utf8"),
+          source,
           originalId,
           createOxcTransformOptions(originalId),
         );
@@ -1081,7 +1760,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         return transformed.code;
       }
 
-      const compatPathId = resolveCompatPath(id, state);
+      const compatPathId = resolveCompatPath(id);
       if (compatPathId) {
         return await renderCompat(compatPathId, state);
       }
@@ -1093,35 +1772,30 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       return renderShim(id, state.platform);
     },
     async transform(code, id, _options): Promise<TransformResult | null> {
-      const compatPathId = resolveCompatPath(id, state);
-      if (compatPathId) {
-        const compatCode = await renderCompat(compatPathId, state);
-        if (compatCode !== null) {
-          return {
-            code: compatCode,
-            map: null,
-          };
+      if (!id.startsWith(TRANSFORM_PREFIX)) {
+        const compatPathId = resolveCompatPath(id);
+        if (compatPathId) {
+          const compatCode = await renderCompat(compatPathId, state);
+          if (compatCode !== null) {
+            return {
+              code: compatCode,
+              map: null,
+            };
+          }
         }
       }
 
-      if (shouldTransformWithProjectBabel(id, state.babelInPackages)) {
-        const runtime = await loadProjectBabelRuntime(state.projectRoot);
+      if (shouldTransformWithProjectBabel(id, state)) {
+        const transformed = await transformWithProjectBabel(code, id, true);
+        if (transformed) {
+          return transformed;
+        }
+      }
 
-        if (runtime) {
-          const transformed = await runtime.transformAsync(code, {
-            babelrc: false,
-            configFile: false,
-            filename: id,
-            presets: [runtime.presetPath],
-            sourceMaps: true,
-          });
-
-          if (transformed?.code) {
-            return {
-              code: transformed.code,
-              map: (transformed.map as TransformResult["map"]) ?? null,
-            };
-          }
+      if (shouldTransformProjectSourceWithBabel(id, state)) {
+        const transformed = await transformWithProjectBabel(code, id, false);
+        if (transformed) {
+          return transformed;
         }
       }
 
@@ -1155,6 +1829,10 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         return shimId;
       }
 
+      if (source.startsWith(COMPAT_PREFIX) || source.startsWith(TRANSFORM_PREFIX)) {
+        return source;
+      }
+
       if (
         source.startsWith(SHIM_PREFIX) ||
         source.startsWith("\0") ||
@@ -1169,12 +1847,16 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
           ? stripQuery(importer.slice(TRANSFORM_PREFIX.length))
           : stripQuery(importer)
         : path.resolve(state.projectRoot, state.entry);
+      const resolverFromFile = shouldResolveFromProjectRoot(source)
+        ? path.join(state.projectRoot, "package.json")
+        : fromFile;
 
       try {
         const resolved = await resolveReactNativeModule({
           conditions: state.conditions,
           extensions: [...state.extensions, ...state.assetExtensions],
-          fromFile,
+          fromFile: resolverFromFile,
+          mainFields: state.mainFields,
           platform: state.resolvePlatform,
           projectRoot: state.projectRoot,
           specifier: source,
@@ -1185,7 +1867,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
           state.assetFiles.add(resolvedPath);
         }
 
-        const compatPathId = resolveCompatPath(resolvedPath, state);
+        const compatPathId = resolveCompatPath(resolvedPath);
         if (compatPathId) {
           return compatPathId;
         }
@@ -1283,6 +1965,10 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
     entry: options.entry ?? "./index.js",
     extensions: normalizeExtensions(options.extensions),
     jsxInPackages: normalizeJsxInPackages(options.jsxInPackages),
+    mainFields: normalizeMainFields(
+      options.resolvePlatform ?? options.platform,
+      options.mainFields,
+    ),
     platform: options.platform,
     projectRoot,
     reactNativeCompat: options.reactNativeCompat ?? "none",
@@ -1315,6 +2001,7 @@ async function resolveWebPreviewDependency(options: {
   conditions?: string[];
   extensions?: string[];
   fromFile: string;
+  mainFields?: string[];
   projectRoot: string;
   specifier: string;
 }) {
@@ -1322,6 +2009,7 @@ async function resolveWebPreviewDependency(options: {
     conditions: normalizeConditions("web", options.conditions),
     extensions: normalizeExtensions(options.extensions),
     fromFile: options.fromFile,
+    mainFields: normalizeMainFields("web", options.mainFields),
     platform: "web",
     projectRoot: options.projectRoot,
     specifier: options.specifier,
@@ -1333,6 +2021,7 @@ async function resolveWebPreviewDependency(options: {
 async function createExpoRouterWebPreviewEntry(options: {
   conditions?: string[];
   extensions?: string[];
+  mainFields?: string[];
   outDir: string;
   platform: VifxReactNativePluginOptions["platform"];
   projectRoot: string;
@@ -1361,6 +2050,7 @@ async function createExpoRouterWebPreviewEntry(options: {
     conditions: options.conditions,
     extensions: options.extensions,
     fromFile: generatedEntryPath,
+    mainFields: options.mainFields,
     projectRoot: options.projectRoot,
     specifier: "react",
   });
@@ -1368,6 +2058,7 @@ async function createExpoRouterWebPreviewEntry(options: {
     conditions: options.conditions,
     extensions: options.extensions,
     fromFile: generatedEntryPath,
+    mainFields: options.mainFields,
     projectRoot: options.projectRoot,
     specifier: "expo-router/build/ExpoRoot",
   });
@@ -1375,6 +2066,7 @@ async function createExpoRouterWebPreviewEntry(options: {
     conditions: options.conditions,
     extensions: options.extensions,
     fromFile: generatedEntryPath,
+    mainFields: options.mainFields,
     projectRoot: options.projectRoot,
     specifier: "expo-router/build/head",
   });
@@ -1382,6 +2074,7 @@ async function createExpoRouterWebPreviewEntry(options: {
     conditions: options.conditions,
     extensions: options.extensions,
     fromFile: generatedEntryPath,
+    mainFields: options.mainFields,
     projectRoot: options.projectRoot,
     specifier: "expo-router/build/renderRootComponent",
   });
@@ -1420,6 +2113,7 @@ async function writeWebRuntimeArtifacts(options: {
   entry: string;
   extensions?: string[];
   jsxInPackages?: string[];
+  mainFields?: string[];
   outDir: string;
   platform: VifxReactNativePluginOptions["platform"];
   projectRoot: string;
@@ -1436,6 +2130,7 @@ async function writeWebRuntimeArtifacts(options: {
       ? await createExpoRouterWebPreviewEntry({
           conditions: options.conditions,
           extensions: options.extensions,
+          mainFields: options.mainFields,
           outDir: options.outDir,
           platform: options.platform,
           projectRoot: options.projectRoot,
@@ -1450,6 +2145,7 @@ async function writeWebRuntimeArtifacts(options: {
     entry: previewEntry,
     extensions: normalizeExtensions(options.extensions),
     jsxInPackages: normalizeJsxInPackages(options.jsxInPackages),
+    mainFields: normalizeMainFields("web", options.mainFields),
     platform: options.platform,
     projectRoot: options.projectRoot,
     reactNativeCompat: options.reactNativeCompat,
@@ -1740,6 +2436,10 @@ export async function buildReactNativeBundle(
     entry,
     extensions: normalizeExtensions(options.extensions),
     jsxInPackages: normalizeJsxInPackages(options.jsxInPackages),
+    mainFields: normalizeMainFields(
+      options.resolvePlatform ?? options.platform,
+      options.mainFields,
+    ),
     platform: options.platform,
     projectRoot,
     reactNativeCompat: options.reactNativeCompat ?? "none",
@@ -1812,6 +2512,7 @@ export async function buildReactNativeBundle(
           entry,
           extensions: options.extensions,
           jsxInPackages: options.jsxInPackages,
+          mainFields: options.mainFields,
           outDir: absoluteOutDir,
           platform: options.platform,
           projectRoot,

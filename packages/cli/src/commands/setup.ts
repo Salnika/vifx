@@ -5,7 +5,7 @@ import { VifxError } from "@vifx/errors";
 import { parseFlags } from "../lib/args.ts";
 import type { CliResult, ExecuteCliOptions } from "../types.ts";
 
-export const SETUP_HELP = `Usage: vifx setup [path] [--yes] [--dry-run] [--json] [--force] [--with-vite-config]
+export const SETUP_HELP = `Usage: vifx setup [path] [--yes] [--dry-run] [--json] [--force] [--expo-go] [--with-vite-config]
 
 Onboards an existing Expo project with a Vifx-owned config without editing Expo-owned app files.
 
@@ -14,6 +14,7 @@ Options:
   --dry-run           Optional preview mode without writing files.
   --json              Output machine-readable setup details. Previews unless combined with --yes.
   --force             Replace existing Vifx-owned files.
+  --expo-go           Generate native Expo targets for the Vifx Expo Go server.
   --with-vite-config  Also create a Vifx-owned vite.config.vifx.ts for advanced direct Vite usage.
   --help              Show this message.
 `;
@@ -39,12 +40,18 @@ function formatChangeSummary(changes: PlannedFileChange[]) {
   return changes.map((change) => `  [${change.kind}] ${change.path}`);
 }
 
-function createNextCommands(options: { includeExpoDev: boolean; targetPath: string }) {
+function createNextCommands(options: {
+  expoGo: boolean;
+  includeExpoDev: boolean;
+  targetPath: string;
+}) {
   const targetPath = formatShellArg(options.targetPath);
   const nextCommands = [`pnpm vifx build ${targetPath}`, `pnpm vifx expo audit ${targetPath}`];
 
   if (options.includeExpoDev) {
-    nextCommands.push(`pnpm vifx expo dev ${targetPath} --platform ios`);
+    nextCommands.push(
+      `pnpm vifx expo dev ${targetPath} --platform ios${options.expoGo ? " --expo-go" : ""}`,
+    );
   }
 
   nextCommands.push(`pnpm vifx expo export ${targetPath} --out-dir dist/expo`);
@@ -92,6 +99,7 @@ function renderTerminalSetup(options: {
   detectedExpoVersion: string | null;
   detectedProjectType: string;
   detectedReactNativeVersion: string | null;
+  expoGo: boolean;
   dryRun: boolean;
   expoRouter: boolean;
   iosHostPresent: boolean;
@@ -121,13 +129,16 @@ function renderTerminalSetup(options: {
     `Expo Router: ${options.expoRouter ? "detected" : "missing"}`,
     `app/ directory: ${options.appDirectory ? "detected" : "missing"}`,
     `iOS host: ${options.iosHostPresent ? "present" : "missing"}`,
+    `Expo Go server: ${options.expoGo ? "requested" : "skipped"}`,
     `Advanced Vite config: ${options.withViteConfig ? "requested" : "skipped"}`,
     "",
     "Planned changes:",
     ...formatChangeSummary(options.changes),
     "",
     "Boundaries:",
-    "  - This setup does not install Expo Go parity.",
+    options.expoGo
+      ? "  - This setup configures the early Vifx Expo Go server path, not full Expo CLI parity."
+      : "  - This setup does not configure the Expo Go server path unless --expo-go is passed.",
     "  - This setup does not install React Native Fast Refresh parity.",
     "  - This setup does not install EAS parity.",
     "  - This setup does not install native build or runtime parity.",
@@ -146,7 +157,7 @@ export async function runSetupCommand(
   options: SetupCommandOptions = {},
 ): Promise<CliResult> {
   const parsed = parseFlags(argv, {
-    booleanFlags: ["help", "yes", "dry-run", "json", "force", "with-vite-config"],
+    booleanFlags: ["expo-go", "help", "yes", "dry-run", "json", "force", "with-vite-config"],
     aliases: {
       "-h": "--help",
     },
@@ -179,12 +190,14 @@ export async function runSetupCommand(
   const targetPath = parsed.positional[0] ?? ".";
   const projectRoot = path.resolve(cwd, targetPath);
   const plan = await planExpoSetup(projectRoot, {
+    expoGo: Boolean(parsed.flags["expo-go"]),
     force: Boolean(parsed.flags.force),
     withViteConfig: Boolean(parsed.flags["with-vite-config"]),
   });
   const dryRun = Boolean(parsed.flags["dry-run"] || (parsed.flags.json && !parsed.flags.yes));
   const nextCommands = createNextCommands({
-    includeExpoDev: plan.webPreviewConfigured,
+    expoGo: plan.expoGo,
+    includeExpoDev: plan.webPreviewConfigured || plan.expoGo,
     targetPath,
   });
 
@@ -223,6 +236,7 @@ export async function runSetupCommand(
           detectedProjectType: plan.detectedProjectType,
           detectedExpoVersion: plan.detectedExpoVersion,
           detectedReactNativeVersion: plan.detectedReactNativeVersion,
+          expoGo: plan.expoGo,
           expoRouter: plan.expoRouter,
           appDirectory: plan.appDirectory,
           iosHostPresent: plan.iosHostPresent,
@@ -251,6 +265,7 @@ export async function runSetupCommand(
       detectedProjectType: plan.detectedProjectType,
       detectedReactNativeVersion: plan.detectedReactNativeVersion,
       dryRun,
+      expoGo: plan.expoGo,
       expoRouter: plan.expoRouter,
       iosHostPresent: plan.iosHostPresent,
       nextCommands,
