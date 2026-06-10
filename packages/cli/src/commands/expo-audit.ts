@@ -4,6 +4,12 @@ import path from "node:path";
 import { loadVifxConfig } from "@vifx/config";
 import { VifxError, isVifxError } from "@vifx/errors";
 import { evaluateExpoNoMetroContract, writeExpoExport } from "@vifx/expo-export";
+import {
+  formatVifxHeader,
+  formatVifxInfo,
+  formatVifxKeyValues,
+  formatVifxWarning,
+} from "@vifx/logger";
 import { startExpoDevServer, startExpoGoDevServer } from "@vifx/vite-plugin-expo";
 import type { VifxExpoDevServer, VifxExpoGoDevServer } from "@vifx/vite-plugin-expo";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
@@ -14,6 +20,7 @@ import type {
   VifxJsonObject,
   VifxJsonValue,
 } from "@vifx/types";
+import qrcodeTerminal from "qrcode-terminal";
 import { parseFlags } from "../lib/args.ts";
 import type { CliResult } from "../types.ts";
 
@@ -33,7 +40,74 @@ Options:
 `;
 
 const DEFAULT_EXPO_DEV_HOST = "127.0.0.1";
+const DEFAULT_EXPO_GO_DEV_HOST = "0.0.0.0";
 const DEFAULT_EXPO_DEV_PORT = 5173;
+
+function renderTerminalQrCode(value: string) {
+  let rendered = "";
+
+  qrcodeTerminal.generate(value, { small: true }, (qrCode) => {
+    rendered = qrCode;
+  });
+
+  return rendered.trimEnd();
+}
+
+function formatExpoGoServerOutput(options: {
+  configFile: string | undefined;
+  server: VifxExpoGoDevServer;
+}) {
+  const { server } = options;
+  const qrCode = renderTerminalQrCode(server.expoGoUrl);
+
+  return [
+    formatVifxHeader("Vifx Expo Go Dev", "Scan the QR code with Expo Go."),
+    "",
+    qrCode,
+    "",
+    formatVifxKeyValues([
+      { label: "Project", value: server.projectRoot },
+      { label: "Config", value: options.configFile ?? "inline config" },
+      { label: "Platform", value: server.platform },
+      { label: "Local", value: server.url },
+      { label: "Expo Go", value: server.expoGoUrl },
+      { label: "Manifest", value: server.manifestUrl },
+      { label: "Bundle", value: server.bundleUrl },
+      { label: "Messages", value: server.messageSocketUrl },
+      { label: "Events", value: server.eventsSocketUrl },
+      { label: "Refresh", value: server.fastRefresh ? "Fast Refresh" : `${server.hmr} only` },
+    ]),
+    "",
+    formatVifxWarning(
+      "Boundary: Vifx serves Expo Go manifest and bundle endpoints backed by Vite. It does not replace Expo native runtimes, EAS, or native app binaries.",
+    ),
+    formatVifxInfo("Press Ctrl+C to stop the Expo Go dev server."),
+  ].join("\n");
+}
+
+function formatExpoDevServerOutput(options: {
+  configFile: string | undefined;
+  server: VifxExpoDevServer;
+}) {
+  const { server } = options;
+
+  return [
+    formatVifxHeader("Vifx Expo Dev", "Browser preview server is ready."),
+    "",
+    formatVifxKeyValues([
+      { label: "Project", value: server.projectRoot },
+      { label: "Config", value: options.configFile ?? "inline config" },
+      { label: "Platform", value: server.platform },
+      { label: "Local", value: server.url },
+      { label: "Refresh", value: server.fastRefresh ? "Fast Refresh" : `${server.hmr} only` },
+    ]),
+    "",
+    formatVifxWarning(
+      "Boundary: this is a Vite bundle/dev server for configured Expo targets. It is not Expo CLI, Expo Go, native runtime parity, or React Native Fast Refresh parity.",
+    ),
+    formatVifxInfo("Press Ctrl+C to stop the Expo dev server."),
+  ].join("\n");
+}
 
 const EXPO_DEV_HELP = `Usage: vifx expo dev [path] [--platform ios|android] [--expo-go] [--config <file>] [--host <host>] [--public-host <host>] [--port <number>] [--json]
 
@@ -43,7 +117,7 @@ Options:
   --platform  Restrict the dev server to one platform target.
   --expo-go   Serve an Expo Go compatible native manifest and Vifx bundle URL.
   --config    Use a specific Vifx config file.
-  --host      Hostname to bind the local dev server to. Default: 127.0.0.1.
+  --host      Hostname to bind the local dev server to. Default: 127.0.0.1, or 0.0.0.0 with --expo-go.
   --public-host  Hostname or LAN IP emitted in Expo Go URLs when it differs from --host.
   --port      Port to bind the local dev server to. Default: 5173.
   --json      Output machine-readable server details.
@@ -1091,7 +1165,12 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
     });
   }
 
-  const host = typeof parsed.flags.host === "string" ? parsed.flags.host : DEFAULT_EXPO_DEV_HOST;
+  const host =
+    typeof parsed.flags.host === "string"
+      ? parsed.flags.host
+      : parsed.flags["expo-go"]
+        ? DEFAULT_EXPO_GO_DEV_HOST
+        : DEFAULT_EXPO_DEV_HOST;
   const publicHost =
     typeof parsed.flags["public-host"] === "string" ? parsed.flags["public-host"] : undefined;
   const port = parseExpoDevServerPort(parsed.flags.port);
@@ -1151,22 +1230,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
 
     return {
       exitCode: 0,
-      stdout: [
-        "Vifx Expo Go Dev",
-        "",
-        `Config: ${loaded.filePath ?? "inline config"}`,
-        `Project root: ${server.projectRoot}`,
-        `Platform: ${server.platform}`,
-        `URL: ${server.url}`,
-        `Expo Go URL: ${server.expoGoUrl}`,
-        `Manifest URL: ${server.manifestUrl}`,
-        `Bundle URL: ${server.bundleUrl}`,
-        `Message socket: ${server.messageSocketUrl}`,
-        `Events socket: ${server.eventsSocketUrl}`,
-        "",
-        "Boundary: this server serves Expo Go manifest and bundle endpoints backed by Vifx/Vite. It does not replace Expo native runtimes, EAS, or native app binaries.",
-        "Press Ctrl+C to stop the Expo Go dev server.",
-      ].join("\n"),
+      stdout: formatExpoGoServerOutput({ configFile: loaded.filePath, server }),
       stderr: "",
       waitUntilExit,
     };
@@ -1219,17 +1283,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
 
   return {
     exitCode: 0,
-    stdout: [
-      "Vifx Expo Dev",
-      "",
-      `Config: ${loaded.filePath ?? "inline config"}`,
-      `Project root: ${server.projectRoot}`,
-      `Platform: ${server.platform}`,
-      `URL: ${server.url}`,
-      "",
-      "Boundary: this is a Vite bundle/dev server for configured Expo targets. It is not Expo CLI, Expo Go, native runtime parity, or React Native Fast Refresh parity.",
-      "Press Ctrl+C to stop the Expo dev server.",
-    ].join("\n"),
+    stdout: formatExpoDevServerOutput({ configFile: loaded.filePath, server }),
     stderr: "",
     waitUntilExit,
   };
