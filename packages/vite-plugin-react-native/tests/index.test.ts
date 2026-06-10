@@ -307,6 +307,51 @@ test("buildReactNativeBundle can use the built-in react-native-web compat layer"
   ).toContain('<div id="root"></div>');
 });
 
+test("buildReactNativeBundle uses native Reanimated compat for JS-driven Expo Go bundles", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";',
+      "",
+      "export function AnimatedExample() {",
+      "  const shared = useSharedValue(1);",
+      "  const style = useAnimatedStyle(() => ({ opacity: shared.value }));",
+      "  return { animatedView: Animated.View, style };",
+      "}",
+      "",
+      "export function readCompat() {",
+      "  let hidden = false;",
+      "  const value = { value: 1 };",
+      "  value.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.cubic) }, (finished) => {",
+      "    if (finished) {",
+      "      runOnJS((next) => { hidden = next; })(true);",
+      "    }",
+      "  });",
+      "  return [hidden, value.value, interpolate(0.5, [0, 1], [10, 20])];",
+      "}",
+      "",
+      'console.log("reanimated compat", readCompat());',
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    outDir: ".vifx/helper-ios-reanimated-compat",
+    platform: "ios",
+    projectRoot,
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+
+  expect(bundleSource).toContain("vifx:compat:react-native-reanimated");
+  expect(bundleSource).toContain("var AnimatedBase");
+  expect(bundleSource).toContain("callback?.(true, toValue);");
+  expect(bundleSource).toContain("outputMin + clamp");
+  expect(bundleSource).not.toContain("initializeReanimatedModule");
+});
+
 test("buildReactNativeBundle generates an Expo Router context for web runtime previews", async () => {
   const projectRoot = await copyFixture("expo-router-basic");
   const packageRoot = path.join(projectRoot, "node_modules", "expo-router");
