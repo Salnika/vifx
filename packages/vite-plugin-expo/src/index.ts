@@ -80,6 +80,8 @@ export interface VifxExpoGoDevServer {
   hmr: "reload";
   host: string;
   hostUri: string;
+  hotSocketUrl?: string;
+  inspectorProxyUrl?: string;
   manifestUrl: string;
   messageSocketUrl: string;
   metro: false;

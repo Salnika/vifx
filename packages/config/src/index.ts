@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { VifxError, toVifxError } from "@vifx/errors";
 import type {
+  VifxBundleMode,
   VifxBundlePlatform,
   VifxBundleTargetConfig,
   VifxConfig,
@@ -10,6 +11,7 @@ import type {
   VifxExpoOptions,
   VifxLogLevel,
   VifxLoggerConfig,
+  VifxModuleFormat,
   VifxPlatform,
   VifxProjectType,
   VifxReactNativeCompatMode,
@@ -56,6 +58,8 @@ const VALID_PROJECT_TYPES = new Set<VifxProjectType>([
 const VALID_LOG_LEVELS = new Set<VifxLogLevel>(["error", "warn", "info", "debug"]);
 const VALID_VITE_PLUGIN_MODES = new Set<VifxVitePluginMode>(["none", "react-native", "expo"]);
 const VALID_REACT_NATIVE_COMPAT_MODES = new Set<VifxReactNativeCompatMode>(["none", "web"]);
+const VALID_BUNDLE_MODES = new Set<VifxBundleMode>(["development", "production"]);
+const VALID_MODULE_FORMATS = new Set<VifxModuleFormat>(["hoisted", "metro"]);
 
 const TOP_LEVEL_KEYS = new Set([
   "projectRoot",
@@ -77,9 +81,12 @@ const VITE_KEYS = new Set(["mode", "targets"]);
 const VITE_TARGET_KEYS = new Set([
   "aliases",
   "babelInPackages",
+  "compatPreview",
   "entry",
   "hermes",
   "jsxInPackages",
+  "mode",
+  "moduleFormat",
   "outDir",
   "platform",
   "reactNativeCompat",
@@ -432,6 +439,14 @@ function normalizeBundleTargets(value: unknown, fieldName: string, source = "con
                 `${fieldName}[${index}].babelInPackages`,
                 source,
               ),
+        compatPreview:
+          parsedTarget.compatPreview === undefined
+            ? undefined
+            : expectBoolean(
+                parsedTarget.compatPreview,
+                source,
+                `${fieldName}[${index}].compatPreview`,
+              ),
         entry: normalizePathLikeString(parsedTarget.entry, source, `${fieldName}[${index}].entry`),
         hermes:
           parsedTarget.hermes === undefined
@@ -444,6 +459,18 @@ function normalizeBundleTargets(value: unknown, fieldName: string, source = "con
                 parsedTarget.jsxInPackages,
                 `${fieldName}[${index}].jsxInPackages`,
                 source,
+              ),
+        mode:
+          parsedTarget.mode === undefined
+            ? undefined
+            : expectBundleMode(parsedTarget.mode, source, `${fieldName}[${index}].mode`),
+        moduleFormat:
+          parsedTarget.moduleFormat === undefined
+            ? undefined
+            : expectModuleFormat(
+                parsedTarget.moduleFormat,
+                source,
+                `${fieldName}[${index}].moduleFormat`,
               ),
         outDir:
           parsedTarget.outDir === undefined
@@ -490,6 +517,9 @@ function normalizeBundleTargets(value: unknown, fieldName: string, source = "con
         target.entry,
         target.outDir ?? "",
         target.hermes ? "1" : "0",
+        target.mode ?? "",
+        target.moduleFormat ?? "",
+        target.compatPreview === undefined ? "" : target.compatPreview ? "1" : "0",
         target.reactNativeCompat ?? "",
         JSON.stringify(target.aliases ?? {}),
         (target.babelInPackages ?? []).join(","),
@@ -704,6 +734,30 @@ function expectVitePluginMode(value: unknown, source: string, fieldName: string)
   }
 
   return value as VifxVitePluginMode;
+}
+
+function expectBundleMode(value: unknown, source: string, fieldName: string) {
+  if (typeof value !== "string" || !VALID_BUNDLE_MODES.has(value as VifxBundleMode)) {
+    throw invalidConfig(
+      source,
+      fieldName,
+      `Expected one of: ${Array.from(VALID_BUNDLE_MODES).join(", ")}.`,
+    );
+  }
+
+  return value as VifxBundleMode;
+}
+
+function expectModuleFormat(value: unknown, source: string, fieldName: string) {
+  if (typeof value !== "string" || !VALID_MODULE_FORMATS.has(value as VifxModuleFormat)) {
+    throw invalidConfig(
+      source,
+      fieldName,
+      `Expected one of: ${Array.from(VALID_MODULE_FORMATS).join(", ")}.`,
+    );
+  }
+
+  return value as VifxModuleFormat;
 }
 
 function expectReactNativeCompatMode(value: unknown, source: string, fieldName: string) {

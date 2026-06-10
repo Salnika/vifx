@@ -24,6 +24,7 @@
     "@vifx/platform-resolver": "workspace:*",
     "@vifx/source-map-tools": "workspace:*",
     "@vifx/types": "workspace:*",
+    "react-refresh": "catalog:",
     "vite": "catalog:"
   },
   "devDependencies": {

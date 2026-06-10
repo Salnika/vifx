@@ -19,6 +19,8 @@ export type VifxLogLevel = "error" | "warn" | "info" | "debug";
 export type VifxCompatibilityStatus = "pass" | "fail" | "partial" | "skip";
 export type VifxVitePluginMode = "none" | "react-native" | "expo";
 export type VifxReactNativeCompatMode = "none" | "web";
+export type VifxBundleMode = "development" | "production";
+export type VifxModuleFormat = "hoisted" | "metro";
 
 export interface VifxResolveOptions {
   platform: VifxPlatform;
@@ -209,9 +211,12 @@ export interface VifxLoggerConfig {
 export interface VifxBundleTargetConfig {
   aliases?: Record<string, string>;
   babelInPackages?: string[];
+  compatPreview?: boolean;
   entry: string;
   hermes: boolean;
   jsxInPackages?: string[];
+  mode?: VifxBundleMode;
+  moduleFormat?: VifxModuleFormat;
   outDir?: string;
   platform: VifxBundlePlatform;
   reactNativeCompat?: VifxReactNativeCompatMode;
@@ -240,6 +245,7 @@ export interface VifxReactNativePluginOptions {
   aliases?: Record<string, string>;
   assetExtensions?: string[];
   babelInPackages?: string[];
+  compatPreview?: boolean;
   conditions?: string[];
   entry?: string;
   env?: NodeJS.ProcessEnv;
@@ -248,6 +254,8 @@ export interface VifxReactNativePluginOptions {
   hermesCompilerPath?: string;
   jsxInPackages?: string[];
   mainFields?: string[];
+  mode?: VifxBundleMode;
+  moduleFormat?: VifxModuleFormat;
   outDir?: string;
   platform: VifxBundlePlatform;
   projectRoot?: string;
