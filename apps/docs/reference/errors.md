@@ -18,6 +18,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_CORE_MISSING_PRIMITIVE`            | A lazy core primitive could not be loaded from its package.                                                       |
 | `VIFX_EXPERIMENTAL_EXPO`                 | Expo support falls outside the current supported corridor for the inspected workflow.                             |
 | `VIFX_EXPO_CONFIG_NOT_FOUND`             | The Expo layer could not find or read app config metadata.                                                        |
+| `VIFX_EXPO_DEV_CLIENT_SIGNING_UNSUPPORTED` | A manifest request demanded a code-signed response, which the Vifx dev server does not support.                 |
 | `VIFX_EXPO_DEV_INVALID_PLATFORM`         | An Expo dev command received an unsupported platform value.                                                       |
 | `VIFX_EXPO_DEV_INVALID_PORT`             | An Expo dev command received a malformed port value.                                                              |
 | `VIFX_EXPO_DEV_PLATFORM_REQUIRED`        | Multiple Expo dev targets exist and the command needs an explicit platform.                                       |

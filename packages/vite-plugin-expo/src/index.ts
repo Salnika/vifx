@@ -27,6 +27,11 @@ import type {
   VifxJsonObject,
   VifxJsonValue,
 } from "@vifx/types";
+import {
+  createDevClientLaunchUrl,
+  negotiateManifestResponse,
+  resolveDevClientScheme,
+} from "./dev-client.ts";
 
 const EXPO_APP_CONFIG_NAMES = [
   "app.json",
@@ -74,6 +79,7 @@ export interface VifxExpoDevServer {
 export interface VifxExpoGoDevServer {
   bundleUrl: string;
   close: () => Promise<void>;
+  devClientUrl?: string;
   eventsSocketUrl: string;
   expoGoUrl: string;
   fastRefresh: false;
