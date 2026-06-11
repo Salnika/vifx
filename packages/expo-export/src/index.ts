@@ -15,6 +15,9 @@ import type {
   VifxJsonObject,
   VifxJsonValue,
 } from "@vifx/types";
+import { formatSupportedExpoSdkList, getSdkSupportTier } from "./sdk-support.ts";
+
+export * from "./sdk-support.ts";
 
 export interface InspectExpoExportOptions {
   exportRoot?: string;
@@ -35,7 +38,6 @@ export interface WriteExpoExportOptions {
   projectRoot: string;
 }
 
-const DEFAULT_SUPPORTED_EXPO_SDK = "54";
 const VIFX_CONFIG_NAMES = [
   "vifx.config.ts",
   "vifx.config.mts",
@@ -523,7 +525,7 @@ export async function evaluateExpoNoMetroContract(
   options: EvaluateExpoNoMetroContractOptions,
 ): Promise<VifxExpoNoMetroContractReport> {
   const projectRoot = path.resolve(options.projectRoot);
-  const supportedExpoSdk = options.supportedExpoSdk ?? DEFAULT_SUPPORTED_EXPO_SDK;
+  const supportedExpoSdk = options.supportedExpoSdk ?? formatSupportedExpoSdkList();
   const packageJson = await readPackageJson(projectRoot);
   const expoVersion = readDependency(packageJson, "expo");
   const reactNativeVersion = readDependency(packageJson, "react-native");
@@ -542,13 +544,24 @@ export async function evaluateExpoNoMetroContract(
       }).catch(() => null)
     : null;
   const vifxGeneratedExport = exportInspection ? hasVifxGeneratedMetadata(exportInspection) : false;
+  const sdkSupport = getSdkSupportTier(expoVersion);
   const warnings: string[] = [];
 
   if (!expoVersion) {
     warnings.push("Expo dependency was not found in package.json.");
-  } else if (!expoVersion.includes(supportedExpoSdk)) {
+  } else if (options.supportedExpoSdk !== undefined) {
+    if (!expoVersion.includes(options.supportedExpoSdk)) {
+      warnings.push(
+        `Expo dependency "${expoVersion}" is outside the fixture-backed SDK ${options.supportedExpoSdk} range.`,
+      );
+    }
+  } else if (sdkSupport.tier === "unsupported") {
     warnings.push(
-      `Expo dependency "${expoVersion}" is outside the fixture-backed SDK ${supportedExpoSdk} range.`,
+      `Expo dependency "${expoVersion}" is outside the supported Expo SDK range (${formatSupportedExpoSdkList()}).`,
+    );
+  } else if (sdkSupport.tier === "experimental") {
+    warnings.push(
+      `Expo SDK ${sdkSupport.sdk ?? "unknown"} support is experimental: static analysis and fixtures only, not device-validated. SDK 54 remains the device-validated gate.`,
     );
   }
 
@@ -667,6 +680,7 @@ export async function evaluateExpoNoMetroContract(
     expoVersion,
     projectRoot,
     reactNativeVersion,
+    sdkSupport,
     supportedExpoSdk,
     warnings,
     workflows,
