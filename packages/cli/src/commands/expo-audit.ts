@@ -1085,6 +1085,7 @@ export async function runExpoAuditCommand(argv: string[], cwd: string): Promise<
       `Project root: ${report.projectRoot}`,
       `Decision: ${report.decision}`,
       `Supported Expo SDK: ${report.supportedExpoSdk}`,
+      `SDK support tier: ${report.sdkSupport.tier}${report.sdkSupport.sdk ? ` (SDK ${report.sdkSupport.sdk})` : ""}`,
       `Expo: ${report.expoVersion ?? "missing"}`,
       `React Native: ${report.reactNativeVersion ?? "missing"}`,
       `Expo Router: ${report.expoRouter ? "detected" : "missing"}`,

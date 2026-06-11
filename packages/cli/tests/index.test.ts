@@ -159,7 +159,7 @@ test("expo audit --json returns the no-Metro contract matrix", async () => {
   expect(result.exitCode).toBe(0);
   expect(report.decision).toBe("partial");
   expect(report.expoVersion).toBe("~54.0.0");
-  expect(report.supportedExpoSdk).toBe("54");
+  expect(report.supportedExpoSdk).toBe("54, 55, 56");
   expect(report.workflows.map((workflow) => [workflow.id, workflow.status])).toEqual([
     ["config", "blocked"],
     ["vite-build", "blocked"],
@@ -167,6 +167,46 @@ test("expo audit --json returns the no-Metro contract matrix", async () => {
     ["dev-server", "blocked"],
     ["export-artifacts", "blocked"],
   ]);
+});
+
+test("expo audit does not hard-fail experimental SDK projects and reports the tier", async () => {
+  const result = await executeCli([
+    "expo",
+    "audit",
+    path.join(FIXTURE_ROOT, "expo-sdk55-basic"),
+    "--json",
+  ]);
+  const report = JSON.parse(result.stdout) as {
+    expoVersion: string;
+    sdkSupport: { notes: string[]; sdk: string | null; tier: string };
+    warnings: string[];
+  };
+
+  expect(result.exitCode).toBe(0);
+  expect(report.expoVersion).toBe("~55.0.0");
+  expect(report.sdkSupport.tier).toBe("experimental");
+  expect(report.sdkSupport.sdk).toBe("55");
+  expect(report.warnings.join(" ")).toContain("not device-validated");
+  expect(report.warnings.join(" ")).not.toContain("outside");
+});
+
+test("expo audit --supported-sdk keeps explicit range semantics", async () => {
+  const result = await executeCli([
+    "expo",
+    "audit",
+    path.join(FIXTURE_ROOT, "expo-sdk55-basic"),
+    "--supported-sdk",
+    "54",
+    "--json",
+  ]);
+  const report = JSON.parse(result.stdout) as {
+    supportedExpoSdk: string;
+    warnings: string[];
+  };
+
+  expect(result.exitCode).toBe(0);
+  expect(report.supportedExpoSdk).toBe("54");
+  expect(report.warnings.join(" ")).toContain("outside the fixture-backed SDK 54 range");
 });
 
 test("expo audit terminal output lists workflow evidence and blockers", async () => {
@@ -277,6 +317,43 @@ test("doctor --json returns machine-readable inspection data", async () => {
   expect(inspection.projectType).toBe("expo");
   expect(inspection.nodeVersion).toBe(process.version);
   expect(inspection.vitePluginMode).toBe("none");
+});
+
+test("doctor --json includes the structured Expo SDK support status", async () => {
+  const result = await executeCli([
+    "doctor",
+    path.join(FIXTURE_ROOT, "expo-sdk55-basic"),
+    "--json",
+  ]);
+
+  expect(result.exitCode).toBe(0);
+  const inspection = JSON.parse(result.stdout) as {
+    expoSdkSupport: { notes: string[]; sdk: string | null; tier: string };
+    projectType: string;
+  };
+
+  expect(inspection.projectType).toBe("expo");
+  expect(inspection.expoSdkSupport.tier).toBe("experimental");
+  expect(inspection.expoSdkSupport.sdk).toBe("55");
+  expect(inspection.expoSdkSupport.notes.join(" ")).toContain("not device-validated");
+});
+
+test("doctor terminal output reports the Expo SDK support tier", async () => {
+  const validated = await executeCli(["doctor", path.join(FIXTURE_ROOT, "expo-basic")]);
+  const experimental = await executeCli(["doctor", path.join(FIXTURE_ROOT, "expo-sdk56-basic")]);
+  const bare = await executeCli(["doctor", path.join(FIXTURE_ROOT, "rn-bare-basic")]);
+
+  expect(validated.exitCode).toBe(0);
+  expect(validated.stdout).toContain("Expo SDK support:");
+  expect(validated.stdout).toContain("SDK: 54");
+  expect(validated.stdout).toContain("Tier: validated");
+  expect(experimental.exitCode).toBe(0);
+  expect(experimental.stdout).toContain("SDK: 56");
+  expect(experimental.stdout).toContain("Tier: experimental");
+  expect(experimental.stdout).toContain("not device-validated");
+  expect(experimental.stdout).toContain("WARN  VIFX_PROJECT_EXPERIMENTAL_EXPO_SDK");
+  expect(bare.exitCode).toBe(0);
+  expect(bare.stdout).not.toContain("Expo SDK support:");
 });
 
 test("doctor prints the detected Node version in terminal mode", async () => {

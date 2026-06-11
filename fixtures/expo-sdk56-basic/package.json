@@ -1,0 +1,16 @@
+{
+  "name": "expo-sdk56-basic",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
+  },
+  "dependencies": {
+    "expo": "~56.0.0",
+    "react": "~19.2.0",
+    "react-native": "0.84.0"
+  },
+  "packageManager": "pnpm@11.1.2"
+}

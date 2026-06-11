@@ -2,6 +2,8 @@ export const FIXTURE_IDS = [
   "expo-basic",
   "expo-export-basic",
   "expo-router-basic",
+  "expo-sdk55-basic",
+  "expo-sdk56-basic",
   "rn-bare-basic",
   "rn-bare-platform-files",
   "rn-bare-assets",

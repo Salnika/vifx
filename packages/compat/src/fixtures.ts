@@ -27,6 +27,30 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     features: ["expo-project", "expo-router", "browser-preview-target"],
   },
   {
+    id: "expo-sdk55-basic",
+    title: "Expo SDK 55 Basic",
+    relativePath: "fixtures/expo-sdk55-basic",
+    projectType: "expo",
+    packageManager: "pnpm",
+    features: ["expo-project", "sdk-matrix", "new-architecture"],
+    notes: [
+      "Expo SDK 55 (React Native 0.83, New Architecture only).",
+      "Experimental support tier: static analysis and fixtures only, not device-validated.",
+    ],
+  },
+  {
+    id: "expo-sdk56-basic",
+    title: "Expo SDK 56 Basic",
+    relativePath: "fixtures/expo-sdk56-basic",
+    projectType: "expo",
+    packageManager: "pnpm",
+    features: ["expo-project", "sdk-matrix", "hermes-v1"],
+    notes: [
+      "Expo SDK 56 (React Native 0.84, Hermes V1 default engine).",
+      "Experimental support tier: static analysis and fixtures only, not device-validated.",
+    ],
+  },
+  {
     id: "rn-bare-basic",
     title: "React Native Bare Basic",
     relativePath: "fixtures/rn-bare-basic",
