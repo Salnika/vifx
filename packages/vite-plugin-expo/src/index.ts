@@ -33,6 +33,13 @@ import {
   resolveDevClientScheme,
 } from "./dev-client.ts";
 
+export {
+  createDevClientLaunchUrl,
+  negotiateManifestResponse,
+  resolveDevClientScheme,
+} from "./dev-client.ts";
+export type { ManifestNegotiationRequest, NegotiatedManifestResponse } from "./dev-client.ts";
+
 const EXPO_APP_CONFIG_NAMES = [
   "app.json",
   "app.config.ts",
@@ -1607,10 +1614,8 @@ export async function startExpoGoDevServer(
     const bundleUrl = `${baseUrl}${bundleUrlPath}`;
 
     if (isManifestPath(requestUrl.pathname)) {
-      writeJsonResponse(
-        response,
-        200,
-        buildManifest({
+      const negotiated = negotiateManifestResponse({
+        manifestJson: buildManifest({
           bundleUrl,
           assets: bundle.assets,
           exp,
@@ -1620,12 +1625,10 @@ export async function startExpoGoDevServer(
           platform: options.platform,
           projectRoot,
         }),
-        {
-          "expo-manifest-filters": "",
-          "expo-protocol-version": "1",
-          "expo-server-defined-headers": "",
-        },
-      );
+        request: { headers: request.headers },
+      });
+      response.writeHead(negotiated.status, negotiated.headers);
+      response.end(negotiated.body);
       return;
     }
 
@@ -1695,6 +1698,8 @@ export async function startExpoGoDevServer(
   const displayHost = resolveDisplayHost(host, options.publicHost);
   const baseUrl = `http://${displayHost}:${String(actualPort)}`;
   const hostUri = `${displayHost}:${String(actualPort)}`;
+  const manifestUrl = `${baseUrl}/manifest`;
+  const devClientScheme = resolveDevClientScheme(exp);
 
   return {
     bundleUrl: `${baseUrl}${bundleUrlPath}`,
@@ -1703,13 +1708,16 @@ export async function startExpoGoDevServer(
         messageChannel.closeAll();
         server.close((error) => (error ? reject(error) : resolve()));
       }),
+    ...(devClientScheme === null
+      ? {}
+      : { devClientUrl: createDevClientLaunchUrl({ manifestUrl, scheme: devClientScheme }) }),
     eventsSocketUrl: `${baseUrl.replace(/^http:/u, "ws:")}/events`,
     expoGoUrl: `exp://${hostUri}`,
     fastRefresh: false,
     hmr: "reload",
     host,
     hostUri,
-    manifestUrl: `${baseUrl}/manifest`,
+    manifestUrl,
     messageSocketUrl: `${baseUrl.replace(/^http:/u, "ws:")}/message`,
     metro: false,
     nativeRuntime: true,

@@ -158,16 +158,24 @@ export function createDevClientLaunchUrl(options: { manifestUrl: string; scheme:
   return `${options.scheme}://${DEV_CLIENT_LAUNCH_HOST}/?url=${encodeURIComponent(options.manifestUrl)}`;
 }
 
-/** Reads the first URL scheme declared by the resolved Expo app config, if any. */
+// Mirrors @expo/cli UrlCreator.constructDevClientUrl: http(s) can never open a
+// development client, and "_" is invalid inside a URL protocol.
+function isUsableDevClientScheme(scheme: string) {
+  return (
+    scheme.length > 0 && !["http", "https"].includes(scheme.toLowerCase()) && !scheme.includes("_")
+  );
+}
+
+/** Reads the first usable URL scheme declared by the resolved Expo app config, if any. */
 export function resolveDevClientScheme(exp: VifxJsonObject) {
   const scheme = exp.scheme;
-  if (typeof scheme === "string" && scheme.length > 0) {
+  if (typeof scheme === "string" && isUsableDevClientScheme(scheme)) {
     return scheme;
   }
 
   if (Array.isArray(scheme)) {
     for (const candidate of scheme) {
-      if (typeof candidate === "string" && candidate.length > 0) {
+      if (typeof candidate === "string" && isUsableDevClientScheme(candidate)) {
         return candidate;
       }
     }

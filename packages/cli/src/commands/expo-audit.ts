@@ -1204,6 +1204,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
           {
             bundleUrl: server.bundleUrl,
             configFile: loaded.filePath,
+            ...(server.devClientUrl === undefined ? {} : { devClientUrl: server.devClientUrl }),
             eventsSocketUrl: server.eventsSocketUrl,
             expoGoUrl: server.expoGoUrl,
             fastRefresh: server.fastRefresh,
