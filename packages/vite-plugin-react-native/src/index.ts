@@ -20,10 +20,30 @@ import { validateSourceMap } from "@vifx/source-map-tools";
 import type {
   VifxBuildAssetArtifact,
   VifxBundleArtifacts,
+  VifxBundleMode,
   VifxPlatform,
   VifxReactNativePluginOptions,
   VifxWebRuntimeArtifact,
 } from "@vifx/types";
+import {
+  resolveBuildMinify,
+  resolveBundleMode,
+  resolveDefines,
+  resolveOutputOptions,
+} from "./modes.ts";
+
+export {
+  resolveBuildMinify,
+  resolveBundleMode,
+  resolveDefines,
+  resolveOutputOptions,
+} from "./modes.ts";
+export type {
+  VifxResolveBundleModeOptions,
+  VifxResolveDefinesOptions,
+  VifxResolvedOutputOptions,
+  VifxResolveOutputOptionsOptions,
+} from "./modes.ts";
 
 const DEFAULT_EXTENSIONS = ["tsx", "ts", "jsx", "js", "json"] as const;
 const DEFAULT_NATIVE_MAIN_FIELDS = ["react-native", "main", "module"] as const;
@@ -80,6 +100,7 @@ interface ReactNativePluginState {
   extensions: string[];
   jsxInPackages: string[];
   mainFields: string[];
+  mode: VifxBundleMode;
   platform: VifxReactNativePluginOptions["platform"];
   projectRoot: string;
   reactNativeCompat: NonNullable<VifxReactNativePluginOptions["reactNativeCompat"]>;
@@ -2214,13 +2235,11 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     config() {
       return {
         assetsInclude: state.assetExtensions.map((extension) => `**/*.${extension}`),
-        define: {
-          __DEV__: state.resolvePlatform === "web" ? "false" : "true",
-          global: "globalThis",
-          "process.env.NODE_ENV": JSON.stringify(
-            state.resolvePlatform === "web" ? "production" : "development",
-          ),
-        },
+        define: resolveDefines({
+          mode: state.mode,
+          platform: state.platform,
+          resolvePlatform: state.resolvePlatform,
+        }),
         resolve: {
           conditions: state.conditions,
           dedupe: [...NATIVE_SINGLETON_PACKAGES],
@@ -2460,6 +2479,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
       options.resolvePlatform ?? options.platform,
       options.mainFields,
     ),
+    mode: resolveBundleMode(options),
     platform: options.platform,
     projectRoot,
     reactNativeCompat: options.reactNativeCompat ?? "none",
@@ -2605,6 +2625,7 @@ async function writeWebRuntimeArtifacts(options: {
   extensions?: string[];
   jsxInPackages?: string[];
   mainFields?: string[];
+  mode: VifxBundleMode;
   outDir: string;
   platform: VifxReactNativePluginOptions["platform"];
   projectRoot: string;
@@ -2637,6 +2658,7 @@ async function writeWebRuntimeArtifacts(options: {
     extensions: normalizeExtensions(options.extensions),
     jsxInPackages: normalizeJsxInPackages(options.jsxInPackages),
     mainFields: normalizeMainFields("web", options.mainFields),
+    mode: options.mode,
     platform: options.platform,
     projectRoot: options.projectRoot,
     reactNativeCompat: options.reactNativeCompat,
@@ -2665,7 +2687,11 @@ async function writeWebRuntimeArtifacts(options: {
           assetFileNames: "assets/[name][extname]",
           chunkFileNames: "chunks/[name].js",
           entryFileNames: WEB_RUNTIME_BUNDLE_FILE,
-          format: "es",
+          ...resolveOutputOptions({
+            mode: options.mode,
+            moduleFormat: "hoisted",
+            platform: "web",
+          }),
         },
       },
       sourcemap: true,
@@ -2915,6 +2941,8 @@ export async function buildReactNativeBundle(
   const entry = options.entry ?? "./index.js";
   const outDir = options.outDir ?? `.vifx/vite/${options.platform}`;
   const absoluteOutDir = path.resolve(projectRoot, outDir);
+  const mode = resolveBundleMode(options);
+  const moduleFormat = options.moduleFormat ?? "hoisted";
   const state: ReactNativePluginState = {
     aliases: normalizeAliases(options.aliases),
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
@@ -2931,6 +2959,7 @@ export async function buildReactNativeBundle(
       options.resolvePlatform ?? options.platform,
       options.mainFields,
     ),
+    mode,
     platform: options.platform,
     projectRoot,
     reactNativeCompat: options.reactNativeCompat ?? "none",
@@ -2946,7 +2975,7 @@ export async function buildReactNativeBundle(
       assetsInlineLimit: 0,
       cssCodeSplit: false,
       emptyOutDir: true,
-      minify: false,
+      minify: resolveBuildMinify(mode),
       outDir,
       rollupOptions: {
         input: inputEntry,
@@ -2954,7 +2983,11 @@ export async function buildReactNativeBundle(
           assetFileNames: "assets/[name][extname]",
           chunkFileNames: "chunks/[name].js",
           entryFileNames: "index.bundle",
-          format: "es",
+          ...resolveOutputOptions({
+            mode,
+            moduleFormat,
+            platform: state.resolvePlatform,
+          }),
         },
       },
       sourcemap: true,
@@ -2981,6 +3014,12 @@ export async function buildReactNativeBundle(
     projectRoot,
   });
 
+  // Hermes always compiles the emitted index.bundle. In production mode that
+  // file is already Oxc-minified by the Vite build, so bytecode is generated
+  // from the minified script. Source-map fidelity: index.bundle.map composes
+  // transform + minify mappings natively in Rolldown, but no bytecode-level
+  // map is produced here, so symbolication of Hermes frames resolves through
+  // the JS bundle map only.
   let hermesBytecodePath: string | undefined;
   if (options.hermes) {
     const hermesResult = await compileHermesBytecode({
@@ -3004,6 +3043,7 @@ export async function buildReactNativeBundle(
           extensions: options.extensions,
           jsxInPackages: options.jsxInPackages,
           mainFields: options.mainFields,
+          mode,
           outDir: absoluteOutDir,
           platform: options.platform,
           projectRoot,
