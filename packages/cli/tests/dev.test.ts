@@ -1,4 +1,5 @@
 import { cp, mkdtemp, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { SourceMap } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,18 @@ import WebSocket from "ws";
 import { executeCli } from "../src/index.ts";
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "../../../fixtures");
+
+async function canListenOnLocalhost() {
+  return await new Promise<boolean>((resolve) => {
+    const server = createServer();
+    server.once("error", () => resolve(false));
+    server.listen(0, "127.0.0.1", () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+const NETWORK_SERVER_TESTS = (await canListenOnLocalhost()) ? test : test.skip;
 
 interface DevServerJson {
   bundleUrl: string;
@@ -139,7 +152,7 @@ test("dev --no-build fails with a bundle hint when artifacts are missing", async
   expect(result.stderr).toContain("vifx build");
 });
 
-test(
+NETWORK_SERVER_TESTS(
   "dev serves Metro endpoints against a temp-built rn-bare fixture",
   { timeout: 180_000 },
   async () => {
