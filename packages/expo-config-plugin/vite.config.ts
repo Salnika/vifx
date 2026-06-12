@@ -1,6 +1,12 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@vifx/errors": fileURLToPath(new URL("../errors/src/index.ts", import.meta.url)),
+    },
+  },
   fmt: {},
   lint: {
     options: {

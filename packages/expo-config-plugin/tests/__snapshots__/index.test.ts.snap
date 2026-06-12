@@ -1,0 +1,208 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Expo template app/build.gradle gains vifx assignments at the end of react {} 1`] = `
+"apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+
+/**
+ * This is the configuration block to customize your React Native Android app.
+ * By default you don't need to apply any configuration, just uncomment the lines you need.
+ */
+react {
+    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
+    reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
+    hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/%OS-BIN%/hermesc"
+    codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
+
+    // Use Expo CLI to bundle the app, this ensures the Metro config
+    // works correctly with Expo projects.
+    cliFile = new File(["node", "--print", "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })"].execute(null, rootDir).text.trim())
+    bundleCommand = "export:embed"
+
+    /* Folders */
+    //   The root of your project, i.e. where "package.json" lives. Default is '../..'
+    // root = file("../../")
+    //   The folder where the react-native NPM package is. Default is ../../node_modules/react-native
+    // reactNativeDir = file("../../node_modules/react-native")
+    //   The folder where the react-native Codegen package is. Default is ../../node_modules/@react-native/codegen
+    // codegenDir = file("../../node_modules/@react-native/codegen")
+
+    /* Variants */
+    //   The list of variants to that are debuggable. For those we're going to
+    //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
+    //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
+    // debuggableVariants = ["liteDebug", "prodDebug"]
+
+    /* Autolinking */
+    autolinkLibrariesWithApp()
+    // @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-46157043bd38fb4bbc096391d1934f4dc45de471
+    cliFile = file("../../node_modules/@vifx/cli/bin/vifx.mjs")
+    bundleCommand = "export:embed"
+    // @generated end vifx-bundle-command
+}
+
+/**
+ * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ */
+def enableProguardInReleaseBuilds = (findProperty('android.enableProguardInReleaseBuilds') ?: false).toBoolean()
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
+
+    namespace 'com.example.app'
+    defaultConfig {
+        applicationId 'com.example.app'
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0.0"
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.debug
+            shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+}
+
+dependencies {
+    // The version of react-native is set by the React Native Gradle Plugin
+    implementation("com.facebook.react:react-android")
+}
+"
+`;
+
+exports[`Xcode project fixture is patched in place and serializes deterministically 1`] = `
+"// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXNativeTarget section */
+		13B07F861A680F5B00A75B9A /* example */ = {
+			isa = PBXNativeTarget;
+			buildPhases = (
+				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
+			);
+			name = example;
+			productName = example;
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.xcode.env.local",
+				"$(SRCROOT)/.xcode.env",
+			);
+			name = "Bundle React Native code and images";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-7aad9f622de05c71bab08cb51ee82280632b6497\\nexport CLI_PATH=\\"$PROJECT_DIR/../node_modules/@vifx/cli/bin/vifx.mjs\\"\\nexport BUNDLE_COMMAND=\\"export:embed\\"\\n# @generated end vifx-bundle-command\\nif [[ -f \\"$PODS_ROOT/../.xcode.env\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env\\"\\nfi\\nif [[ -f \\"$PODS_ROOT/../.xcode.env.local\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env.local\\"\\nfi\\n\\n# The project root by default is one level up from the ios directory\\nexport PROJECT_ROOT=\\"$PROJECT_DIR\\"/..\\n\\nif [[ \\"$CONFIGURATION\\" = *Debug* ]]; then\\n  export SKIP_BUNDLING=1\\nfi\\nif [[ -z \\"$ENTRY_FILE\\" ]]; then\\n  # Set the entry JS file using the bundler's entry resolution.\\n  export ENTRY_FILE=\\"$(\\"$NODE_BINARY\\" -e \\"require('expo/scripts/resolveAppEntry')\\" \\"$PROJECT_ROOT\\" ios absolute | tail -n 1)\\"\\nfi\\n\\nif [[ -z \\"$CLI_PATH\\" ]]; then\\n  # Use Expo CLI\\n  export CLI_PATH=\\"$(\\"$NODE_BINARY\\" --print \\"require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })\\")\\"\\nfi\\nif [[ -z \\"$BUNDLE_COMMAND\\" ]]; then\\n  # Default Expo CLI command for bundling\\n  export BUNDLE_COMMAND=\\"export:embed\\"\\nfi\\n\\n# Source .xcode.env.updates if it exists to allow\\n# SKIP_BUNDLING to be unset if needed\\nif [[ -f \\"$PODS_ROOT/../.xcode.env.updates\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env.updates\\"\\nfi\\n# Source local changes to allow skipping bundling\\nif [[ -f \\"$PODS_ROOT/../.xcode.env.local\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env.local\\"\\nfi\\n\\n\`\\"$NODE_BINARY\\" --print \\"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\\"\`\\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXProject section */
+		83CBB9F71A601CBA00E9B192 /* Project object */ = {
+			isa = PBXProject;
+			compatibilityVersion = "Xcode 12.0";
+			targets = (
+				13B07F861A680F5B00A75B9A /* example */,
+			);
+		};
+/* End PBXProject section */
+	};
+	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
+}
+"
+`;
+
+exports[`app/build.gradle without a react {} block gains a marker-wrapped block 1`] = `
+"apply plugin: "com.android.application"
+
+android {
+    namespace 'com.example.app'
+    defaultConfig {
+        applicationId 'com.example.app'
+        versionCode 1
+        versionName "1.0.0"
+    }
+}
+
+dependencies {
+    implementation("com.facebook.react:react-android")
+}
+// @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-613d361523aa104e4c4f83edf90044c0ab1b6f0e
+react {
+    cliFile = file("../../node_modules/@vifx/cli/bin/vifx.mjs")
+    bundleCommand = "export:embed"
+}
+// @generated end vifx-bundle-command
+"
+`;
+
+exports[`iOS bundle phase script gains marker-guarded CLI_PATH/BUNDLE_COMMAND exports 1`] = `
+"# @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-7aad9f622de05c71bab08cb51ee82280632b6497
+export CLI_PATH="$PROJECT_DIR/../node_modules/@vifx/cli/bin/vifx.mjs"
+export BUNDLE_COMMAND="export:embed"
+# @generated end vifx-bundle-command
+if [[ -f "$PODS_ROOT/../.xcode.env" ]]; then
+  source "$PODS_ROOT/../.xcode.env"
+fi
+if [[ -f "$PODS_ROOT/../.xcode.env.local" ]]; then
+  source "$PODS_ROOT/../.xcode.env.local"
+fi
+
+# The project root by default is one level up from the ios directory
+export PROJECT_ROOT="$PROJECT_DIR"/..
+
+if [[ "$CONFIGURATION" = *Debug* ]]; then
+  export SKIP_BUNDLING=1
+fi
+if [[ -z "$ENTRY_FILE" ]]; then
+  # Set the entry JS file using the bundler's entry resolution.
+  export ENTRY_FILE="$("$NODE_BINARY" -e "require('expo/scripts/resolveAppEntry')" "$PROJECT_ROOT" ios absolute | tail -n 1)"
+fi
+
+if [[ -z "$CLI_PATH" ]]; then
+  # Use Expo CLI
+  export CLI_PATH="$("$NODE_BINARY" --print "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })")"
+fi
+if [[ -z "$BUNDLE_COMMAND" ]]; then
+  # Default Expo CLI command for bundling
+  export BUNDLE_COMMAND="export:embed"
+fi
+
+# Source .xcode.env.updates if it exists to allow
+# SKIP_BUNDLING to be unset if needed
+if [[ -f "$PODS_ROOT/../.xcode.env.updates" ]]; then
+  source "$PODS_ROOT/../.xcode.env.updates"
+fi
+# Source local changes to allow skipping bundling
+if [[ -f "$PODS_ROOT/../.xcode.env.local" ]]; then
+  source "$PODS_ROOT/../.xcode.env.local"
+fi
+
+\`"$NODE_BINARY" --print "require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'"\`
+"
+`;
