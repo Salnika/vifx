@@ -8,6 +8,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_ASSET_INVALID_SCALE`               | An asset scale group was malformed or inconsistent.                                                               |
 | `VIFX_ASSET_NOT_FOUND`                   | The requested asset file or asset group does not exist.                                                           |
 | `VIFX_ASSET_UNSUPPORTED_TYPE`            | The requested asset type is outside the supported asset registry extensions.                                      |
+| `VIFX_BABEL_CONFIG_LOAD_FAILED`          | The target project's Babel configuration exists but could not be loaded or evaluated.                             |
 | `VIFX_BUILD_INVALID_PLATFORM`            | A build command received an unsupported platform value.                                                           |
 | `VIFX_BUILD_TARGET_NOT_FOUND`            | No configured build target matched the requested platform.                                                        |
 | `VIFX_BUILD_TARGETS_MISSING`             | The config does not contain any Vite bundle targets.                                                              |
