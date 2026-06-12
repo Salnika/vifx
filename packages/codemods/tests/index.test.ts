@@ -114,6 +114,104 @@ test("planExpoSetup preserves package.json and existing vite.config.ts by defaul
   expect(await readFile(path.join(targetPath, "vite.config.ts"), "utf8")).toBe(originalViteConfig);
 });
 
+test("planExpoSetup --experimental-embed plans the app.json config plugin registration", async () => {
+  const plan = await planExpoSetup(path.join(FIXTURE_ROOT, "expo-basic"), {
+    experimentalEmbed: true,
+  });
+  const appJsonChange = plan.changes.find((change) => change.path === "app.json");
+  const parsed = JSON.parse(appJsonChange?.after ?? "{}") as {
+    expo: { name: string; plugins: string[]; slug: string };
+  };
+
+  expect(plan.experimentalEmbed).toBe(true);
+  expect(appJsonChange?.kind).toBe("update");
+  expect(parsed.expo.plugins).toEqual(["@vifx/expo-config-plugin"]);
+  expect(parsed.expo.name).toBe("Expo Basic");
+  expect(parsed.expo.slug).toBe("expo-basic");
+});
+
+test("planExpoSetup --experimental-embed is idempotent once the plugin is registered", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-codemods-embed-"));
+  const targetPath = path.join(tempRoot, "expo-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-basic"), targetPath, { recursive: true });
+
+  const firstPlan = await planExpoSetup(targetPath, { experimentalEmbed: true });
+  await applyPlannedChanges(targetPath, firstPlan.changes);
+
+  const secondPlan = await planExpoSetup(targetPath, { experimentalEmbed: true });
+
+  expect(firstPlan.changes.map((change) => change.path)).toContain("app.json");
+  expect(secondPlan.changes.map((change) => change.path)).not.toContain("app.json");
+});
+
+test("planExpoSetup --experimental-embed keeps existing plugins including tuple entries", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-codemods-embed-plugins-"));
+  const targetPath = path.join(tempRoot, "expo-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-basic"), targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "app.json"),
+    JSON.stringify(
+      {
+        expo: {
+          name: "Expo Basic",
+          plugins: ["expo-router", ["expo-camera", { cameraPermission: "Allow" }]],
+          slug: "expo-basic",
+        },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  const plan = await planExpoSetup(targetPath, { experimentalEmbed: true });
+  const appJsonChange = plan.changes.find((change) => change.path === "app.json");
+  const parsed = JSON.parse(appJsonChange?.after ?? "{}") as { expo: { plugins: unknown[] } };
+
+  expect(parsed.expo.plugins).toEqual([
+    "expo-router",
+    ["expo-camera", { cameraPermission: "Allow" }],
+    "@vifx/expo-config-plugin",
+  ]);
+});
+
+test("planExpoSetup --experimental-embed honors a tuple registration of the plugin", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-codemods-embed-tuple-"));
+  const targetPath = path.join(tempRoot, "expo-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-basic"), targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "app.json"),
+    JSON.stringify(
+      {
+        expo: {
+          name: "Expo Basic",
+          plugins: [["@vifx/expo-config-plugin", { bundleCommand: "export:embed" }]],
+          slug: "expo-basic",
+        },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  const plan = await planExpoSetup(targetPath, { experimentalEmbed: true });
+
+  expect(plan.changes.map((change) => change.path)).not.toContain("app.json");
+});
+
+test("planExpoSetup --experimental-embed requires a static app.json", async () => {
+  await expect(
+    planExpoSetup(path.join(FIXTURE_ROOT, "expo-router-basic"), { experimentalEmbed: true }),
+  ).rejects.toMatchObject({
+    code: "VIFX_SETUP_APP_JSON_REQUIRED",
+    name: "VifxError",
+  });
+});
+
 test("applyPlannedChanges writes the generated files into a copied fixture", async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-codemods-"));
   const targetPath = path.join(tempRoot, "expo-basic");

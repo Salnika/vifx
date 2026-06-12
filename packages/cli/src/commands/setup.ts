@@ -5,18 +5,19 @@ import { VifxError } from "@vifx/errors";
 import { parseFlags } from "../lib/args.ts";
 import type { CliResult, ExecuteCliOptions } from "../types.ts";
 
-export const SETUP_HELP = `Usage: vifx setup [path] [--yes] [--dry-run] [--json] [--force] [--expo-go] [--with-vite-config]
+export const SETUP_HELP = `Usage: vifx setup [path] [--yes] [--dry-run] [--json] [--force] [--expo-go] [--with-vite-config] [--experimental-embed]
 
 Onboards an existing Expo project with a Vifx-owned config without editing Expo-owned app files.
 
 Options:
-  --yes               Apply the planned changes without interactive confirmation.
-  --dry-run           Optional preview mode without writing files.
-  --json              Output machine-readable setup details. Previews unless combined with --yes.
-  --force             Replace existing Vifx-owned files.
-  --expo-go           Generate native Expo targets for the Vifx Expo Go server.
-  --with-vite-config  Also create a Vifx-owned vite.config.vifx.ts for advanced direct Vite usage.
-  --help              Show this message.
+  --yes                 Apply the planned changes without interactive confirmation.
+  --dry-run             Optional preview mode without writing files.
+  --json                Output machine-readable setup details. Previews unless combined with --yes.
+  --force               Replace existing Vifx-owned files.
+  --expo-go             Generate native Expo targets for the Vifx Expo Go server.
+  --with-vite-config    Also create a Vifx-owned vite.config.vifx.ts for advanced direct Vite usage.
+  --experimental-embed  Experimental: register @vifx/expo-config-plugin in app.json so expo prebuild points native builds at vifx export:embed.
+  --help                Show this message.
 `;
 
 interface SetupCommandOptions {
@@ -99,6 +100,7 @@ function renderTerminalSetup(options: {
   detectedExpoVersion: string | null;
   detectedProjectType: string;
   detectedReactNativeVersion: string | null;
+  experimentalEmbed: boolean;
   expoGo: boolean;
   dryRun: boolean;
   expoRouter: boolean;
@@ -131,6 +133,7 @@ function renderTerminalSetup(options: {
     `iOS host: ${options.iosHostPresent ? "present" : "missing"}`,
     `Expo Go server: ${options.expoGo ? "requested" : "skipped"}`,
     `Advanced Vite config: ${options.withViteConfig ? "requested" : "skipped"}`,
+    `Native embed plugin: ${options.experimentalEmbed ? "requested (experimental)" : "skipped"}`,
     "",
     "Planned changes:",
     ...formatChangeSummary(options.changes),
@@ -157,7 +160,16 @@ export async function runSetupCommand(
   options: SetupCommandOptions = {},
 ): Promise<CliResult> {
   const parsed = parseFlags(argv, {
-    booleanFlags: ["expo-go", "help", "yes", "dry-run", "json", "force", "with-vite-config"],
+    booleanFlags: [
+      "expo-go",
+      "help",
+      "yes",
+      "dry-run",
+      "json",
+      "force",
+      "with-vite-config",
+      "experimental-embed",
+    ],
     aliases: {
       "-h": "--help",
     },
@@ -190,6 +202,7 @@ export async function runSetupCommand(
   const targetPath = parsed.positional[0] ?? ".";
   const projectRoot = path.resolve(cwd, targetPath);
   const plan = await planExpoSetup(projectRoot, {
+    experimentalEmbed: Boolean(parsed.flags["experimental-embed"]),
     expoGo: Boolean(parsed.flags["expo-go"]),
     force: Boolean(parsed.flags.force),
     withViteConfig: Boolean(parsed.flags["with-vite-config"]),
@@ -236,6 +249,7 @@ export async function runSetupCommand(
           detectedProjectType: plan.detectedProjectType,
           detectedExpoVersion: plan.detectedExpoVersion,
           detectedReactNativeVersion: plan.detectedReactNativeVersion,
+          experimentalEmbed: plan.experimentalEmbed,
           expoGo: plan.expoGo,
           expoRouter: plan.expoRouter,
           appDirectory: plan.appDirectory,
@@ -265,6 +279,7 @@ export async function runSetupCommand(
       detectedProjectType: plan.detectedProjectType,
       detectedReactNativeVersion: plan.detectedReactNativeVersion,
       dryRun,
+      experimentalEmbed: plan.experimentalEmbed,
       expoGo: plan.expoGo,
       expoRouter: plan.expoRouter,
       iosHostPresent: plan.iosHostPresent,

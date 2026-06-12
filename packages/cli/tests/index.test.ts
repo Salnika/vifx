@@ -602,6 +602,60 @@ test("setup rejects non-Expo targets with a dedicated hint", async () => {
   expect(result.stderr).toContain("migrate react-native");
 });
 
+test("setup --experimental-embed previews the app.json config plugin registration", async () => {
+  const result = await executeCli([
+    "setup",
+    path.join(FIXTURE_ROOT, "expo-basic"),
+    "--experimental-embed",
+    "--dry-run",
+    "--json",
+  ]);
+  const parsed = JSON.parse(result.stdout) as {
+    applied: boolean;
+    changes: Array<{ kind: string; path: string }>;
+    experimentalEmbed: boolean;
+  };
+  const appJsonChange = parsed.changes.find((change) => change.path === "app.json");
+
+  expect(result.exitCode).toBe(0);
+  expect(parsed.experimentalEmbed).toBe(true);
+  expect(parsed.applied).toBe(false);
+  expect(appJsonChange?.kind).toBe("update");
+});
+
+test("setup --experimental-embed --yes registers the plugin in app.json", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-setup-embed-"));
+  const targetPath = path.join(tempRoot, "expo-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-basic"), targetPath, { recursive: true });
+
+  const result = await executeCli(["setup", targetPath, "--yes", "--experimental-embed"]);
+  const appJson = JSON.parse(await readFile(path.join(targetPath, "app.json"), "utf8")) as {
+    expo: { plugins: string[] };
+  };
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("Native embed plugin: requested (experimental)");
+  expect(appJson.expo.plugins).toEqual(["@vifx/expo-config-plugin"]);
+});
+
+test("setup without --experimental-embed leaves app.json untouched", async () => {
+  const result = await executeCli([
+    "setup",
+    path.join(FIXTURE_ROOT, "expo-basic"),
+    "--dry-run",
+    "--json",
+  ]);
+  const parsed = JSON.parse(result.stdout) as {
+    changes: Array<{ path: string }>;
+    experimentalEmbed: boolean;
+  };
+
+  expect(result.exitCode).toBe(0);
+  expect(parsed.experimentalEmbed).toBe(false);
+  expect(parsed.changes.map((change) => change.path)).not.toContain("app.json");
+});
+
 test("setup --with-vite-config writes the optional Vifx-owned Vite config explicitly", async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-setup-vite-"));
   const targetPath = path.join(tempRoot, "expo-router-basic");
