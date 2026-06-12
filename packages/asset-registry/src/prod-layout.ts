@@ -60,16 +60,7 @@ const ANDROID_DENSITIES: readonly AndroidDensity[] = [
 
 // Mirrors Metro's assetPathUtils drawableFileTypes: these asset types land in
 // res/drawable-<density>/ while every other type lands in res/raw/.
-const ANDROID_DRAWABLE_TYPES = new Set([
-  "gif",
-  "jpeg",
-  "jpg",
-  "ktx",
-  "png",
-  "svg",
-  "webp",
-  "xml",
-]);
+const ANDROID_DRAWABLE_TYPES = new Set(["gif", "jpeg", "jpg", "ktx", "png", "svg", "webp", "xml"]);
 
 /**
  * Maps an asset scale to the Android density qualifier. Exact Metro mappings

@@ -4,11 +4,7 @@ import { collectAssetGroup, writeProdAssets } from "@vifx/asset-registry";
 import type { WriteProdAssetsResult } from "@vifx/asset-registry";
 import { loadVifxConfig } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
-import type {
-  VifxBundleArtifacts,
-  VifxBundlePlatform,
-  VifxBundleTargetConfig,
-} from "@vifx/types";
+import type { VifxBundleArtifacts, VifxBundlePlatform, VifxBundleTargetConfig } from "@vifx/types";
 import { buildExpoBundle } from "@vifx/vite-plugin-expo";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 import type { CliResult } from "../types.ts";
@@ -351,6 +347,30 @@ interface ExportEmbedExecution {
   sourcemapOutput: string | null;
 }
 
+/**
+ * Rewrites (or strips) the trailing sourceMappingURL comment so the embedded
+ * bundle points at the basename of --sourcemap-output instead of the
+ * intermediate build artifact. Only the final comment line is touched.
+ */
+export function rewriteTrailingSourceMapComment(
+  contents: string,
+  sourceMapFileName: string | undefined,
+): string {
+  const match = contents.match(/(^|\n)\/\/# sourceMappingURL=[^\n]*\n?$/u);
+
+  if (!match) {
+    return sourceMapFileName === undefined
+      ? contents
+      : `${contents}${contents.endsWith("\n") || contents.length === 0 ? "" : "\n"}//# sourceMappingURL=${sourceMapFileName}\n`;
+  }
+
+  const prefix = contents.slice(0, (match.index ?? 0) + match[1]!.length);
+
+  return sourceMapFileName === undefined
+    ? prefix
+    : `${prefix}//# sourceMappingURL=${sourceMapFileName}\n`;
+}
+
 async function writeBundleOutputs(options: {
   bundleOutput: string;
   projectRoot: string;
@@ -358,19 +378,12 @@ async function writeBundleOutputs(options: {
   sourcemapOutput?: string;
 }) {
   const bundleSource = path.resolve(options.projectRoot, options.result.bundle.path);
-  let bundleContents = await readFile(bundleSource, "utf8");
+  const bundleContents = rewriteTrailingSourceMapComment(
+    await readFile(bundleSource, "utf8"),
+    options.sourcemapOutput === undefined ? undefined : path.basename(options.sourcemapOutput),
+  );
 
   await mkdir(path.dirname(options.bundleOutput), { recursive: true });
-
-  if (options.sourcemapOutput === undefined) {
-    bundleContents = bundleContents.replace(/^\/\/# sourceMappingURL=.*$\n?/mu, "");
-  } else {
-    bundleContents = bundleContents.replace(
-      /^\/\/# sourceMappingURL=.*$/mu,
-      `//# sourceMappingURL=${path.basename(options.sourcemapOutput)}`,
-    );
-  }
-
   await writeFile(options.bundleOutput, bundleContents, "utf8");
 
   if (options.sourcemapOutput !== undefined) {
