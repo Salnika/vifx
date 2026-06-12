@@ -9,6 +9,7 @@ import {
   runExpoExportCommand,
   runExpoSmokeCommand,
 } from "./commands/expo-audit.ts";
+import { runExportEmbedCommand } from "./commands/export-embed.ts";
 import { runHermesCompileCommand } from "./commands/hermes-compile.ts";
 import { runInitCommand } from "./commands/init.ts";
 import { runInspectCommand } from "./commands/inspect.ts";
@@ -32,6 +33,7 @@ Commands:
   expo smoke [path]             Smoke-test the Vifx Expo Go server endpoints.
   doctor [path]                 Check project readiness and support boundaries.
   build [path]                  Build Vifx bundle targets from vifx.config.*.
+  export:embed [path]           Build the release bundle and assets for Xcode/Gradle embedding.
   run [path]                    Serve a built Vifx runtime locally.
   inspect [path]                Inspect project primitives.
   compat run [options]          Run compatibility cases with the vifx adapter.
@@ -116,6 +118,10 @@ export async function executeCli(
 
     if (argv[0] === "build") {
       return await runBuildCommand(argv.slice(1), cwd);
+    }
+
+    if (argv[0] === "export:embed" || argv[0] === "export-embed") {
+      return await runExportEmbedCommand(argv.slice(1), cwd);
     }
 
     if (argv[0] === "run") {
