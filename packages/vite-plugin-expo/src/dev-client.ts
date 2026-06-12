@@ -21,6 +21,10 @@ const DEV_CLIENT_LAUNCH_HOST = "expo-development-client";
 const EXPO_SIGNATURE_REQUEST_HEADERS = ["expo-expect-signature", "expo-expects-signature"] as const;
 
 export interface ManifestNegotiationRequest {
+  /**
+   * Incoming request headers with lowercase names, as found on
+   * `node:http` `IncomingMessage.headers`.
+   */
   headers: Record<string, string | string[] | undefined>;
 }
 
