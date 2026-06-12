@@ -18,7 +18,7 @@ import {
 } from "@vifx/asset-registry";
 import { VifxError } from "@vifx/errors";
 import { symbolicateStackFrame } from "@vifx/source-map-tools";
-import { reactNative } from "@vifx/vite-plugin-react-native";
+import { reactNative, resolveBundleMode } from "@vifx/vite-plugin-react-native";
 import type {
   VifxBuildAssetArtifact,
   VifxBundleArtifacts,
@@ -1575,6 +1575,7 @@ export async function startExpoGoDevServer(
     shimReactNative: options.shimReactNative ?? false,
   });
   const bundleUrlPath = await createExpoGoBundleUrlPath({
+    dev: resolveBundleMode(options) !== "production",
     exp,
     hermes: options.hermes,
     mainModuleName,
