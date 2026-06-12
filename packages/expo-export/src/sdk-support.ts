@@ -35,8 +35,16 @@ export const EXPO_SDK_SUPPORT: Record<string, VifxExpoSdkSupportEntry> = {
 
 export const SUPPORTED_EXPO_SDK_VERSIONS = Object.keys(EXPO_SDK_SUPPORT);
 
+export const VALIDATED_EXPO_SDK_VERSIONS = SUPPORTED_EXPO_SDK_VERSIONS.filter(
+  (sdk) => EXPO_SDK_SUPPORT[sdk]?.tier === "validated",
+);
+
 export function formatSupportedExpoSdkList() {
   return SUPPORTED_EXPO_SDK_VERSIONS.join(", ");
+}
+
+export function formatValidatedExpoSdkList() {
+  return VALIDATED_EXPO_SDK_VERSIONS.join(", ");
 }
 
 export function parseExpoSdkMajor(expoVersion: string | null | undefined): string | null {

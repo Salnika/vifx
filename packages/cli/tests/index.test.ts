@@ -3,6 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { chmod } from "node:fs/promises";
 import { cp } from "node:fs/promises";
+import {
+  EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS,
+  SUPPORTED_EXPO_SDK_MAJOR_VERSIONS,
+} from "@vifx/compat-runner";
+import { EXPO_SDK_SUPPORT, SUPPORTED_EXPO_SDK_VERSIONS } from "@vifx/expo-export";
 import { expect, test } from "vite-plus/test";
 import { executeCli } from "../src/index.ts";
 
@@ -354,6 +359,13 @@ test("doctor terminal output reports the Expo SDK support tier", async () => {
   expect(experimental.stdout).toContain("WARN  VIFX_PROJECT_EXPERIMENTAL_EXPO_SDK");
   expect(bare.exitCode).toBe(0);
   expect(bare.stdout).not.toContain("Expo SDK support:");
+});
+
+test("compat-runner SDK support mirror stays in sync with the expo-export table", () => {
+  expect(SUPPORTED_EXPO_SDK_MAJOR_VERSIONS.map(String)).toEqual(SUPPORTED_EXPO_SDK_VERSIONS);
+  expect(EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS.map(String)).toEqual(
+    SUPPORTED_EXPO_SDK_VERSIONS.filter((sdk) => EXPO_SDK_SUPPORT[sdk]?.tier === "experimental"),
+  );
 });
 
 test("doctor prints the detected Node version in terminal mode", async () => {

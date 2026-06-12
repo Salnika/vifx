@@ -40,9 +40,10 @@ const VITE_CONFIG_FILENAMES = [
 ] as const;
 
 // Mirrors the canonical EXPO_SDK_SUPPORT table in @vifx/expo-export, which is
-// built after this package and therefore cannot be imported here.
-const SUPPORTED_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [54, 55, 56];
-const EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [55, 56];
+// built after this package and therefore cannot be imported here. The CLI test
+// suite asserts that this mirror stays in sync with the canonical table.
+export const SUPPORTED_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [54, 55, 56];
+export const EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [55, 56];
 const VALIDATED_EXPO_SDK_MAJOR_VERSIONS: readonly number[] =
   SUPPORTED_EXPO_SDK_MAJOR_VERSIONS.filter(
     (majorVersion) => !EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS.includes(majorVersion),

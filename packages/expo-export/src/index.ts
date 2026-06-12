@@ -15,7 +15,11 @@ import type {
   VifxJsonObject,
   VifxJsonValue,
 } from "@vifx/types";
-import { formatSupportedExpoSdkList, getSdkSupportTier } from "./sdk-support.ts";
+import {
+  formatSupportedExpoSdkList,
+  formatValidatedExpoSdkList,
+  getSdkSupportTier,
+} from "./sdk-support.ts";
 
 export * from "./sdk-support.ts";
 
@@ -561,7 +565,7 @@ export async function evaluateExpoNoMetroContract(
     );
   } else if (sdkSupport.tier === "experimental") {
     warnings.push(
-      `Expo SDK ${sdkSupport.sdk ?? "unknown"} support is experimental: static analysis and fixtures only, not device-validated. SDK 54 remains the device-validated gate.`,
+      `Expo SDK ${sdkSupport.sdk ?? "unknown"} support is experimental: static analysis and fixtures only, not device-validated. SDK ${formatValidatedExpoSdkList()} remains the device-validated gate.`,
     );
   }
 
