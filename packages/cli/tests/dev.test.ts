@@ -65,6 +65,31 @@ async function createRnBareProject(prefix: string, outDir: string) {
   return targetPath;
 }
 
+function toWebSocketText(data: Buffer | Buffer[] | string) {
+  if (typeof data === "string") {
+    return data;
+  }
+
+  return Array.isArray(data) ? Buffer.concat(data).toString("utf8") : data.toString("utf8");
+}
+
+function waitForWebSocketOpen(socket: WebSocket) {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Timed out waiting for the WebSocket to open.")),
+      10_000,
+    );
+    socket.once("open", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    socket.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+}
+
 function normalizeSourcePath(source: string) {
   return source
     .replaceAll("\\", "/")
@@ -245,7 +270,8 @@ NETWORK_SERVER_TESTS(
       const wrongBundleResponse = await fetch(`${server.url}/other-entry.bundle?platform=ios`);
       expect(wrongBundleResponse.status).toBe(404);
 
-      const socket = new WebSocket(`${server.url.replace(/^http:/u, "ws:")}/message`);
+      const socketUrl = `${server.url.replace(/^http:/u, "ws:")}/message`;
+      const socket = new WebSocket(socketUrl);
       const identity = await new Promise<string | null>((resolve, reject) => {
         const timeout = setTimeout(() => {
           socket.close();
@@ -257,13 +283,7 @@ NETWORK_SERVER_TESTS(
         });
         socket.once("message", (data: Buffer | Buffer[] | string) => {
           clearTimeout(timeout);
-          const payload =
-            typeof data === "string"
-              ? data
-              : Array.isArray(data)
-                ? Buffer.concat(data).toString("utf8")
-                : data.toString("utf8");
-          const parsed = JSON.parse(payload) as {
+          const parsed = JSON.parse(toWebSocketText(data)) as {
             id: number;
             result?: string;
             version: number;
@@ -277,6 +297,37 @@ NETWORK_SERVER_TESTS(
         });
       });
       expect(identity).toMatch(/^vifx-/u);
+
+      const sender = new WebSocket(socketUrl);
+      const receiver = new WebSocket(socketUrl);
+      try {
+        await Promise.all([waitForWebSocketOpen(sender), waitForWebSocketOpen(receiver)]);
+
+        const senderEcho: string[] = [];
+        sender.on("message", (data: Buffer | Buffer[] | string) => {
+          senderEcho.push(toWebSocketText(data));
+        });
+        const received = new Promise<string>((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error("Timed out waiting for the broadcast.")),
+            10_000,
+          );
+          receiver.once("message", (data: Buffer | Buffer[] | string) => {
+            clearTimeout(timeout);
+            resolve(toWebSocketText(data));
+          });
+        });
+
+        sender.send(JSON.stringify({ method: "reload", version: 2 }));
+
+        const broadcast = JSON.parse(await received) as { method: string; version: number };
+        expect(broadcast.method).toBe("reload");
+        expect(broadcast.version).toBe(2);
+        expect(senderEcho).toEqual([]);
+      } finally {
+        sender.close();
+        receiver.close();
+      }
     } finally {
       await result.close?.();
     }

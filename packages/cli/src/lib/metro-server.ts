@@ -154,7 +154,9 @@ function createMetroMessageChannel() {
     }
 
     if (messageIsBroadcast(message)) {
-      broadcastToClients(null, data);
+      // Metro relays client-originated broadcasts to every peer except the
+      // sender; mirror that so clients never receive their own broadcasts.
+      broadcastToClients(client.id, data);
       return;
     }
 
