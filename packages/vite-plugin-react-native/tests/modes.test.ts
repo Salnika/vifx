@@ -1,4 +1,4 @@
-import { chmod, cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
@@ -57,6 +57,37 @@ async function writeDefineProbeEntry(projectRoot: string) {
       "",
       'console.log("vifx-define", __DEV__, process.env.NODE_ENV, process.env.EXPO_OS);',
       'AppRegistry.registerComponent("BareApp", () => null);',
+      "",
+    ].join("\n"),
+  );
+}
+
+async function writeFakeReactNativeWebPackage(projectRoot: string) {
+  const packageRoot = path.join(projectRoot, "node_modules", "react-native-web");
+
+  await mkdir(packageRoot, { recursive: true });
+  await writeFile(
+    path.join(packageRoot, "package.json"),
+    JSON.stringify(
+      {
+        name: "react-native-web",
+        main: "index.js",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(packageRoot, "index.js"),
+    [
+      "export const AppRegistry = {",
+      "  registerComponent(name, loader) {",
+      "    return { loader, name };",
+      "  },",
+      "};",
+      'export const Platform = { OS: "web", select(value) { return value?.web ?? value?.default ?? null; } };',
+      "const ReactNativeWeb = { AppRegistry, Platform };",
+      "export default ReactNativeWeb;",
       "",
     ].join("\n"),
   );
@@ -248,6 +279,18 @@ test("hermes production builds compile bytecode from the minified bundle", async
 test("web runtime previews keep ESM output while the native bundle is IIFE", async () => {
   const projectRoot = await copyFixture("rn-bare-basic");
 
+  await writeFakeReactNativeWebPackage(projectRoot);
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import { AppRegistry } from "react-native";',
+      "",
+      'console.log("vifx modes compat probe");',
+      'AppRegistry.registerComponent("BareApp", () => null);',
+      "",
+    ].join("\n"),
+  );
+
   const bundle = await buildReactNativeBundle({
     entry: "./index.js",
     outDir: ".vifx/modes-ios-web-compat",
@@ -263,5 +306,5 @@ test("web runtime previews keep ESM output while the native bundle is IIFE", asy
 
   expectScriptBundle(nativeBundleSource);
   expect(bundle.runtime?.htmlPath).toBe(".vifx/modes-ios-web-compat/index.html");
-  expect(previewBundleSource).toContain("rn ios bundle");
+  expect(previewBundleSource).toContain("vifx modes compat probe");
 });
