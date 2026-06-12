@@ -24,6 +24,13 @@ import type {
   VifxReactNativePluginOptions,
   VifxWebRuntimeArtifact,
 } from "@vifx/types";
+import { buildModuleRegistryBundle } from "./module-registry/index.ts";
+
+export { buildModuleRegistryBundle, MODULE_REGISTRY_PRELUDE } from "./module-registry/index.ts";
+export type {
+  BuildModuleRegistryBundleOptions,
+  ModuleRegistryBundleResult,
+} from "./module-registry/index.ts";
 
 const DEFAULT_EXTENSIONS = ["tsx", "ts", "jsx", "js", "json"] as const;
 const DEFAULT_NATIVE_MAIN_FIELDS = ["react-native", "main", "module"] as const;
@@ -2939,6 +2946,49 @@ export async function buildReactNativeBundle(
     shimReact: options.shimReact ?? true,
     shimReactNative: options.shimReactNative ?? true,
   };
+
+  if ((options.moduleFormat ?? "hoisted") === "metro") {
+    const registry = await buildModuleRegistryBundle({
+      absoluteOutDir,
+      entry,
+      plugins: [createReactNativePlugin(state)],
+      projectRoot,
+    });
+    const bundleStats = await stat(registry.bundlePath);
+    const assets = await collectBuildAssets({
+      assetFilePaths: [...state.assetFiles].sort(),
+      outDir: absoluteOutDir,
+      projectRoot,
+    });
+
+    let hermesBytecodePath: string | undefined;
+    if (options.hermes) {
+      const hermesResult = await compileHermesBytecode({
+        compilerPath: options.hermesCompilerPath,
+        cwd: projectRoot,
+        env: options.env,
+        inputBundlePath: registry.bundlePath,
+        outputBytecodePath: path.join(absoluteOutDir, "index.hbc"),
+      });
+      hermesBytecodePath = relativeFrom(projectRoot, hermesResult.outputBytecodePath);
+    }
+
+    return {
+      assets,
+      bundle: {
+        path: relativeFrom(projectRoot, registry.bundlePath),
+        sizeBytes: bundleStats.size,
+      },
+      entry,
+      hermesBytecodePath,
+      mode: "react-native",
+      platform: options.platform,
+      projectRoot,
+      runtime: null,
+      sourceMap: await buildSourceMapArtifact(projectRoot, registry.sourceMapPath),
+    };
+  }
+
   const inputEntry = await createBuildInputEntry(projectRoot, absoluteOutDir, entry);
   const buildConfig: InlineConfig = {
     appType: "custom",
