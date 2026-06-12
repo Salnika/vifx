@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Synthetic library packages checked in for compatibility fixtures.
+!fixtures/libs/*/node_modules/
+!fixtures/libs/*/node_modules/**
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

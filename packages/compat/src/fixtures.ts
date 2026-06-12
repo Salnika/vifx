@@ -68,6 +68,17 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     primaryPackagePath: "packages/mobile",
     features: ["monorepo", "yarn-workspaces", "react-native-project"],
   },
+  {
+    id: "lib-react-native-reanimated",
+    title: "Library: react-native-reanimated",
+    relativePath: "fixtures/libs/react-native-reanimated",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "worklet-directives", "ts-source-entry"],
+    notes: [
+      "Synthetic replica of react-native-builder-bob packaging with a react-native field pointing at TypeScript sources.",
+    ],
+  },
 ];
 
 const FIXTURE_MANIFEST_MAP = new Map(FIXTURE_MANIFESTS.map((fixture) => [fixture.id, fixture]));
@@ -90,5 +101,6 @@ export function resolveRepoRoot(metaUrl = import.meta.url) {
 }
 
 export function resolveFixturePath(fixtureId: FixtureId, metaUrl = import.meta.url) {
-  return fileURLToPath(new URL(`../../../fixtures/${fixtureId}/`, metaUrl));
+  const manifest = getFixtureManifest(fixtureId);
+  return fileURLToPath(new URL(`../../../${manifest.relativePath}/`, metaUrl));
 }

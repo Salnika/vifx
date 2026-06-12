@@ -8,10 +8,13 @@ import {
 } from "../src/index.ts";
 
 test("fixture manifests expose the compatibility fixtures", () => {
-  expect(getFixtureManifests()).toHaveLength(8);
+  expect(getFixtureManifests()).toHaveLength(9);
   expect(getFixtureManifest("expo-basic").projectType).toBe("expo");
   expect(getFixtureManifest("expo-router-basic").features).toContain("expo-router");
   expect(resolveFixturePath("expo-basic")).toContain("fixtures/expo-basic");
+  expect(resolveFixturePath("lib-react-native-reanimated")).toContain(
+    "fixtures/libs/react-native-reanimated",
+  );
 });
 
 test("compat cases cover the NEXT minimum categories", () => {

@@ -7,6 +7,7 @@ export const FIXTURE_IDS = [
   "rn-bare-assets",
   "monorepo-pnpm-workspaces",
   "monorepo-yarn-workspaces",
+  "lib-react-native-reanimated",
 ] as const;
 
 export type FixtureId = (typeof FIXTURE_IDS)[number];
