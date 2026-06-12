@@ -41,6 +41,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_MIGRATION_UNSAFE_CHANGE`           | A requested migration step was too risky or targeted the wrong project type.                                      |
 | `VIFX_MONOREPO_EXPERIMENTAL`             | Project inspection detected a workspace path that still depends on the current monorepo-limited support corridor. |
 | `VIFX_NO_ISSUES`                         | Project inspection completed without finding actionable issues.                                                   |
+| `VIFX_PROJECT_EXPERIMENTAL_EXPO_SDK`     | The project's Expo SDK is on the experimental support tier: static analysis only, not device-validated.           |
 | `VIFX_PROJECT_INVALID_PACKAGE_JSON`      | Project detection could not parse or use a package manifest.                                                      |
 | `VIFX_PROJECT_UNSUPPORTED_EXPO_VERSION`  | The project's Expo version falls outside the current experiment range.                                            |
 | `VIFX_RESOLVE_AMBIGUOUS_PLATFORM_FILE`   | Multiple platform candidates matched and Vifx could not pick one safely.                                          |
