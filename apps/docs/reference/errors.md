@@ -31,6 +31,10 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_EXPO_EXPORT_REQUIRES_EXPO_MODE`    | Expo export generation was run without `vite.mode = "expo"`.                                                      |
 | `VIFX_EXPO_EXPORT_TARGET_NOT_FOUND`      | No configured Expo export target matched the requested platform.                                                  |
 | `VIFX_EXPO_EXPORT_TARGETS_MISSING`       | Expo export generation did not receive any Vifx bundle artifacts.                                                 |
+| `VIFX_EXPO_PLUGIN_BUNDLE_PHASE_NOT_FOUND` | The Expo config plugin found no "Bundle React Native code and images" Xcode build phase.                          |
+| `VIFX_EXPO_PLUGIN_GRADLE_LANGUAGE_UNSUPPORTED` | The Expo config plugin only rewrites Groovy `android/app/build.gradle` files.                                     |
+| `VIFX_EXPO_PLUGIN_GRADLE_REACT_BLOCK_UNTERMINATED` | The `react {}` block in `android/app/build.gradle` never closes.                                                  |
+| `VIFX_EXPO_PLUGIN_SHELL_SCRIPT_UNREADABLE` | The Xcode bundle build phase shell script could not be parsed.                                                    |
 | `VIFX_EXPO_SMOKE_INVALID_ASSET_LIMIT`    | An Expo smoke command received a malformed asset sampling limit.                                                  |
 | `VIFX_EXPO_SMOKE_REQUIRES_EXPO_MODE`     | Expo Go smoke validation was run without `vite.mode = "expo"`.                                                    |
 | `VIFX_EXPO_SMOKE_WEBSOCKET_UNAVAILABLE`  | The current Node.js runtime cannot open the WebSocket loop required by Expo Go smoke validation.                  |
@@ -41,6 +45,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_MIGRATION_UNSAFE_CHANGE`           | A requested migration step was too risky or targeted the wrong project type.                                      |
 | `VIFX_MONOREPO_EXPERIMENTAL`             | Project inspection detected a workspace path that still depends on the current monorepo-limited support corridor. |
 | `VIFX_NO_ISSUES`                         | Project inspection completed without finding actionable issues.                                                   |
+| `VIFX_PROJECT_INVALID_APP_JSON`          | Setup codemods could not parse or use the project's `app.json`.                                                   |
 | `VIFX_PROJECT_INVALID_PACKAGE_JSON`      | Project detection could not parse or use a package manifest.                                                      |
 | `VIFX_PROJECT_UNSUPPORTED_EXPO_VERSION`  | The project's Expo version falls outside the current experiment range.                                            |
 | `VIFX_RESOLVE_AMBIGUOUS_PLATFORM_FILE`   | Multiple platform candidates matched and Vifx could not pick one safely.                                          |
@@ -56,6 +61,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_RUN_TARGET_NOT_FOUND`              | No configured runtime target matched the requested platform.                                                      |
 | `VIFX_RUN_TARGETS_MISSING`               | The config does not contain any Vite runtime targets.                                                             |
 | `VIFX_SOURCEMAP_INVALID`                 | A source map failed validation or comparison.                                                                     |
+| `VIFX_SETUP_APP_JSON_REQUIRED`           | `vifx setup --experimental-embed` needs a static `app.json` to register the embed plugin.                         |
 | `VIFX_SETUP_CONFIRMATION_REQUIRED`       | `vifx setup` was run without `--yes` in a non-interactive session.                                                |
 | `VIFX_SETUP_EXPO_ONLY`                   | `vifx setup` was pointed at a non-Expo project even though the v1 flow supports Expo only.                        |
 | `VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST` | Project inspection found a custom Metro `resolveRequest` hook outside Vifx scope.                                 |
