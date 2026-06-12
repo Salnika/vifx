@@ -148,6 +148,37 @@ test("require.context respects recursive: false", async () => {
   expect(captured.keys).toEqual(["./home.ts"]);
 });
 
+test("require.context matches every file when the filter regex is global", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+
+  // A global regex keeps lastIndex state between test() calls. After matching
+  // the long "./alpha-icon.ts" key, a stateful filter would start scanning the
+  // following short "./b.ts" key beyond its end and skip it.
+  await mkdir(path.join(projectRoot, "icons"), { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "icons", "alpha-icon.ts"),
+    ['export const name = "alpha";', ""].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "icons", "b.ts"),
+    ['export const name = "b";', ""].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'const iconsContext = require.context("./icons", true, /\\.ts$/gu);',
+      "globalThis.__vifxContext = { keys: iconsContext.keys() };",
+      "",
+    ].join("\n"),
+  );
+
+  const bundleSource = await buildIifeBundle(projectRoot, ".vifx/dynamic-context-global");
+  const sandbox = evalBundle(bundleSource);
+  const captured = sandbox.__vifxContext as { keys: string[] };
+
+  expect(captured.keys).toEqual(["./alpha-icon.ts", "./b.ts"]);
+});
+
 test("require.context loads JSON modules", async () => {
   const projectRoot = await copyFixture("rn-bare-basic");
 

@@ -102,7 +102,6 @@ function parseRequireContextArguments(options: { call: AstNode; code: string; fi
   directory: string;
   filterFlags: string | null;
   filterSource: string | null;
-  mode: string;
   recursive: boolean;
 } {
   const notStatic = (reason: string, start: number) =>
@@ -183,7 +182,7 @@ function parseRequireContextArguments(options: { call: AstNode; code: string; fi
     });
   }
 
-  return { directory, filterFlags, filterSource, mode, recursive };
+  return { directory, filterFlags, filterSource, recursive };
 }
 
 function createRequireContextModuleId(descriptor: RequireContextDescriptor) {
@@ -320,8 +319,14 @@ async function collectRequireContextEntries(
       }
 
       const contextKey = `./${toPosixPath(path.relative(descriptor.directory, entryPath))}`;
-      if (filter && !filter.test(contextKey)) {
-        continue;
+      if (filter) {
+        // Global and sticky filters keep lastIndex state between test() calls,
+        // which would skip matching files nondeterministically. Reset it so
+        // every context key is matched independently.
+        filter.lastIndex = 0;
+        if (!filter.test(contextKey)) {
+          continue;
+        }
       }
 
       entries.push({ contextKey, resolvedFilePath: entryPath });
