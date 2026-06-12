@@ -240,13 +240,17 @@ test(
         }, 10_000);
 
         socket.once("open", () => {
-          socket.send(
-            JSON.stringify({ id: 1, method: "getid", target: "server", version: 2 }),
-          );
+          socket.send(JSON.stringify({ id: 1, method: "getid", target: "server", version: 2 }));
         });
-        socket.once("message", (data) => {
+        socket.once("message", (data: Buffer | Buffer[] | string) => {
           clearTimeout(timeout);
-          const parsed = JSON.parse(String(data)) as {
+          const payload =
+            typeof data === "string"
+              ? data
+              : Array.isArray(data)
+                ? Buffer.concat(data).toString("utf8")
+                : data.toString("utf8");
+          const parsed = JSON.parse(payload) as {
             id: number;
             result?: string;
             version: number;
