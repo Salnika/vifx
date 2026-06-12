@@ -16,6 +16,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_CONFIG_MISSING`                    | Project inspection did not find a `vifx.config.*` file.                                                           |
 | `VIFX_CONFIG_NOT_FOUND`                  | A required or explicitly requested config file was missing.                                                       |
 | `VIFX_CORE_MISSING_PRIMITIVE`            | A lazy core primitive could not be loaded from its package.                                                       |
+| `VIFX_DEVTOOLS_MIDDLEWARE_FAILED`        | The React Native DevTools middleware failed while handling an inspector proxy request.                            |
 | `VIFX_EXPERIMENTAL_EXPO`                 | Expo support falls outside the current supported corridor for the inspected workflow.                             |
 | `VIFX_EXPO_CONFIG_NOT_FOUND`             | The Expo layer could not find or read app config metadata.                                                        |
 | `VIFX_EXPO_DEV_INVALID_PLATFORM`         | An Expo dev command received an unsupported platform value.                                                       |
