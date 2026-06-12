@@ -313,8 +313,7 @@ export const withVifxBundler: ConfigPlugin<VifxBundlerProps | undefined> = (conf
         details: { language: gradleConfig.modResults.language },
         docsPath: "/guide/native-builds",
         hint: 'Set cliFile = file("../../node_modules/@vifx/cli/bin/vifx.mjs") and bundleCommand = "export:embed" inside react {} of android/app/build.gradle.kts manually.',
-        message:
-          "@vifx/expo-config-plugin only supports Groovy android/app/build.gradle files.",
+        message: "@vifx/expo-config-plugin only supports Groovy android/app/build.gradle files.",
       });
     }
 
