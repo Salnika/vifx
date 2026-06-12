@@ -98,11 +98,7 @@ function createContextError(options: {
   });
 }
 
-function parseRequireContextArguments(options: {
-  call: AstNode;
-  code: string;
-  filePath: string;
-}): {
+function parseRequireContextArguments(options: { call: AstNode; code: string; filePath: string }): {
   directory: string;
   filterFlags: string | null;
   filterSource: string | null;
@@ -144,10 +140,7 @@ function parseRequireContextArguments(options: {
   const recursiveArgument = callArguments[1];
   if (recursiveArgument !== undefined) {
     if (recursiveArgument.type !== "Literal" || typeof recursiveArgument.value !== "boolean") {
-      throw notStatic(
-        "the recursive argument must be a boolean literal.",
-        recursiveArgument.start,
-      );
+      throw notStatic("the recursive argument must be a boolean literal.", recursiveArgument.start);
     }
     recursive = recursiveArgument.value;
   }
@@ -286,7 +279,10 @@ export function transformRequireContext(options: {
   }
 
   return {
-    code: prependModuleCode(applyCodeReplacements(options.code, replacements), `${importLines.join("\n")}\n`),
+    code: prependModuleCode(
+      applyCodeReplacements(options.code, replacements),
+      `${importLines.join("\n")}\n`,
+    ),
   };
 }
 

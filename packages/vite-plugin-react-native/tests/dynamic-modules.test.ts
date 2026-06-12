@@ -190,11 +190,7 @@ test("literal import() emits a single native bundle and resolves in a VM", async
   );
   await writeFile(
     path.join(projectRoot, "detail.js"),
-    [
-      'export const value = "detail value";',
-      'export default { kind: "detail" };',
-      "",
-    ].join("\n"),
+    ['export const value = "detail value";', 'export default { kind: "detail" };', ""].join("\n"),
   );
   await writeFile(
     path.join(projectRoot, "index.js"),
