@@ -142,6 +142,7 @@ export function createHotChannel(): VifxHotChannel {
       for (const socket of clients) {
         socket.close(HOT_SOCKET_CLOSE_GOING_AWAY, "Vifx dev server is shutting down.");
       }
+      clients.clear();
 
       return new Promise<void>((resolve, reject) => {
         websocketServer.close((error) => (error ? reject(error) : resolve()));

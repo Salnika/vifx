@@ -81,6 +81,9 @@ function formatExpoGoServerOutput(options: {
     formatVifxWarning(
       "Boundary: Vifx serves Expo Go manifest and bundle endpoints backed by Vite. It does not replace Expo native runtimes, EAS, or native app binaries.",
     ),
+    ...(server.watching && server.hotSocketUrl
+      ? [formatVifxInfo(`Watching for changes — hot: ${server.hotSocketUrl}`)]
+      : []),
     formatVifxInfo("Press Ctrl+C to stop the Expo Go dev server."),
   ].join("\n");
 }
@@ -1210,6 +1213,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
             hmr: server.hmr,
             host: server.host,
             hostUri: server.hostUri,
+            hotSocketUrl: server.hotSocketUrl,
             manifestUrl: server.manifestUrl,
             messageSocketUrl: server.messageSocketUrl,
             metro: server.metro,
@@ -1219,6 +1223,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
             projectRoot: server.projectRoot,
             sourceMapUrl: server.sourceMapUrl,
             url: server.url,
+            watching: server.watching,
           },
           null,
           2,

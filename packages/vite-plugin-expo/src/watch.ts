@@ -1,5 +1,6 @@
 import { stat, watch } from "node:fs/promises";
 import path from "node:path";
+import { VifxError } from "@vifx/errors";
 
 const DEFAULT_DEBOUNCE_MS = 150;
 const DEFAULT_IGNORED_SEGMENTS = new Set(["node_modules", ".git", ".vifx", "dist"]);
@@ -116,7 +117,12 @@ export async function createBundleWatcher(
       const startedAt = Date.now();
 
       try {
-        await options.rebuild();
+        // Defer one microtask so `activeRebuild` is assigned before any user
+        // code runs; a synchronously-throwing rebuild would otherwise finish
+        // this whole function (including `activeRebuild = null`) before the
+        // scheduling assignment, stranding a stale non-null `activeRebuild`
+        // that swallows every future change notification.
+        await Promise.resolve().then(() => options.rebuild());
         emitEvent({ changedPaths, durationMs: Date.now() - startedAt, type: "rebuild-done" });
       } catch (error) {
         emitEvent({ error, type: "rebuild-error" });
@@ -174,9 +180,19 @@ export async function createBundleWatcher(
   if (projectRootStats?.isDirectory()) {
     watching = true;
     watchLoop = consumeWatchEvents();
+    // Give the recursive watch one event-loop turn to fail fast (for example
+    // on platforms without recursive watch support) so callers observing
+    // `watching` right after creation see the degraded state.
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
   } else if (projectRootStats) {
     emitEvent({
-      error: new Error(`Watch root "${projectRoot}" is not a directory.`),
+      error: new VifxError({
+        code: "VIFX_EXPO_DEV_WATCH_UNAVAILABLE",
+        message: `Watch root "${projectRoot}" is not a directory.`,
+        hint: "Point the Expo dev server at the project directory that contains your app source.",
+      }),
       type: "watch-error",
     });
   }
