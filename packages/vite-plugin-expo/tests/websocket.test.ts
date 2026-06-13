@@ -351,9 +351,7 @@ NETWORK_SOCKET_TESTS("removes a client from the registry when it disconnects", a
     second.close();
     await closed;
 
-    await expect
-      .poll(() => harness.channel.messageClientCount(), { timeout: 2000 })
-      .toBe(1);
+    await expect.poll(() => harness.channel.messageClientCount(), { timeout: 2000 }).toBe(1);
   } finally {
     first.close();
     await harness.close();
