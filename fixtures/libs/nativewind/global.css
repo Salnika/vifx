@@ -1,0 +1,6 @@
+/* Tailwind/NativeWind CSS entry. NativeWind compiles these directives into a
+   StyleSheet via its Metro/PostCSS transform; a plain native bundler build does
+   not run that transform, so utility classes are not registered at runtime. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

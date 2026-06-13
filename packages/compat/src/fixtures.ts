@@ -156,6 +156,50 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
       "Synthetic Expo module opening a database through the ExpoSQLite native module via a vendored expo-modules-core.",
     ],
   },
+  {
+    id: "lib-react-native-vector-icons",
+    title: "Library: react-native-vector-icons",
+    relativePath: "fixtures/libs/react-native-vector-icons",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "jsx-in-published-js", "babel-required"],
+    notes: [
+      "Synthetic replica shipping untranspiled JSX inside published .js files, the classic Metro-flavored publishing quirk.",
+    ],
+  },
+  {
+    id: "lib-lottie-react-native",
+    title: "Library: lottie-react-native",
+    relativePath: "fixtures/libs/lottie-react-native",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "native-component", "jsx-source", "ts-source-entry"],
+    notes: [
+      "Synthetic replica rendering a native animation view (LottieAnimationView) from a TSX react-native entry.",
+    ],
+  },
+  {
+    id: "lib-nativewind",
+    title: "Library: nativewind",
+    relativePath: "fixtures/libs/nativewind",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "css-import", "babel-required", "ts-source-entry"],
+    notes: [
+      "Synthetic replica whose consumer imports a Tailwind CSS entry; the real toolchain pairs it with a Babel preset and PostCSS pipeline.",
+    ],
+  },
+  {
+    id: "lib-react-native-webview",
+    title: "Library: react-native-webview",
+    relativePath: "fixtures/libs/react-native-webview",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "native-component", "jsx-source", "ts-source-entry"],
+    notes: [
+      "Synthetic replica rendering a native RNCWebView host component from a TSX react-native entry.",
+    ],
+  },
 ];
 
 const FIXTURE_MANIFEST_MAP = new Map(FIXTURE_MANIFESTS.map((fixture) => [fixture.id, fixture]));

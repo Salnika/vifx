@@ -487,4 +487,124 @@ export const compatCases: CompatCase[] = [
     notes: ["Synthetic Expo module opening a database via the ExpoSQLite native module."],
     docsPath: "/compat/libraries#expo-sqlite",
   },
+  {
+    id: "lib-react-native-vector-icons",
+    title: "react-native-vector-icons ships untranspiled JSX in published .js",
+    category: "libraries",
+    fixtureId: "lib-react-native-vector-icons",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-vector-icons",
+      platform: "ios",
+      bundleProbes: ["createIconSet"],
+      partialAspects: [],
+    },
+    expected: {
+      packageName: "react-native-vector-icons",
+      toolchains: {
+        vifx: {
+          status: "fail",
+          note: "The published entry ships untranspiled JSX inside a .js file. The default build does not transform JSX in node_modules .js files, so the bundle fails to parse. Metro applies the React Native Babel preset here; vifx needs the babel-pipeline unit (jsxInPackages / babelInPackages opt-in).",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: [
+      "Synthetic replica of the classic Metro-flavored publishing quirk: JSX shipped in published .js files.",
+    ],
+    docsPath: "/compat/libraries#react-native-vector-icons",
+  },
+  {
+    id: "lib-lottie-react-native",
+    title: "lottie-react-native bundles its TSX native-component entry",
+    category: "libraries",
+    fixtureId: "lib-lottie-react-native",
+    operation: {
+      kind: "library-build",
+      packageName: "lottie-react-native",
+      platform: "ios",
+      bundleProbes: ["LottieView"],
+      partialAspects: [
+        "the LottieAnimationView native host component is only available on a device, so animations do not render from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "lottie-react-native",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Transpiles the TSX react-native entry and bundles it, but the LottieAnimationView native component is not registered at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica rendering a native animation view from a TSX entry."],
+    docsPath: "/compat/libraries#lottie-react-native",
+  },
+  {
+    id: "lib-nativewind",
+    title: "nativewind bundles its runtime but does not apply its CSS/Babel pipeline",
+    category: "libraries",
+    fixtureId: "lib-nativewind",
+    operation: {
+      kind: "library-build",
+      packageName: "nativewind",
+      platform: "ios",
+      bundleProbes: ["cssInterop", "styled"],
+      partialAspects: [
+        "the NativeWind Babel preset (jsxImportSource) and the Tailwind/PostCSS compilation of the imported CSS entry are not applied by a plain bundler build, so utility classes are not registered at runtime (see the babel-pipeline unit)",
+      ],
+    },
+    expected: {
+      packageName: "nativewind",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the react-native field to TypeScript sources and tolerates the imported CSS entry, but neither the NativeWind Babel preset nor the Tailwind PostCSS pipeline runs, so className utilities are not compiled to styles.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica whose consumer imports a Tailwind CSS entry."],
+    docsPath: "/compat/libraries#nativewind",
+  },
+  {
+    id: "lib-react-native-webview",
+    title: "react-native-webview bundles its TSX native-component entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-webview",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-webview",
+      platform: "ios",
+      bundleProbes: ["WebView"],
+      partialAspects: [
+        "the RNCWebView native host component is only available on a device, so the web view does not mount from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "react-native-webview",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Transpiles the TSX react-native entry and bundles it, but the RNCWebView native component is not registered at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica rendering a native RNCWebView host component from a TSX entry."],
+    docsPath: "/compat/libraries#react-native-webview",
+  },
 ];
