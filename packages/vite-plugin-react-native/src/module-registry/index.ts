@@ -143,6 +143,7 @@ export async function buildModuleRegistryBundle(
 
   const plan = await planMetroEntryModule({
     absoluteOutDir: options.absoluteOutDir,
+    dev: options.hmr === true,
     entry: options.entry,
     onWarn: options.onWarn,
     projectRoot: options.projectRoot,

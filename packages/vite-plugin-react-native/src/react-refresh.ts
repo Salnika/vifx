@@ -6,40 +6,23 @@ import type { VifxBundleMode, VifxModuleFormat } from "@vifx/types";
 /**
  * Transform-level React Refresh support for the Metro-compatible dev bundle.
  *
- * Vifx serves React Native's own Fast Refresh client (HMRClient +
- * setUpReactRefresh, shipped inside react-native). For that client to drive
- * component-level updates, every project module must be transformed exactly the
- * way Metro transforms it:
+ * Runs `react-refresh/babel` over each project module, emitting the
+ * `$RefreshReg$(Type, "id")` registration calls and `$RefreshSig$()` signature
+ * calls React Refresh needs. That is the ONLY thing done here.
  *
- *  1. The `react-refresh/babel` plugin runs over the module, emitting
- *     `$RefreshReg$(Type, "id")` registration calls and `$RefreshSig$()`
- *     signature calls for every component/hook it can recognise.
- *  2. The module body is wrapped so that, while it executes, the global
- *     `$RefreshReg$` / `$RefreshSig$` point at per-module implementations that
- *     register types against a stable id (`moduleId + " " + localName`) with the
- *     react-refresh runtime, and the previous globals are restored afterwards.
+ * The registration glue itself lives in the runtime, not in the module body:
+ * the `moduleFormat: "metro"` registry prelude installs the `$RefreshReg$` /
+ * `$RefreshSig$` globals around each module factory and registers the module's
+ * real exports afterwards (see `module-registry/runtime.ts`
+ * `loadModuleImplementation`), exactly as Metro's `metroRequire` does. Doing the
+ * registration in the runtime — rather than wrapping the body in a nested
+ * `(module, exports)` closure here — is what keeps the factory's real
+ * `module.exports` visible to React Refresh; wrapping it would register an empty
+ * exports object and silently degrade every edit to a full reload.
  *
- * Metro performs step 2 inside its `metroRequire` runtime (see
- * metro-runtime/src/polyfills/require.js). Vifx's dev bundle is scope-hoisted and
- * has no `__d`/`__r` module registry to hook into at this layer, so the
- * equivalent save/install/execute/restore is emitted inline around each module's
- * body here. The semantics are matched to Metro's so RN's HMRClient and
- * setUpReactRefresh work unmodified once the delta-delivery layer lands.
- *
- * Scope: TRANSFORM-LEVEL ONLY. This module does not deliver updates over a
- * `/hot` socket and is not wired to any runtime end-to-end path; both depend on
- * sibling units and a follow-up.
+ * Scope: TRANSFORM-LEVEL ONLY. Activated under `moduleFormat: "metro"` +
+ * development (see {@link shouldApplyReactRefresh}); a no-op otherwise.
  */
-
-/** Default global name React Native's metro-require exposes the Refresh registry under. */
-const REACT_REFRESH_GLOBAL_KEY = "__ReactRefresh";
-
-/** Metro reads the runtime global prefix from this global; we mirror its `|| ""` fallback. */
-const METRO_GLOBAL_PREFIX_KEY = "__METRO_GLOBAL_PREFIX__";
-
-/** Babel-plugin-injected global identifiers. Kept as Metro's defaults so the glue matches. */
-const REFRESH_REG_GLOBAL = "$RefreshReg$";
-const REFRESH_SIG_GLOBAL = "$RefreshSig$";
 
 const NODE_MODULES_SEGMENT = "/node_modules/";
 
@@ -166,8 +149,8 @@ function resolveReactRefreshBabelPlugin(resolveFrom: string): string {
 
 /**
  * Run `react-refresh/babel` over a project module using the plugin's existing
- * project babel runtime. Emits the `$RefreshReg$` / `$RefreshSig$` calls the
- * registration glue (see {@link wrapWithRefreshRegistration}) depends on.
+ * project babel runtime. Emits the `$RefreshReg$` / `$RefreshSig$` calls that
+ * the metro registry runtime's per-factory registration relies on.
  *
  * `skipEnvCheck` is set because this pipeline's babel caller does not advertise a
  * `development` env; the activation predicate already gates on dev mode.
@@ -229,78 +212,6 @@ function defaultResolveFrom(): string {
   return import.meta.url;
 }
 
-function toJsStringLiteral(value: string): string {
-  return JSON.stringify(value);
-}
-
-/**
- * Wrap a (react-refresh-babel-transformed) module body with Metro-compatible
- * registration glue.
- *
- * The shape mirrors metro-runtime's `metroRequire` execution path:
- *
- *  - Resolve the Refresh registry RN's `setUpReactRefresh` installs at
- *    `global[(global.__METRO_GLOBAL_PREFIX__ || "") + "__ReactRefresh"]`.
- *  - Capture the previous `global.$RefreshReg$` / `global.$RefreshSig$`.
- *  - If a registry is present, install per-module implementations:
- *      `$RefreshReg$ = (type, id) => Refresh.register(type, moduleId + " " + id)`
- *      `$RefreshSig$ = Refresh.createSignatureFunctionForTransform`
- *  - Execute the module body (the babel-emitted `$RefreshReg$`/`$RefreshSig$`
- *    calls fire here).
- *  - After the body, register the module's exports
- *    (`Refresh.register(exports, moduleId + " %exports%")` and per-key) so
- *    function-component default/named exports become refresh boundaries.
- *  - In a `finally`, restore the previous `$RefreshReg$`/`$RefreshSig$`.
- *
- * The body runs inside a function so its top-level `const`/`let`/`import`-lowered
- * bindings stay module-scoped rather than leaking to the wrapper. The wrapper is
- * a no-op (beyond running the body) whenever the Refresh registry is absent,
- * matching Metro's `if (Refresh != null)` guard.
- *
- * `moduleId` is embedded as a string literal; the stable type id is
- * `moduleId + " " + localName`, identical to Metro's `$RefreshReg$` id scheme.
- */
-export function wrapWithRefreshRegistration(code: string, moduleId: string): string {
-  const moduleIdLiteral = toJsStringLiteral(moduleId);
-
-  return `(function () {
-  var __vifxRefresh =
-    globalThis[(globalThis.${METRO_GLOBAL_PREFIX_KEY} || "") + ${toJsStringLiteral(
-      REACT_REFRESH_GLOBAL_KEY,
-    )}];
-  var __vifxPrevRefreshReg = globalThis.${REFRESH_REG_GLOBAL};
-  var __vifxPrevRefreshSig = globalThis.${REFRESH_SIG_GLOBAL};
-  var __vifxModuleId = ${moduleIdLiteral};
-  if (__vifxRefresh != null) {
-    globalThis.${REFRESH_REG_GLOBAL} = function (type, id) {
-      __vifxRefresh.register(type, __vifxModuleId + " " + id);
-    };
-    globalThis.${REFRESH_SIG_GLOBAL} = __vifxRefresh.createSignatureFunctionForTransform;
-  }
-  var __vifxModule = { exports: {} };
-  try {
-    (function (module, exports) {
-${code}
-    })(__vifxModule, __vifxModule.exports);
-    if (__vifxRefresh != null) {
-      __vifxRefresh.register(__vifxModule.exports, __vifxModuleId + " %exports%");
-      if (__vifxModule.exports != null && typeof __vifxModule.exports === "object") {
-        for (var __vifxKey in __vifxModule.exports) {
-          var __vifxDesc = Object.getOwnPropertyDescriptor(__vifxModule.exports, __vifxKey);
-          if (__vifxDesc && __vifxDesc.get) {
-            continue;
-          }
-          __vifxRefresh.register(
-            __vifxModule.exports[__vifxKey],
-            __vifxModuleId + " %exports% " + __vifxKey,
-          );
-        }
-      }
-    }
-  } finally {
-    globalThis.${REFRESH_REG_GLOBAL} = __vifxPrevRefreshReg;
-    globalThis.${REFRESH_SIG_GLOBAL} = __vifxPrevRefreshSig;
-  }
-})();
-`;
-}
+// React Refresh registration is performed by the metro registry runtime
+// (module-registry/runtime.ts loadModuleImplementation), not by wrapping the
+// module body here — see this file's header comment.

@@ -1,11 +1,9 @@
 import path from "node:path";
-import vm from "node:vm";
 import { expect, test } from "vite-plus/test";
 import {
   applyReactRefreshTransform,
   type ProjectBabelLike,
   shouldApplyReactRefresh,
-  wrapWithRefreshRegistration,
 } from "../src/react-refresh.ts";
 
 const PROJECT_ROOT = "/project";
@@ -159,96 +157,6 @@ test("applyReactRefreshTransform surfaces babel failures as VifxError", async ()
   ).rejects.toMatchObject({ name: "VifxError", code: "VIFX_INTERNAL_ERROR" });
 });
 
-test("wrapWithRefreshRegistration emits Metro-compatible registration glue", () => {
-  const moduleId = "src/App.tsx";
-  const wrapped = wrapWithRefreshRegistration(REFRESH_BABEL_OUTPUT, moduleId);
-
-  // Reads the Refresh registry RN's setUpReactRefresh installs (prefix + key).
-  expect(wrapped).toContain("__METRO_GLOBAL_PREFIX__");
-  expect(wrapped).toContain('"__ReactRefresh"');
-
-  // Saves previous globals, installs per-module impls, restores in finally.
-  expect(wrapped).toContain("$RefreshReg$");
-  expect(wrapped).toContain("$RefreshSig$");
-  expect(wrapped).toContain("createSignatureFunctionForTransform");
-  expect(wrapped).toContain('register(type, __vifxModuleId + " " + id)');
-  expect(wrapped).toContain(JSON.stringify(moduleId));
-
-  // Registers the executed module's exports (and per-key) as refresh families.
-  expect(wrapped).toContain('+ " %exports%"');
-  expect(wrapped).toContain('+ " %exports% "');
-
-  // The babel-emitted registration calls are carried through verbatim.
-  expect(wrapped).toContain('$RefreshReg$(_c, "App")');
-
-  // The restore happens in a finally block.
-  expect(wrapped).toMatch(/finally\s*\{/u);
-});
-
-test("wrapWithRefreshRegistration output is syntactically valid", () => {
-  const wrapped = wrapWithRefreshRegistration(REFRESH_BABEL_OUTPUT, "src/App.tsx");
-  // Compiling (without executing) throws on any syntax error.
-  expect(() => new vm.Script(wrapped, { filename: "wrapped.js" })).not.toThrow();
-});
-
-test("wrapWithRefreshRegistration glue registers against the moduleId and restores globals", () => {
-  // A module body that exercises the installed $RefreshReg$/$RefreshSig$.
-  const body = [
-    "var sig = $RefreshSig$();",
-    "function Comp() { return null; }",
-    "module.exports.default = Comp;",
-    '$RefreshReg$(Comp, "Comp");',
-  ].join("\n");
-  const wrapped = wrapWithRefreshRegistration(body, "src/Comp.tsx");
-
-  const registered: Array<{ id: unknown }> = [];
-  const sentinelReg = () => undefined;
-  const sentinelSig = () => undefined;
-
-  const sandbox: Record<string, unknown> = {
-    globalThis: undefined,
-    Object,
-  };
-  sandbox.globalThis = sandbox;
-  sandbox.__METRO_GLOBAL_PREFIX__ = "";
-  sandbox.$RefreshReg$ = sentinelReg;
-  sandbox.$RefreshSig$ = sentinelSig;
-  sandbox.__ReactRefresh = {
-    register: (_type: unknown, id: unknown) => {
-      registered.push({ id });
-    },
-    createSignatureFunctionForTransform: () => () => undefined,
-  };
-
-  vm.runInNewContext(wrapped, sandbox, { filename: "wrapped-run.js" });
-
-  // The component registered against `moduleId + " " + localName`.
-  expect(registered.some((entry) => entry.id === "src/Comp.tsx Comp")).toBe(true);
-  // Exports were registered too.
-  expect(registered.some((entry) => entry.id === "src/Comp.tsx %exports%")).toBe(true);
-
-  // Globals were restored to the previous sentinels after the body ran.
-  expect(sandbox.$RefreshReg$).toBe(sentinelReg);
-  expect(sandbox.$RefreshSig$).toBe(sentinelSig);
-});
-
-test("wrapWithRefreshRegistration is a no-op wrapper when no Refresh registry is present", () => {
-  let ran = false;
-  const body = "module.exports.value = (globalThis.__vifxRan = true);";
-  const wrapped = wrapWithRefreshRegistration(body, "src/Plain.tsx");
-
-  const sandbox: Record<string, unknown> = { Object };
-  sandbox.globalThis = sandbox;
-  // No __ReactRefresh, no $RefreshReg$/$RefreshSig$ globals defined.
-  Object.defineProperty(sandbox, "__vifxRan", {
-    configurable: true,
-    get: () => ran,
-    set: (value: boolean) => {
-      ran = value;
-    },
-  });
-
-  expect(() => vm.runInNewContext(wrapped, sandbox, { filename: "plain-run.js" })).not.toThrow();
-  // Body still executed even with no registry available.
-  expect(ran).toBe(true);
-});
+// React Refresh registration now happens in the metro registry runtime, not by
+// wrapping the module body — see module-registry-hmr.test.ts for the runtime's
+// $RefreshReg$ install + registerExportsForReactRefresh coverage.

@@ -61,11 +61,7 @@ import {
   resolveOutputOptions,
 } from "./modes.ts";
 import { buildModuleRegistryBundle } from "./module-registry/index.ts";
-import {
-  applyReactRefreshTransform,
-  shouldApplyReactRefresh,
-  wrapWithRefreshRegistration,
-} from "./react-refresh.ts";
+import { applyReactRefreshTransform, shouldApplyReactRefresh } from "./react-refresh.ts";
 import { VIFX_HMR_CLIENT_SOURCE } from "./hmr-client.ts";
 
 export {
@@ -2246,15 +2242,6 @@ function resolvePluginVersion(): string {
 
 const dependencyVersionCache = new Map<string, string>();
 
-function reactRefreshModuleId(
-  id: string,
-  state: Pick<ReactNativePluginState, "projectRoot">,
-): string {
-  const normalizedId = stripQuery(id);
-  const relativePath = path.relative(state.projectRoot, normalizedId);
-  return toPosixPath(relativePath === "" ? path.basename(normalizedId) : relativePath);
-}
-
 function resolveDependencyVersion(name: string, fromUrl = import.meta.url): string {
   const cacheKey = `${fromUrl} ${name}`;
   const cached = dependencyVersionCache.get(cacheKey);
@@ -2557,8 +2544,16 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
               platform: state.resolvePlatform,
               projectRoot: state.projectRoot,
             });
+            // Use the babel output (with its emitted $RefreshReg$/$RefreshSig$
+            // calls) directly. The metro registry runtime installs those globals
+            // around each factory and registers the real module.exports after it
+            // (see module-registry/runtime.ts loadModuleImplementation). Wrapping
+            // the body in a nested (module, exports) closure would shadow the
+            // factory's real exports, so React Refresh would register an empty
+            // object — isReactRefreshBoundary would always be false and every edit
+            // would silently degrade to a full reload.
             return {
-              code: wrapWithRefreshRegistration(refreshed.code, reactRefreshModuleId(id, state)),
+              code: refreshed.code,
               map: null,
             };
           }

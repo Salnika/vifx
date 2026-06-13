@@ -42,9 +42,25 @@ export const MODULE_REGISTRY_POLYFILL_SPECIFIERS = [
  */
 export const INITIALIZE_CORE_SPECIFIER = "react-native/Libraries/Core/InitializeCore.js";
 
+/**
+ * React Native's Fast Refresh setup module. Development bundles import it right
+ * after InitializeCore (which wires the globals it depends on) so it installs
+ * `global[(__METRO_GLOBAL_PREFIX__ || "") + "__ReactRefresh"]` — the registry
+ * the metro runtime's HMR engine reads — independently of RN's internal
+ * InitializeCore → setUpDeveloperTools → setUpReactRefresh chain, which can drift
+ * across RN versions. setUpReactRefresh is idempotent and the registry memoizes
+ * each module, so importing it in addition to RN's own chain runs the body once.
+ */
+export const SET_UP_REACT_REFRESH_SPECIFIER = "react-native/Libraries/Core/setUpReactRefresh.js";
+
 export interface MetroEntryPlanOptions {
   /** Absolute path of the final bundle output directory. */
   absoluteOutDir: string;
+  /**
+   * Development bundle: additionally import setUpReactRefresh after
+   * InitializeCore so `global.__ReactRefresh` is installed for Fast Refresh.
+   */
+  dev?: boolean;
   /** User entry as configured (path-like or bare specifier). */
   entry: string;
   /** Called for non-fatal setup notices (defaults to `console.warn`). */
@@ -58,6 +74,8 @@ export interface MetroEntryPlan {
   inputEntryPath: string;
   /** Whether InitializeCore was resolvable and is imported by the wrapper. */
   includesInitializeCore: boolean;
+  /** Whether the dev setUpReactRefresh import was resolvable and is included. */
+  includesSetUpReactRefresh: boolean;
   /** Polyfill specifiers that resolved and are imported by the wrapper. */
   polyfillSpecifiers: string[];
   /** Warnings emitted while planning (also forwarded to `onWarn`). */
@@ -116,6 +134,22 @@ export async function planMetroEntryModule(
     warn(warning);
   }
 
+  // Development bundles explicitly install React Refresh after InitializeCore so
+  // global.__ReactRefresh exists for the HMR runtime, independent of RN's
+  // internal dev-tools chain. A no-op (with a loud warning) when unresolvable.
+  const includesSetUpReactRefresh =
+    options.dev === true &&
+    includesInitializeCore &&
+    canResolveFromProject(options.projectRoot, SET_UP_REACT_REFRESH_SPECIFIER);
+
+  if (options.dev === true && includesInitializeCore && !includesSetUpReactRefresh) {
+    const warning =
+      `[vifx] ${SET_UP_REACT_REFRESH_SPECIFIER} is not resolvable from "${options.projectRoot}"; ` +
+      "Fast Refresh will be inert (global.__ReactRefresh is never installed) in this dev bundle.";
+    warnings.push(warning);
+    warn(warning);
+  }
+
   const entrySpecifier = isPathLikeEntry(options.entry)
     ? toPosixSpecifier(
         path.relative(
@@ -128,6 +162,9 @@ export async function planMetroEntryModule(
   const importLines = [
     ...polyfillSpecifiers.map((specifier) => `import ${JSON.stringify(specifier)};`),
     ...(includesInitializeCore ? [`import ${JSON.stringify(INITIALIZE_CORE_SPECIFIER)};`] : []),
+    ...(includesSetUpReactRefresh
+      ? [`import ${JSON.stringify(SET_UP_REACT_REFRESH_SPECIFIER)};`]
+      : []),
     `import ${JSON.stringify(entrySpecifier)};`,
     "",
   ];
@@ -137,6 +174,7 @@ export async function planMetroEntryModule(
 
   return {
     includesInitializeCore,
+    includesSetUpReactRefresh,
     inputEntryPath: generatedEntryPath,
     polyfillSpecifiers,
     warnings,

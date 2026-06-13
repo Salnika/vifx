@@ -376,6 +376,63 @@ test(
   BUILD_TIMEOUT,
 );
 
+const FAST_REFRESH_FIXTURE_FILES: Record<string, string> = {
+  "index.js": [
+    'import { tag } from "./util.js";',
+    'globalThis.__order.push("entry:" + tag);',
+    "",
+  ].join("\n"),
+  "util.js": ['export const tag = "u";', 'globalThis.__order.push("util");', ""].join("\n"),
+  "node_modules/@react-native/js-polyfills/package.json":
+    '{ "name": "@react-native/js-polyfills", "version": "1.0.0" }\n',
+  "node_modules/@react-native/js-polyfills/error-guard.js":
+    'globalThis.__order.push("error-guard");\n',
+  "node_modules/react-native/package.json":
+    '{ "name": "react-native", "version": "1.0.0", "main": "index.js" }\n',
+  "node_modules/react-native/index.js": "module.exports = {};\n",
+  "node_modules/react-native/Libraries/Core/InitializeCore.js":
+    'globalThis.__order.push("initialize-core");\n',
+  "node_modules/react-native/Libraries/Core/setUpReactRefresh.js":
+    'globalThis.__order.push("setup-react-refresh");\n',
+};
+
+test(
+  "dev (hmr) metro bundle imports setUpReactRefresh after InitializeCore; production omits it",
+  async () => {
+    const projectRoot = await createSyntheticProject(
+      "metro-fast-refresh",
+      FAST_REFRESH_FIXTURE_FILES,
+    );
+
+    const dev = await buildModuleRegistryBundle({
+      absoluteOutDir: path.join(projectRoot, ".vifx/metro-dev"),
+      entry: "./index.js",
+      hmr: true,
+      plugins: [reactNative({ entry: "./index.js", platform: "ios", projectRoot })],
+      projectRoot,
+    });
+    expect(dev.plan.includesSetUpReactRefresh).toBe(true);
+    const devOrder = evaluateBundle(await readFile(dev.bundlePath, "utf8")).order;
+    // setUpReactRefresh runs after InitializeCore (its globals) and before user code.
+    expect(devOrder.indexOf("setup-react-refresh")).toBeGreaterThan(
+      devOrder.indexOf("initialize-core"),
+    );
+    expect(devOrder.indexOf("setup-react-refresh")).toBeLessThan(devOrder.indexOf("util"));
+
+    const prod = await buildModuleRegistryBundle({
+      absoluteOutDir: path.join(projectRoot, ".vifx/metro-prod"),
+      entry: "./index.js",
+      plugins: [reactNative({ entry: "./index.js", platform: "ios", projectRoot })],
+      projectRoot,
+    });
+    expect(prod.plan.includesSetUpReactRefresh).toBe(false);
+    expect(evaluateBundle(await readFile(prod.bundlePath, "utf8")).order).not.toContain(
+      "setup-react-refresh",
+    );
+  },
+  BUILD_TIMEOUT,
+);
+
 test("module-registry prelude implements importDefault/importAll interop and cycle partials", () => {
   const context = vm.createContext({});
   vm.runInContext(MODULE_REGISTRY_PRELUDE, context, { filename: "prelude.js" });
