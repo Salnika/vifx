@@ -102,6 +102,19 @@ export interface VifxTransformCacheStats {
   errors: number;
 }
 
+/**
+ * One serialized module from a `moduleFormat: "metro"` build, surfaced so a dev
+ * server can diff rebuilds into Fast Refresh deltas. Structurally identical to
+ * the `SerializedModule` in `@vifx/vite-plugin-react-native`; it is re-declared
+ * here so `@vifx/types` keeps no dependency back onto that package.
+ */
+export interface VifxSerializedModule {
+  dependencyIds: number[];
+  factory: string;
+  fileName: string;
+  id: number;
+}
+
 export interface VifxBundleArtifacts {
   appConfigPath?: string;
   assets: VifxBuildAssetArtifact[];
@@ -110,6 +123,16 @@ export interface VifxBundleArtifacts {
   entry: string;
   hermesBytecodePath?: string;
   mode: Exclude<VifxVitePluginMode, "none">;
+  /**
+   * Metro module graph for Fast Refresh, populated only by the development
+   * `moduleFormat: "metro"` build path. The dev server feeds `moduleIds` back as
+   * the next rebuild's `existingModuleIds` (for stable ids) and diffs `modules`
+   * into `/hot` deltas. Undefined for hoisted, web, and production bundles.
+   */
+  moduleGraph?: {
+    moduleIds: ReadonlyMap<string, number>;
+    modules: readonly VifxSerializedModule[];
+  };
   platform: VifxBundlePlatform;
   projectRoot: string;
   runtime: VifxWebRuntimeArtifact | null;

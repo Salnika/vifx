@@ -160,8 +160,8 @@ NETWORK_SERVER_TESTS(
           },
           type: "error",
         });
-        // This unit only emits full-rebuild notifications, never granular
-        // "update" deltas; those belong to the dev serializer follow-up.
+        // These full-rebuild notifications never carry granular deltas;
+        // broadcastUpdate (exercised below) is the only producer of "update".
         expect(
           messages.every(
             (message) =>
@@ -170,6 +170,45 @@ NETWORK_SERVER_TESTS(
               (message as { type?: unknown }).type !== "update",
           ),
         ).toBe(true);
+      } finally {
+        socket.close();
+      }
+    } finally {
+      await harness.close();
+    }
+  },
+);
+
+NETWORK_SERVER_TESTS(
+  "createHotChannel broadcasts a granular Fast Refresh update delta",
+  async () => {
+    const harness = await startHotChannelServer();
+
+    try {
+      const socket = await openWebSocket(`${harness.url}/hot`);
+      const messages = collectMessages(socket);
+
+      try {
+        await waitFor(() => harness.channel.clientCount() === 1);
+
+        const update = {
+          added: [],
+          deleted: [],
+          isInitialUpdate: false,
+          modified: [
+            {
+              module: [3, "__d(function () {}, 3, [], undefined, {});"] as [number, string],
+              sourceMappingURL: null,
+              sourceURL: "http://host/m3.js",
+            },
+          ],
+          revisionId: "1",
+        };
+        harness.channel.broadcastUpdate(update);
+        await waitFor(() => messages.length === 1);
+
+        // The client consumes message.type === "update" and message.body.modified.
+        expect(messages[0]).toEqual({ body: update, type: "update" });
       } finally {
         socket.close();
       }

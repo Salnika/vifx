@@ -63,6 +63,7 @@ import {
 import { buildModuleRegistryBundle } from "./module-registry/index.ts";
 import { applyReactRefreshTransform, shouldApplyReactRefresh } from "./react-refresh.ts";
 import { VIFX_HMR_CLIENT_SOURCE } from "./hmr-client.ts";
+export { VIFX_HMR_URL_GLOBAL } from "./hmr-client.ts";
 
 export {
   resolveBuildMinify,

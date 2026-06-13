@@ -50,6 +50,8 @@ export type VifxHotMessage =
 
 export interface VifxHotChannel {
   broadcastError: (payload: VifxHotErrorPayload) => void;
+  /** Emits a Metro `update` delta ({@link VifxHotUpdate}) over `/hot`. */
+  broadcastUpdate: (update: VifxHotUpdate) => void;
   broadcastUpdateDone: () => void;
   broadcastUpdateStart: (options?: { isInitialUpdate?: boolean }) => void;
   clientCount: () => number;
@@ -120,6 +122,9 @@ export function createHotChannel(): VifxHotChannel {
   return {
     broadcastError(payload) {
       broadcast({ body: payload, type: "error" });
+    },
+    broadcastUpdate(update) {
+      broadcast({ body: update, type: "update" });
     },
     broadcastUpdateDone() {
       broadcast({ type: "update-done" });

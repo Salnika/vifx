@@ -19,10 +19,12 @@ import { VifxError } from "@vifx/errors";
 import { symbolicateStackFrame } from "@vifx/source-map-tools";
 import {
   buildModuleRegistryBundle,
+  computeHmrUpdate,
   reactNative,
   resolveBuildMinify,
   resolveBundleMode,
   resolveOutputOptions,
+  VIFX_HMR_URL_GLOBAL,
 } from "@vifx/vite-plugin-react-native";
 import type {
   VifxBuildAssetArtifact,
@@ -31,6 +33,7 @@ import type {
   VifxExpoPluginOptions,
   VifxJsonObject,
   VifxJsonValue,
+  VifxSerializedModule,
 } from "@vifx/types";
 import {
   createDevClientLaunchUrl,
@@ -97,15 +100,15 @@ export interface VifxExpoGoDevServer {
   devClientUrl?: string;
   eventsSocketUrl: string;
   expoGoUrl: string;
-  fastRefresh: false;
-  hmr: "reload";
+  fastRefresh: boolean;
+  hmr: "fast-refresh" | "reload";
   host: string;
   hostUri: string;
   hotSocketUrl?: string;
   inspectorProxyUrl?: string;
   manifestUrl: string;
   messageSocketUrl: string;
-  metro: false;
+  metro: boolean;
   nativeRuntime: true;
   platform: VifxBundlePlatform;
   port: number;
@@ -1061,7 +1064,7 @@ async function createExpoBuildInputEntry(projectRoot: string, outDir: string, en
 }
 
 export async function buildExpoBundle(
-  options: VifxExpoPluginOptions,
+  options: VifxExpoPluginOptions & { existingModuleIds?: ReadonlyMap<string, number> },
 ): Promise<VifxBundleArtifacts> {
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
   const entry = options.entry ?? "./index.js";
@@ -1069,9 +1072,16 @@ export async function buildExpoBundle(
   const absoluteOutDir = path.resolve(projectRoot, outDir);
 
   if ((options.moduleFormat ?? "hoisted") === "metro") {
+    // Development metro bundles ship the Fast Refresh prelude + the explicit
+    // setUpReactRefresh import, and thread the previous build's id map so module
+    // ids stay stable across rebuilds (required for /hot deltas to patch the
+    // right module). Production metro bundles get neither.
+    const metroMode = resolveBundleMode(options);
     const registry = await buildModuleRegistryBundle({
       absoluteOutDir,
       entry,
+      existingModuleIds: options.existingModuleIds,
+      hmr: metroMode !== "production",
       plugins: [
         ...expo({
           ...options,
@@ -1099,6 +1109,10 @@ export async function buildExpoBundle(
       },
       entry,
       mode: "expo",
+      moduleGraph: {
+        moduleIds: registry.moduleIds,
+        modules: registry.modules,
+      },
       platform: options.platform,
       projectRoot,
       runtime: null,
@@ -1270,6 +1284,15 @@ export async function startExpoGoDevServer(
   };
   const bundle = await buildExpoBundle(bundleOptions);
   let servedBundle = await loadExpoGoServedBundle(projectRoot, bundle);
+  // Fast Refresh is opt-in: it engages only for a development metro-format bundle
+  // (bundle.moduleGraph is populated). The default hoisted path leaves this off
+  // and keeps its full-reload-on-save behavior byte-for-byte.
+  const fastRefreshMode =
+    (bundleOptions.moduleFormat ?? "hoisted") === "metro" &&
+    resolveBundleMode(bundleOptions) !== "production";
+  let prevModuleIds = bundle.moduleGraph?.moduleIds;
+  let prevModules: readonly VifxSerializedModule[] = bundle.moduleGraph?.modules ?? [];
+  let hmrRevision = 0;
   const bundleUrlPath = await createExpoGoBundleUrlPath({
     dev: resolveBundleMode(options) !== "production",
     exp,
@@ -1288,9 +1311,30 @@ export async function startExpoGoDevServer(
     hotChannel.broadcastUpdateStart();
 
     try {
-      const artifacts = await buildExpoBundle(bundleOptions);
+      const artifacts = await buildExpoBundle({
+        ...bundleOptions,
+        existingModuleIds: prevModuleIds,
+      });
       servedBundle = await loadExpoGoServedBundle(projectRoot, artifacts);
-      messageChannel.broadcast("reload");
+      if (fastRefreshMode && artifacts.moduleGraph) {
+        const nextModules = artifacts.moduleGraph.modules;
+        hmrRevision += 1;
+        const update = computeHmrUpdate({
+          next: nextModules,
+          previous: prevModules,
+          revisionId: String(hmrRevision),
+        });
+        // A deleted module can't be hot-applied; fall back to a full reload.
+        if (update.deleted.length > 0) {
+          messageChannel.broadcast("reload");
+        } else {
+          hotChannel.broadcastUpdate(update);
+        }
+        prevModules = nextModules;
+        prevModuleIds = artifacts.moduleGraph.moduleIds;
+      } else {
+        messageChannel.broadcast("reload");
+      }
       hotChannel.broadcastUpdateDone();
     } catch (error) {
       hotChannel.broadcastError(createHotErrorPayload(error));
@@ -1341,12 +1385,14 @@ export async function startExpoGoDevServer(
     }
 
     if (isBundlePath(requestUrl.pathname)) {
-      writeTextResponse(
-        response,
-        200,
-        servedBundle.bundleSource,
-        "application/javascript; charset=utf-8",
-      );
+      // In Fast Refresh mode, set the /hot socket URL the injected HMR client
+      // reads (hmr-client.ts stays inert without it). Prepend with NO trailing
+      // newline so the prelude stays on line 0 and the line-keyed source map is
+      // unchanged; the hoisted path serves bytes verbatim.
+      const bundleSource = fastRefreshMode
+        ? `globalThis.${VIFX_HMR_URL_GLOBAL}=${JSON.stringify(`ws://${hostUri}/hot`)};${servedBundle.bundleSource}`
+        : servedBundle.bundleSource;
+      writeTextResponse(response, 200, bundleSource, "application/javascript; charset=utf-8");
       return;
     }
 
@@ -1469,15 +1515,15 @@ export async function startExpoGoDevServer(
       : { devClientUrl: createDevClientLaunchUrl({ manifestUrl, scheme: devClientScheme }) }),
     eventsSocketUrl: `${baseUrl.replace(/^http:/u, "ws:")}/events`,
     expoGoUrl: `exp://${hostUri}`,
-    fastRefresh: false,
-    hmr: "reload",
+    fastRefresh: fastRefreshMode,
+    hmr: fastRefreshMode ? "fast-refresh" : "reload",
     host,
     hostUri,
     hotSocketUrl: `${baseUrl.replace(/^http:/u, "ws:")}/hot`,
     inspectorProxyUrl: devtools.inspectorProxyUrl,
     manifestUrl,
     messageSocketUrl: `${baseUrl.replace(/^http:/u, "ws:")}/message`,
-    metro: false,
+    metro: fastRefreshMode,
     nativeRuntime: true,
     platform: options.platform,
     port: actualPort,
