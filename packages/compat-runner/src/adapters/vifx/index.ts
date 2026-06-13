@@ -1,8 +1,10 @@
-import { cp, mkdtemp } from "node:fs/promises";
+import { cp, mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { LibraryBuildOperation, LibraryBuildResult } from "@vifx/compat";
+import { toVifxError } from "@vifx/errors";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
-import type { CompatAdapter } from "../../types.ts";
+import type { CompatAdapter, CompatCaseContext } from "../../types.ts";
 import {
   collectAssetMetadata,
   collectAssetScaleGroup,
@@ -46,6 +48,81 @@ function getBundleArtifacts(fixturePath: string, platform: "ios" | "android", en
   const bundle = buildFixtureBundle(fixturePath, platform, entry);
   viteBundleCache.set(cacheKey, bundle);
   return bundle;
+}
+
+// Strip ANSI colour codes (with or without a leading ESC) from bundler errors.
+// eslint-disable-next-line no-control-regex
+const ANSI_ESCAPE_PATTERN = /\u001b?\[[0-9;]*m/g;
+
+function summarizeBuildFailure(error: unknown) {
+  const vifxError = toVifxError(error);
+  const summary = `${vifxError.code}: ${vifxError.message}`
+    // Drop terminal colour codes so the detail is plain text in JSON/markdown reports.
+    .replace(ANSI_ESCAPE_PATTERN, "")
+    // Cut the code-frame (box-drawing render of the offending source) and anything
+    // after it: it carries a volatile temp path and raw source (including angle
+    // brackets that break Markdown/Vue rendering of the docs support matrix).
+    .replace(/[─-╿].*$/su, "")
+    // Collapse any volatile temp build directories that survive to a stable,
+    // bracket-free marker so the snapshot is deterministic across machines.
+    .replace(/\S*vifx-compat-bundle-\S*/g, "[tmp]")
+    .replace(/\s+/g, " ")
+    .trim();
+  return summary.length > 240 ? `${summary.slice(0, 240)}…` : summary;
+}
+
+async function runLibraryBuildOperation(
+  operation: LibraryBuildOperation,
+  context: CompatCaseContext,
+): Promise<LibraryBuildResult> {
+  let artifacts: Awaited<ReturnType<typeof buildFixtureBundle>>;
+  try {
+    artifacts = await getBundleArtifacts(
+      context.fixturePath,
+      operation.platform,
+      operation.entry ?? "index.js",
+    );
+  } catch (error) {
+    return {
+      packageName: operation.packageName,
+      toolchain: "vifx",
+      status: "fail",
+      detail: `Bundle build failed. ${summarizeBuildFailure(error)}`,
+    };
+  }
+
+  const bundleSource = await readFile(
+    path.join(artifacts.projectRoot, artifacts.bundle.path),
+    "utf8",
+  );
+  const missingProbes = operation.bundleProbes.filter((probe) => !bundleSource.includes(probe));
+  const detailParts: string[] = [];
+
+  if (missingProbes.length > 0) {
+    detailParts.push(
+      `library source markers missing from the bundle (substituted by a compat or shim layer): ${missingProbes.join(", ")}`,
+    );
+  }
+
+  if (operation.partialAspects.length > 0) {
+    detailParts.push(`aspects a build cannot verify: ${operation.partialAspects.join("; ")}`);
+  }
+
+  if (detailParts.length > 0) {
+    return {
+      packageName: operation.packageName,
+      toolchain: "vifx",
+      status: "partial",
+      detail: `Bundle built. Remaining gaps: ${detailParts.join(". ")}.`,
+    };
+  }
+
+  return {
+    packageName: operation.packageName,
+    toolchain: "vifx",
+    status: "pass",
+    detail: "Bundle built from the synthetic package sources.",
+  };
 }
 
 export const vifxAdapter: CompatAdapter = {
@@ -106,6 +183,9 @@ export const vifxAdapter: CompatAdapter = {
           sourceMapPresent: Boolean(bundle.sourceMap),
           valid: bundle.sourceMap?.valid ?? false,
         };
+      }
+      case "library-build": {
+        return runLibraryBuildOperation(compatCase.operation, context);
       }
       default: {
         return {

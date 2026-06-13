@@ -8,10 +8,13 @@ import {
 } from "../src/index.ts";
 
 test("fixture manifests expose the compatibility fixtures", () => {
-  expect(getFixtureManifests()).toHaveLength(10);
+  expect(getFixtureManifests()).toHaveLength(22);
   expect(getFixtureManifest("expo-basic").projectType).toBe("expo");
   expect(getFixtureManifest("expo-router-basic").features).toContain("expo-router");
   expect(resolveFixturePath("expo-basic")).toContain("fixtures/expo-basic");
+  expect(resolveFixturePath("lib-react-native-reanimated")).toContain(
+    "fixtures/libs/react-native-reanimated",
+  );
 });
 
 test("experimental SDK fixtures are registered with honest tier notes", () => {
@@ -48,7 +51,20 @@ test("compat cases cover the NEXT minimum categories", () => {
     "bundler.bundleArtifacts",
     "bundler.sourceMapValidity",
     "monorepo.workspaceResolution",
+    "libraries",
   ]);
+});
+
+test("the libraries category covers the top synthetic library fixtures", () => {
+  const libraryCases = compatCases.filter((compatCase) => compatCase.category === "libraries");
+
+  expect(libraryCases).toHaveLength(12);
+  for (const libraryCase of libraryCases) {
+    expect(libraryCase.operation.kind).toBe("library-build");
+    // Every library case must carry a per-toolchain status snapshot.
+    expect(libraryCase.expected).toHaveProperty("toolchains.vifx.status");
+    expect(libraryCase.expected).toHaveProperty("toolchains.metro.status");
+  }
 });
 
 test("compat assertions preserve expected and actual values in failures", () => {

@@ -9,6 +9,18 @@ export const FIXTURE_IDS = [
   "rn-bare-assets",
   "monorepo-pnpm-workspaces",
   "monorepo-yarn-workspaces",
+  "lib-react-native-reanimated",
+  "lib-react-native-gesture-handler",
+  "lib-react-native-screens",
+  "lib-react-native-safe-area-context",
+  "lib-react-native-svg",
+  "lib-expo-image",
+  "lib-flash-list",
+  "lib-expo-sqlite",
+  "lib-react-native-vector-icons",
+  "lib-lottie-react-native",
+  "lib-nativewind",
+  "lib-react-native-webview",
 ] as const;
 
 export type FixtureId = (typeof FIXTURE_IDS)[number];
@@ -23,9 +35,18 @@ export const COMPAT_CATEGORIES = [
   "bundler.bundleArtifacts",
   "bundler.sourceMapValidity",
   "monorepo.workspaceResolution",
+  "libraries",
 ] as const;
 
 export type CompatCategory = (typeof COMPAT_CATEGORIES)[number];
+
+export const COMPAT_CASE_STATUSES = ["pass", "fail", "partial", "skip"] as const;
+
+export type CompatCaseStatus = (typeof COMPAT_CASE_STATUSES)[number];
+
+export const COMPAT_TOOLCHAINS = ["vifx", "metro"] as const;
+
+export type CompatToolchain = (typeof COMPAT_TOOLCHAINS)[number];
 export type Platform = "ios" | "android" | "native" | "web";
 export type BuildPlatform = Extract<Platform, "ios" | "android">;
 export type PackageManager = "pnpm" | "yarn" | "npm" | "bun" | "unknown";
@@ -81,6 +102,26 @@ export interface SourceMapValidityOperation {
   platform: BuildPlatform;
 }
 
+export interface LibraryBuildOperation {
+  kind: "library-build";
+  /** Published package name replicated by the synthetic fixture. */
+  packageName: string;
+  platform: BuildPlatform;
+  entry?: string;
+  /**
+   * Marker strings that must appear in the output bundle to prove the
+   * synthetic package sources were resolved and bundled. A successful build
+   * with missing probes means a compat or shim layer substituted the package.
+   */
+  bundleProbes: string[];
+  /**
+   * Library aspects a bundler build alone cannot verify (native module
+   * runtime behavior, worklet compilation, CSS application). A successful
+   * build with pending aspects is classified as "partial".
+   */
+  partialAspects: string[];
+}
+
 export type CompatOperation =
   | ProjectInfoOperation
   | ResolveFileOperation
@@ -88,7 +129,8 @@ export type CompatOperation =
   | AssetMetadataOperation
   | WorkspaceRootOperation
   | BundleArtifactsOperation
-  | SourceMapValidityOperation;
+  | SourceMapValidityOperation
+  | LibraryBuildOperation;
 
 export interface ProjectInfoExpectation {
   projectType: ProjectType;
@@ -137,6 +179,24 @@ export interface SourceMapValidityExpectation {
   valid: boolean;
 }
 
+export interface LibraryToolchainExpectation {
+  status: CompatCaseStatus;
+  note: string;
+}
+
+export interface LibraryBuildExpectation {
+  packageName: string;
+  /** Status snapshot per toolchain. Later units flip these as support lands. */
+  toolchains: Record<CompatToolchain, LibraryToolchainExpectation>;
+}
+
+export interface LibraryBuildResult {
+  packageName: string;
+  toolchain: CompatToolchain;
+  status: CompatCaseStatus;
+  detail: string;
+}
+
 export type CompatExpectation =
   | ProjectInfoExpectation
   | ResolveFileExpectation
@@ -144,7 +204,8 @@ export type CompatExpectation =
   | AssetMetadataExpectation
   | WorkspaceRootExpectation
   | BundleArtifactsExpectation
-  | SourceMapValidityExpectation;
+  | SourceMapValidityExpectation
+  | LibraryBuildExpectation;
 
 export interface CompatCase<
   TOperation extends CompatOperation = CompatOperation,
@@ -166,8 +227,15 @@ export interface CompatCaseOutcome {
   category: CompatCategory;
   fixtureId: FixtureId;
   passed: boolean;
+  /**
+   * Observed status for the case. Non-library cases map pass/fail from the
+   * boolean outcome; library cases carry the adapter classification so the
+   * support matrix can distinguish partial and skipped coverage.
+   */
+  status: CompatCaseStatus;
   expected: CompatExpectation;
-  actual: CompatExpectation | Record<string, unknown>;
+  actual: CompatExpectation | LibraryBuildResult | Record<string, unknown>;
   message: string;
   docsPath: string;
+  notes?: string[];
 }

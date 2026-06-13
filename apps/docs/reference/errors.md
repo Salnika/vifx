@@ -11,6 +11,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_BUILD_INVALID_PLATFORM`                      | A build command received an unsupported platform value.                                                           |
 | `VIFX_BUILD_TARGET_NOT_FOUND`                      | No configured build target matched the requested platform.                                                        |
 | `VIFX_BUILD_TARGETS_MISSING`                       | The config does not contain any Vite bundle targets.                                                              |
+| `VIFX_COMPAT_INVALID_LIBRARY_CASE`                 | A compatibility library case is missing its per-toolchain support-matrix expectation.                             |
 | `VIFX_CONFIG_INVALID`                              | A Vifx config value failed schema or shape validation.                                                            |
 | `VIFX_CONFIG_LOAD_FAILED`                          | A config file existed but could not be imported or evaluated.                                                     |
 | `VIFX_CONFIG_MISSING`                              | Project inspection did not find a `vifx.config.*` file.                                                           |

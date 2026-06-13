@@ -18,6 +18,9 @@
     "test": "vp test run",
     "prepublishOnly": "vp run build"
   },
+  "dependencies": {
+    "@vifx/errors": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:",

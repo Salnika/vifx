@@ -1,10 +1,27 @@
 import path from "node:path";
+import { isLibraryBuildResult } from "@vifx/compat";
 import type {
   CompatCategoryReport,
+  CompatLibraryMatrixRow,
   CompatReportCase,
   CompatReportFormat,
   CompatRunReport,
 } from "./types.ts";
+
+export function buildLibraryMatrix(cases: CompatReportCase[]): CompatLibraryMatrixRow[] {
+  return cases
+    .filter((compatCase) => compatCase.category === "libraries")
+    .map((compatCase) => {
+      const result = isLibraryBuildResult(compatCase.actual) ? compatCase.actual : null;
+      return {
+        caseId: compatCase.caseId,
+        packageName: result?.packageName ?? compatCase.caseId,
+        status: compatCase.status,
+        detail: result?.detail ?? compatCase.message,
+        docsPath: compatCase.docsPath,
+      } satisfies CompatLibraryMatrixRow;
+    });
+}
 
 function createCategoryLine(categoryReport: CompatCategoryReport, width: number) {
   return `${categoryReport.category.padEnd(width)} ${categoryReport.status.padEnd(4)} ${categoryReport.passed}/${categoryReport.total}`;
@@ -70,6 +87,23 @@ export function formatCompatReport(report: CompatRunReport, format: CompatReport
             .map((compatCase) => `- \`${compatCase.caseId}\` (${compatCase.docsPath})`)
             .join("\n");
 
+    const librarySection =
+      report.libraryMatrix.length === 0
+        ? []
+        : [
+            "",
+            "## Library support matrix",
+            "",
+            `Observed status for the \`${report.adapterId}\` toolchain. \`partial\` means the JavaScript bundles but a build-time-invisible aspect (native module, worklet, CSS/Babel transform) is not exercised; \`skip\` means the toolchain does not run the case.`,
+            "",
+            "| Library | Status | Notes |",
+            "| --- | --- | --- |",
+            ...report.libraryMatrix.map(
+              (row) =>
+                `| \`${row.packageName}\` | ${row.status} | ${row.detail.replace(/\|/g, "\\|")} |`,
+            ),
+          ];
+
     return [
       "# Compatibility report",
       "",
@@ -80,6 +114,7 @@ export function formatCompatReport(report: CompatRunReport, format: CompatReport
       "| Category | Status | Pass rate |",
       "| --- | --- | --- |",
       categoryRows,
+      ...librarySection,
       "",
       "## Failures",
       failureSection,
@@ -92,6 +127,24 @@ export function formatCompatReport(report: CompatRunReport, format: CompatReport
   );
   const failureCases = report.cases.filter((compatCase) => !compatCase.passed);
 
+  const librarySection =
+    report.libraryMatrix.length === 0
+      ? []
+      : (() => {
+          const libraryWidth = Math.max(
+            "Library".length,
+            ...report.libraryMatrix.map((row) => row.packageName.length),
+          );
+          return [
+            "",
+            "Library support matrix:",
+            ...report.libraryMatrix.map(
+              (row) =>
+                `  ${row.packageName.padEnd(libraryWidth)}  ${row.status.padEnd(7)}  ${row.detail}`,
+            ),
+          ];
+        })();
+
   return [
     "Compatibility report",
     "",
@@ -100,6 +153,7 @@ export function formatCompatReport(report: CompatRunReport, format: CompatReport
     `Cases: ${report.passedCases}/${report.totalCases} passed`,
     "",
     ...report.categories.map((category) => createCategoryLine(category, categoryWidth)),
+    ...librarySection,
     "",
     failureCases.length === 0
       ? "No failing cases."

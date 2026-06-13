@@ -285,4 +285,366 @@ export const compatCases: CompatCase[] = [
     },
     docsPath: "/compat/monorepo#workspace-resolution",
   },
+  {
+    id: "lib-react-native-reanimated",
+    title: "react-native-reanimated bundles from its react-native TS source entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-reanimated",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-reanimated",
+      platform: "ios",
+      bundleProbes: ["withTiming"],
+      partialAspects: [
+        "worklet directives are not compiled to UI-thread worklets without the Reanimated Babel plugin (see the babel-pipeline unit)",
+      ],
+    },
+    expected: {
+      packageName: "react-native-reanimated",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the react-native field to TypeScript sources and bundles them, but 'worklet' directives are stripped instead of compiled. Real worklets need the Reanimated Babel plugin from the babel-pipeline unit.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: [
+      "Synthetic replica of react-native-builder-bob packaging (extensionless entries, react-native field at TS sources, 'worklet' directives).",
+    ],
+    docsPath: "/compat/libraries#react-native-reanimated",
+  },
+  {
+    id: "lib-react-native-gesture-handler",
+    title: "react-native-gesture-handler bundles from its exports/react-native TS entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-gesture-handler",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-gesture-handler",
+      platform: "ios",
+      bundleProbes: ["attachGestureHandler", "gestureHandlerRootHOC"],
+      partialAspects: [
+        "the RNGestureHandlerModule native module is only registered on a device, so gesture recognition does not run from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "react-native-gesture-handler",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the exports map / react-native condition to TypeScript sources and bundles them. The native gesture module is unavailable at build time, so the JS surface bundles but gestures do not run.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica with an exports map plus a native-module dependency."],
+    docsPath: "/compat/libraries#react-native-gesture-handler",
+  },
+  {
+    id: "lib-react-native-screens",
+    title: "react-native-screens bundles its TSX native-component entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-screens",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-screens",
+      platform: "ios",
+      bundleProbes: ["Screen", "ScreenContainer"],
+      partialAspects: [
+        "the RNSScreen native host component is only available on a device, so native screen containers do not mount from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "react-native-screens",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Transpiles the TSX react-native entry and bundles it, but the RNSScreen native component is not registered at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica registering a native host component from a TSX entry."],
+    docsPath: "/compat/libraries#react-native-screens",
+  },
+  {
+    id: "lib-react-native-safe-area-context",
+    title: "react-native-safe-area-context bundles its pure-JS TSX entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-safe-area-context",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-safe-area-context",
+      platform: "ios",
+      bundleProbes: ["getSafeAreaInsets", "SafeAreaProvider"],
+      partialAspects: [],
+    },
+    expected: {
+      packageName: "react-native-safe-area-context",
+      toolchains: {
+        vifx: {
+          status: "pass",
+          note: "Pure-JS insets surface: the TSX react-native entry transpiles and bundles with no native module dependency, fully reproducing its build-time behavior.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: [
+      "Synthetic replica of the pure-JS insets surface (no native module on the resolved entry).",
+    ],
+    docsPath: "/compat/libraries#react-native-safe-area-context",
+  },
+  {
+    id: "lib-react-native-svg",
+    title: "react-native-svg bundles its TSX native-component entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-svg",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-svg",
+      platform: "ios",
+      bundleProbes: ["Svg", "Path"],
+      partialAspects: [
+        "the RNSVGSvgView and RNSVGPath native host components are only available on a device, so SVG rendering does not run from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "react-native-svg",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Transpiles the TSX react-native entry and bundles it, but the RNSVG native components are not registered at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica registering native host components from a TSX entry."],
+    docsPath: "/compat/libraries#react-native-svg",
+  },
+  {
+    id: "lib-expo-image",
+    title: "expo-image bundles its precompiled Expo-module build entry",
+    category: "libraries",
+    fixtureId: "lib-expo-image",
+    operation: {
+      kind: "library-build",
+      packageName: "expo-image",
+      platform: "ios",
+      bundleProbes: ["Image", "prefetch"],
+      partialAspects: [
+        "the ExpoImage native view manager is only registered on a device, so images do not decode or render from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "expo-image",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the Expo module's precompiled build entry and its vendored expo-modules-core, then bundles them. The native ExpoImage view is unavailable at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic Expo module rendering a native view via a vendored expo-modules-core."],
+    docsPath: "/compat/libraries#expo-image",
+  },
+  {
+    id: "lib-flash-list",
+    title: "@shopify/flash-list bundles its scoped react-native TS entry and transitive deps",
+    category: "libraries",
+    fixtureId: "lib-flash-list",
+    operation: {
+      kind: "library-build",
+      packageName: "@shopify/flash-list",
+      platform: "ios",
+      bundleProbes: ["FlashList", "DataProvider"],
+      partialAspects: [
+        "the AutoLayoutView native host component is only available on a device, so the high-performance list layout does not run from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "@shopify/flash-list",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the scoped react-native/source field to TypeScript sources and bundles them together with the vendored recyclerlistview. The AutoLayoutView native component is unavailable at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic scoped package building on a vendored recyclerlistview."],
+    docsPath: "/compat/libraries#shopify-flash-list",
+  },
+  {
+    id: "lib-expo-sqlite",
+    title: "expo-sqlite bundles its precompiled Expo-module build entry",
+    category: "libraries",
+    fixtureId: "lib-expo-sqlite",
+    operation: {
+      kind: "library-build",
+      packageName: "expo-sqlite",
+      platform: "ios",
+      bundleProbes: ["openDatabaseSync", "requireNativeModule"],
+      partialAspects: [
+        "the ExpoSQLite native module is only registered on a device, so opening a database throws from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "expo-sqlite",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the Expo module's precompiled build entry and its vendored expo-modules-core, then bundles them. The native ExpoSQLite module is unavailable at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic Expo module opening a database via the ExpoSQLite native module."],
+    docsPath: "/compat/libraries#expo-sqlite",
+  },
+  {
+    id: "lib-react-native-vector-icons",
+    title: "react-native-vector-icons ships untranspiled JSX in published .js",
+    category: "libraries",
+    fixtureId: "lib-react-native-vector-icons",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-vector-icons",
+      platform: "ios",
+      bundleProbes: ["createIconSet"],
+      partialAspects: [],
+    },
+    expected: {
+      packageName: "react-native-vector-icons",
+      toolchains: {
+        vifx: {
+          status: "fail",
+          note: "The published entry ships untranspiled JSX inside a .js file. The default build does not transform JSX in node_modules .js files, so the bundle fails to parse. Metro applies the React Native Babel preset here; vifx needs the babel-pipeline unit (jsxInPackages / babelInPackages opt-in).",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: [
+      "Synthetic replica of the classic Metro-flavored publishing quirk: JSX shipped in published .js files.",
+    ],
+    docsPath: "/compat/libraries#react-native-vector-icons",
+  },
+  {
+    id: "lib-lottie-react-native",
+    title: "lottie-react-native bundles its TSX native-component entry",
+    category: "libraries",
+    fixtureId: "lib-lottie-react-native",
+    operation: {
+      kind: "library-build",
+      packageName: "lottie-react-native",
+      platform: "ios",
+      bundleProbes: ["LottieView"],
+      partialAspects: [
+        "the LottieAnimationView native host component is only available on a device, so animations do not render from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "lottie-react-native",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Transpiles the TSX react-native entry and bundles it, but the LottieAnimationView native component is not registered at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica rendering a native animation view from a TSX entry."],
+    docsPath: "/compat/libraries#lottie-react-native",
+  },
+  {
+    id: "lib-nativewind",
+    title: "nativewind bundles its runtime but does not apply its CSS/Babel pipeline",
+    category: "libraries",
+    fixtureId: "lib-nativewind",
+    operation: {
+      kind: "library-build",
+      packageName: "nativewind",
+      platform: "ios",
+      bundleProbes: ["cssInterop", "styled"],
+      partialAspects: [
+        "the NativeWind Babel preset (jsxImportSource) and the Tailwind/PostCSS compilation of the imported CSS entry are not applied by a plain bundler build, so utility classes are not registered at runtime (see the babel-pipeline unit)",
+      ],
+    },
+    expected: {
+      packageName: "nativewind",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the react-native field to TypeScript sources and tolerates the imported CSS entry, but neither the NativeWind Babel preset nor the Tailwind PostCSS pipeline runs, so className utilities are not compiled to styles.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica whose consumer imports a Tailwind CSS entry."],
+    docsPath: "/compat/libraries#nativewind",
+  },
+  {
+    id: "lib-react-native-webview",
+    title: "react-native-webview bundles its TSX native-component entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-webview",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-webview",
+      platform: "ios",
+      bundleProbes: ["WebView"],
+      partialAspects: [
+        "the RNCWebView native host component is only available on a device, so the web view does not mount from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "react-native-webview",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Transpiles the TSX react-native entry and bundles it, but the RNCWebView native component is not registered at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica rendering a native RNCWebView host component from a TSX entry."],
+    docsPath: "/compat/libraries#react-native-webview",
+  },
 ];

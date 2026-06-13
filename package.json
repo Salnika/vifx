@@ -12,6 +12,8 @@
     "dev": "pnpm --filter docs run dev",
     "docs:build": "pnpm --filter docs run build",
     "docs:dev": "pnpm --filter docs run dev",
+    "docs:support-matrix": "pnpm --filter @vifx/compat-runner... run build && node ./scripts/generate-support-matrix.mjs",
+    "docs:support-matrix:check": "pnpm --filter @vifx/compat-runner... run build && node ./scripts/generate-support-matrix.mjs --check",
     "lint": "vp lint",
     "playground:expo": "pnpm --filter playground-expo run validate",
     "playground:rn-bare": "pnpm --filter playground-rn-bare run validate",
