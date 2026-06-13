@@ -69,8 +69,7 @@ export async function derivePackageTransformRules(
       configReferences(config.plugins, "react-native-worklets", "plugin") ||
       configReferences(config.plugins, "react-native-reanimated", "plugin");
     const impliesWorkletsPlugin =
-      configReferences(config.presets, "babel-preset-expo") &&
-      resolvesWorkletsPlugin(projectRoot);
+      configReferences(config.presets, "babel-preset-expo") && resolvesWorkletsPlugin(projectRoot);
 
     if (declaresWorkletsPlugin || impliesWorkletsPlugin) {
       fullBabelPackages.add("react-native-reanimated");

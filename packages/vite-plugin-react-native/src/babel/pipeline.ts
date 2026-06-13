@@ -1,10 +1,6 @@
 import path from "node:path";
 import type { VifxPlatform, VifxReactNativeCompatMode } from "@vifx/types";
-import {
-  derivePackageTransformRules,
-  EMPTY_PACKAGE_TRANSFORM_RULES,
-  type PackageTransformRules,
-} from "./package-rules.ts";
+import { derivePackageTransformRules, type PackageTransformRules } from "./package-rules.ts";
 import { loadProjectBabelConfig, type ProjectBabelConfig } from "./project-config.ts";
 
 /**
@@ -82,14 +78,11 @@ export function createBabelPipeline(options: BabelPipelineOptions): BabelPipelin
   };
 
   const getPackageTransformRules = () => {
-    rulesPromise ??= (async () => {
-      const config = await getProjectBabelConfig();
-      if (!config) {
-        return EMPTY_PACKAGE_TRANSFORM_RULES;
-      }
-
-      return derivePackageTransformRules({ config, projectRoot: options.projectRoot });
-    })();
+    // The dependency-manifest heuristic applies even when the project has no
+    // usable Babel runtime, so rules are derived from a possibly-null config.
+    rulesPromise ??= getProjectBabelConfig().then((config) =>
+      derivePackageTransformRules({ config, projectRoot: options.projectRoot }),
+    );
     return rulesPromise;
   };
 

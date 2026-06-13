@@ -214,7 +214,9 @@ function toConfigEntries(items: unknown[] | null | undefined): ProjectBabelConfi
   }
 
   return items.map((item) => {
-    const candidate = (typeof item === "object" && item !== null ? item : {}) as BabelConfigItemLike;
+    const candidate = (
+      typeof item === "object" && item !== null ? item : {}
+    ) as BabelConfigItemLike;
 
     return {
       name: typeof candidate.name === "string" ? candidate.name : null,

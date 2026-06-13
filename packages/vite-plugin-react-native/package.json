@@ -28,6 +28,7 @@
     "vite": "catalog:"
   },
   "devDependencies": {
+    "@babel/core": "^7.26.0",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
