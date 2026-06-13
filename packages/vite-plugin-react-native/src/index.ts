@@ -108,6 +108,7 @@ const NATIVE_SINGLETON_PACKAGES = ["react", "react-native"] as const;
 const NATIVE_SINGLETON_PACKAGE_SET = new Set<string>(NATIVE_SINGLETON_PACKAGES);
 const SHIM_PREFIX = "\0vifx:shim:";
 const TRANSFORM_PREFIX = "\0vifx:transformed:";
+const ASSET_PREFIX = "\0vifx:asset:";
 const WEB_RUNTIME_BUNDLE_FILE = "bundle.js";
 const WEB_RUNTIME_BROWSER_GLOBALS_KEY = "__VIFX_BROWSER_GLOBALS__";
 const WEB_RUNTIME_HTML_FILE = "index.html";
@@ -140,7 +141,9 @@ interface ReactNativePluginState {
   aliases: Record<string, string>;
   assetExtensions: string[];
   assetFiles: Set<string>;
+  assetRegistryAvailable?: boolean;
   babelInPackages: string[];
+  emittedAssetFileNames: Set<string>;
   compatPreview: boolean;
   conditions: string[];
   entry: string;
@@ -366,6 +369,108 @@ function createNativeURLSearchParamsPolyfillLines() {
 
 function createTransformId(filePath: string) {
   return `${TRANSFORM_PREFIX}${filePath}`;
+}
+
+function createAssetId(filePath: string) {
+  return `${ASSET_PREFIX}${filePath}`;
+}
+
+/**
+ * Native asset modules register through `@react-native/assets-registry`, a
+ * react-native dependency present in every real RN/Expo app. When it cannot be
+ * resolved (e.g. a bundle with no react-native installed), we keep Vite's URL
+ * string so the build still succeeds instead of failing on an unresolved import.
+ * The result is cached on the plugin state.
+ */
+async function isNativeAssetRegistryAvailable(
+  state: Pick<
+    ReactNativePluginState,
+    | "assetRegistryAvailable"
+    | "conditions"
+    | "extensions"
+    | "mainFields"
+    | "projectRoot"
+    | "resolvePlatform"
+  >,
+): Promise<boolean> {
+  if (state.assetRegistryAvailable !== undefined) {
+    return state.assetRegistryAvailable;
+  }
+
+  try {
+    await resolveReactNativeModule({
+      conditions: state.conditions,
+      extensions: state.extensions,
+      fromFile: path.join(state.projectRoot, "index.js"),
+      mainFields: state.mainFields,
+      platform: state.resolvePlatform,
+      projectRoot: state.projectRoot,
+      specifier: "@react-native/assets-registry/registry",
+    });
+    state.assetRegistryAvailable = true;
+  } catch {
+    state.assetRegistryAvailable = false;
+  }
+
+  return state.assetRegistryAvailable;
+}
+
+/**
+ * Renders the runtime module for a native asset import.
+ *
+ * React Native resolves `require('./image.png')` to a numeric asset id produced
+ * by `AssetRegistry.registerAsset(...)`, which `<Image source>` and
+ * `Font.loadAsync` expect. Vite's default asset handling instead emits a URL
+ * string, which is only valid for the web `<img>`/`<link>` runtime. For native
+ * targets we therefore emit every scale variant flat under `assets/` (matching
+ * the dev server's flat serving and `collectBuildAssets`'s stat path) and return
+ * a module that registers the asset, mirroring Metro's asset modules.
+ */
+async function renderNativeAssetModule(options: {
+  assetExtensions: readonly string[];
+  emitFile: (file: { fileName: string; source: Buffer; type: "asset" }) => void;
+  emittedFileNames: Set<string>;
+  filePath: string;
+  projectRoot: string;
+}) {
+  const group = await collectAssetGroup({
+    filePath: options.filePath,
+    projectRoot: options.projectRoot,
+    supportedExtensions: options.assetExtensions,
+  });
+
+  for (const variant of group.variants) {
+    const scaleSuffix = variant.scale > 1 ? `@${variant.scale}x` : "";
+    const fileName = `assets/${group.name}${scaleSuffix}.${group.type}`;
+    if (options.emittedFileNames.has(fileName)) {
+      continue;
+    }
+
+    options.emittedFileNames.add(fileName);
+    options.emitFile({
+      fileName,
+      source: await readFile(variant.filePath),
+      type: "asset",
+    });
+  }
+
+  const descriptor = {
+    __packager_asset: true,
+    fileHashes: group.variants.map((variant) => variant.hash),
+    hash: group.hash,
+    height: group.height,
+    httpServerLocation: "/assets",
+    name: group.name,
+    scales: [...group.scales],
+    type: group.type,
+    width: group.width,
+  };
+
+  return [
+    'import { registerAsset } from "@react-native/assets-registry/registry";',
+    `export default registerAsset(${JSON.stringify(descriptor)});`,
+    "",
+  ].join("\n");
 }
 
 function resolveCompatId(
@@ -2357,6 +2462,18 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         return await renderRequireContextModule(id);
       }
 
+      if (id.startsWith(ASSET_PREFIX)) {
+        return await renderNativeAssetModule({
+          assetExtensions: state.assetExtensions,
+          emitFile: (file) => {
+            this.emitFile(file);
+          },
+          emittedFileNames: state.emittedAssetFileNames,
+          filePath: id.slice(ASSET_PREFIX.length),
+          projectRoot: state.projectRoot,
+        });
+      }
+
       if (id.startsWith(COMPAT_PREFIX)) {
         return await renderCompat(id, state);
       }
@@ -2569,6 +2686,15 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
 
         if (isSupportedAssetFile(resolvedPath, state.assetExtensions)) {
           state.assetFiles.add(resolvedPath);
+
+          // On native, an asset import must resolve to a registered asset id (a
+          // number) via AssetRegistry — like Metro — not Vite's default URL
+          // string, which breaks `<Image source>` and font loading. The web
+          // preview keeps the URL string for the browser runtime, and so does a
+          // native build with no resolvable AssetRegistry.
+          if (state.resolvePlatform !== "web" && (await isNativeAssetRegistryAvailable(state))) {
+            return createAssetId(resolvedPath);
+          }
         }
 
         const compatPathId = resolveCompatPath(resolvedPath, state.resolvePlatform);
@@ -2661,6 +2787,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
     aliases: normalizeAliases(options.aliases),
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
     assetFiles: new Set<string>(),
+    emittedAssetFileNames: new Set<string>(),
     babelInPackages: normalizeBabelInPackages(options.babelInPackages),
     compatPreview: options.compatPreview ?? false,
     conditions: normalizeConditions(
@@ -2854,6 +2981,7 @@ async function writeWebRuntimeArtifacts(options: {
     aliases: normalizeAliases(options.aliases),
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
     assetFiles: new Set<string>(),
+    emittedAssetFileNames: new Set<string>(),
     babelInPackages: normalizeBabelInPackages(options.babelInPackages),
     compatPreview: options.compatPreview ?? false,
     conditions: normalizeConditions("web", options.conditions),
@@ -3155,6 +3283,7 @@ export async function buildReactNativeBundle(
     aliases: normalizeAliases(options.aliases),
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
     assetFiles: new Set<string>(),
+    emittedAssetFileNames: new Set<string>(),
     babelInPackages: normalizeBabelInPackages(options.babelInPackages),
     compatPreview: options.compatPreview ?? false,
     conditions: normalizeConditions(

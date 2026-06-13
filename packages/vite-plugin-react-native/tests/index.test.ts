@@ -1,4 +1,4 @@
-import { chmod, cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { build } from "vite";
@@ -378,6 +378,60 @@ test("buildReactNativeBundle does not tag react-native-worklets internals as com
   expect(bundleSource).not.toContain("vifx:compat:react-native-worklets");
   expect(bundleSource).toContain("web-worklets-unpacker");
   expect(bundleSource).toContain("web-worklets-entry");
+});
+
+test("buildReactNativeBundle registers native assets via AssetRegistry with scale variants", async () => {
+  const projectRoot = await copyFixture("rn-bare-assets");
+
+  // Synthetic AssetRegistry so the registered-asset module resolves in the fixture.
+  const registryRoot = path.join(projectRoot, "node_modules", "@react-native", "assets-registry");
+  await mkdir(registryRoot, { recursive: true });
+  await writeFile(
+    path.join(registryRoot, "package.json"),
+    JSON.stringify({ name: "@react-native/assets-registry" }, null, 2),
+  );
+  await writeFile(
+    path.join(registryRoot, "registry.js"),
+    [
+      "let nextId = 1;",
+      "export function registerAsset(asset) { return nextId++; }",
+      "export function getAssetByID(id) { return null; }",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import { AppRegistry } from "react-native";',
+      'import icon from "./assets/icon.png";',
+      'import font from "./assets/font.ttf";',
+      'console.log("native assets", icon, font);',
+      'AppRegistry.registerComponent("BareApp", () => null);',
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    outDir: ".vifx/helper-ios-assets",
+    platform: "ios",
+    projectRoot,
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+
+  // Native asset imports compile to AssetRegistry.registerAsset (a numeric id),
+  // like Metro — not Vite's default URL string, which breaks <Image>/font loading.
+  expect(bundleSource).toContain("registerAsset");
+  expect(bundleSource).toContain('"__packager_asset": true');
+  expect(bundleSource).toContain('"httpServerLocation": "/assets"');
+  expect(bundleSource).not.toContain('"/assets/icon.png"');
+  expect(bundleSource).not.toContain('"/assets/font.ttf"');
+
+  // Every scale variant is emitted flat under assets/ for the dev server + RN.
+  const assetsDir = path.join(projectRoot, ".vifx/helper-ios-assets/assets");
+  for (const name of ["icon.png", "icon@2x.png", "icon@3x.png", "font.ttf"]) {
+    expect((await stat(path.join(assetsDir, name))).isFile()).toBe(true);
+  }
 });
 
 test("buildReactNativeBundle uses native Reanimated compat for Expo Go bundles when compatPreview is enabled", async () => {
