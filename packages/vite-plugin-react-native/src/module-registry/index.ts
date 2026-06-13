@@ -9,7 +9,8 @@ import {
   type StagedChunkSourceMap,
 } from "./serializer.ts";
 
-export { MODULE_REGISTRY_PRELUDE } from "./runtime.ts";
+export { MODULE_REGISTRY_PRELUDE, buildModuleRegistryPrelude } from "./runtime.ts";
+export type { BuildModuleRegistryPreludeOptions } from "./runtime.ts";
 export {
   assignModuleIds,
   INITIALIZE_CORE_SPECIFIER,

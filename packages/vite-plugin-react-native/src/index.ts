@@ -79,7 +79,11 @@ export type {
   VifxResolvedOutputOptions,
   VifxResolveOutputOptionsOptions,
 } from "./modes.ts";
-export { buildModuleRegistryBundle, MODULE_REGISTRY_PRELUDE } from "./module-registry/index.ts";
+export {
+  buildModuleRegistryBundle,
+  buildModuleRegistryPrelude,
+  MODULE_REGISTRY_PRELUDE,
+} from "./module-registry/index.ts";
 export type {
   BuildModuleRegistryBundleOptions,
   ModuleRegistryBundleResult,
