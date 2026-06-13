@@ -2754,7 +2754,7 @@ async function writeWebRuntimeArtifacts(options: {
   shimJsxRuntime: boolean;
   shimReact: boolean;
   shimReactNative: boolean;
-  transformCache?: boolean;
+  transformCache: TransformCache | null;
 }): Promise<VifxWebRuntimeArtifact> {
   const previewOutDir = path.join(options.outDir, "runtime");
   const runtimeHtmlPath = path.join(options.outDir, WEB_RUNTIME_HTML_FILE);
@@ -2787,10 +2787,7 @@ async function writeWebRuntimeArtifacts(options: {
     shimJsxRuntime: options.shimJsxRuntime,
     shimReact: options.shimReact,
     shimReactNative: options.shimReactNative,
-    transformCache: createTransformCacheForState({
-      projectRoot: options.projectRoot,
-      transformCache: options.transformCache,
-    }),
+    transformCache: options.transformCache,
   };
   const previewInputEntry = await createBuildInputEntry(
     options.projectRoot,
@@ -3062,6 +3059,10 @@ export async function buildReactNativeBundle(
   const entry = options.entry ?? "./index.js";
   const outDir = options.outDir ?? `.vifx/vite/${options.platform}`;
   const absoluteOutDir = path.resolve(projectRoot, outDir);
+  const transformCache = createTransformCacheForState({
+    projectRoot,
+    transformCache: options.transformCache,
+  });
   const state: ReactNativePluginState = {
     aliases: normalizeAliases(options.aliases),
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
@@ -3085,10 +3086,7 @@ export async function buildReactNativeBundle(
     shimJsxRuntime: options.shimJsxRuntime ?? true,
     shimReact: options.shimReact ?? true,
     shimReactNative: options.shimReactNative ?? true,
-    transformCache: createTransformCacheForState({
-      projectRoot,
-      transformCache: options.transformCache,
-    }),
+    transformCache,
   };
   const inputEntry = await createBuildInputEntry(projectRoot, absoluteOutDir, entry);
   const buildConfig: InlineConfig = {
@@ -3162,11 +3160,11 @@ export async function buildReactNativeBundle(
           shimJsxRuntime: state.shimJsxRuntime,
           shimReact: state.shimReact,
           shimReactNative: state.shimReactNative,
-          transformCache: options.transformCache,
+          transformCache,
         })
       : null;
 
-  const cacheStats: VifxTransformCacheStats | undefined = state.transformCache?.stats();
+  const cacheStats: VifxTransformCacheStats | undefined = transformCache?.stats();
 
   return {
     assets,
