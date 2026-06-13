@@ -46,6 +46,10 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_EXPO_SMOKE_INVALID_ASSET_LIMIT`              | An Expo smoke command received a malformed asset sampling limit.                                                  |
 | `VIFX_EXPO_SMOKE_REQUIRES_EXPO_MODE`               | Expo Go smoke validation was run without `vite.mode = "expo"`.                                                    |
 | `VIFX_EXPO_SMOKE_WEBSOCKET_UNAVAILABLE`            | The current Node.js runtime cannot open the WebSocket loop required by Expo Go smoke validation.                  |
+| `VIFX_EXPORT_EMBED_BUNDLE_OUTPUT_REQUIRED`         | `export:embed` was run without the required `--bundle-output` path.                                               |
+| `VIFX_EXPORT_EMBED_INVALID_FLAG`                   | An `export:embed` value flag was passed without its value.                                                        |
+| `VIFX_EXPORT_EMBED_INVALID_PLATFORM`               | `export:embed` received a `--platform` other than `ios` or `android`.                                             |
+| `VIFX_EXPORT_EMBED_PROJECT_NOT_FOUND`              | The positional project path passed to `export:embed` is not a directory.                                          |
 | `VIFX_HERMES_COMPILE_FAILED`                       | Hermes compiler execution failed.                                                                                 |
 | `VIFX_HERMES_INPUT_MISSING`                        | The requested Hermes input bundle does not exist.                                                                 |
 | `VIFX_HERMES_OUTPUT_MISSING`                       | Hermes completed without creating the requested bytecode output.                                                  |
@@ -53,6 +57,8 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_MIGRATION_UNSAFE_CHANGE`                     | A requested migration step was too risky or targeted the wrong project type.                                      |
 | `VIFX_MONOREPO_EXPERIMENTAL`                       | Project inspection detected a workspace path that still depends on the current monorepo-limited support corridor. |
 | `VIFX_NO_ISSUES`                                   | Project inspection completed without finding actionable issues.                                                   |
+| `VIFX_PROD_ASSET_VARIANT_MISSING`                  | A production asset group reached the writer without any file variants to copy.                                    |
+| `VIFX_PROD_ASSET_WRITE_FAILED`                     | A production asset could not be written, or its destination escaped the assets dest.                              |
 | `VIFX_PROJECT_EXPERIMENTAL_EXPO_SDK`               | The project's Expo SDK is on the experimental support tier: static analysis only, not device-validated.           |
 | `VIFX_PROJECT_INVALID_APP_JSON`                    | Setup codemods could not parse or use the project's `app.json`.                                                   |
 | `VIFX_PROJECT_INVALID_PACKAGE_JSON`                | Project detection could not parse or use a package manifest.                                                      |

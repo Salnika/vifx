@@ -150,6 +150,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@vifx/asset-registry':
+        specifier: workspace:*
+        version: link:../asset-registry
       '@vifx/codemods':
         specifier: workspace:*
         version: link:../codemods

@@ -3,6 +3,8 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { VifxError } from "@vifx/errors";
 
+export * from "./prod-layout.ts";
+
 export interface AssetVariantDescriptor {
   filePath: string;
   hash: string;
