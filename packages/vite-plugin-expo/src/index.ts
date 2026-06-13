@@ -31,6 +31,7 @@ import {
   negotiateManifestResponse,
   resolveDevClientScheme,
 } from "./dev-client.ts";
+import { createDevtools, type VifxExpoDevtools } from "./devtools.ts";
 import { createExpoGoMessageChannel } from "./websocket.ts";
 
 export {
@@ -1183,6 +1184,7 @@ export async function startExpoGoDevServer(
   const sourceMapUrlPath = createExpoGoSourceMapUrlPath(bundleUrlPath);
   const emittedAssetsRoot = path.join(projectRoot, path.dirname(bundle.bundle.path), "assets");
   const messageChannel = createExpoGoMessageChannel();
+  let devtools: VifxExpoDevtools | null = null;
 
   const server = createHttpServer(async (request, response) => {
     const method = request.method ?? "GET";
@@ -1266,12 +1268,20 @@ export async function startExpoGoDevServer(
       return;
     }
 
+    if (devtools && (await devtools.handleRequest(request, response))) {
+      return;
+    }
+
     response.writeHead(404, {
       "Content-Type": "text/plain; charset=utf-8",
     });
     response.end("Not found\n");
   });
   server.on("upgrade", (request, socket, head) => {
+    if (devtools?.handleUpgrade(request, socket, head)) {
+      return;
+    }
+
     if (!messageChannel.handleUpgrade(request, socket, head)) {
       socket.destroy();
     }
@@ -1287,13 +1297,27 @@ export async function startExpoGoDevServer(
   const manifestUrl = `${baseUrl}/manifest`;
   const devClientScheme = resolveDevClientScheme(exp);
 
+  devtools = createDevtools({
+    broadcast: (method, params) => messageChannel.broadcast(method, params),
+    projectRoot,
+    serverBaseUrl: baseUrl,
+    symbolicate: (stack) =>
+      symbolicateStack({
+        projectRoot,
+        sourceMapPath: bundle.sourceMap?.path ?? null,
+        stack,
+      }),
+  });
+
   return {
     bundleUrl: `${baseUrl}${bundleUrlPath}`,
-    close: () =>
-      new Promise((resolve, reject) => {
-        messageChannel.closeAll();
+    close: async () => {
+      await devtools?.close();
+      messageChannel.closeAll();
+      await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
-      }),
+      });
+    },
     ...(devClientScheme === null
       ? {}
       : { devClientUrl: createDevClientLaunchUrl({ manifestUrl, scheme: devClientScheme }) }),
@@ -1303,6 +1327,7 @@ export async function startExpoGoDevServer(
     hmr: "reload",
     host,
     hostUri,
+    inspectorProxyUrl: devtools.inspectorProxyUrl,
     manifestUrl,
     messageSocketUrl: `${baseUrl.replace(/^http:/u, "ws:")}/message`,
     metro: false,
