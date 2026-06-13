@@ -221,7 +221,7 @@ test("negotiateManifestResponse echoes the requested expo-protocol-version", () 
   }
 });
 
-test("negotiateManifestResponse rejects code-signing requests with a structured error", () => {
+test("negotiateManifestResponse serves an unsigned manifest when a signature is requested", () => {
   for (const headerName of ["expo-expect-signature", "expo-expects-signature"]) {
     const response = negotiateManifestResponse({
       manifestJson: SAMPLE_MANIFEST,
@@ -233,14 +233,12 @@ test("negotiateManifestResponse rejects code-signing requests with a structured 
       },
     });
 
-    expect(response.status).toBe(501);
-    expect(response.headers["Content-Type"]).toBe("application/json; charset=utf-8");
-
-    const error = JSON.parse(response.body) as { code: string; hint: string; message: string };
-
-    expect(error.code).toBe("VIFX_EXPO_DEV_CLIENT_SIGNING_UNSUPPORTED");
-    expect(error.message).toContain(headerName);
-    expect(error.message).toContain("code signing is unsupported");
+    // The dev server does not sign manifests, but Expo Go accepts unsigned dev
+    // manifests — so the manifest is served (not rejected) without a signature.
+    expect(response.status).toBe(200);
+    expect(response.headers["Content-Type"]).toContain("multipart/mixed");
+    expect(response.headers["expo-signature"]).toBeUndefined();
+    expect(response.body).toContain(JSON.stringify(SAMPLE_MANIFEST));
   }
 });
 
@@ -343,11 +341,11 @@ NETWORK_SERVER_TESTS(
         },
       });
 
-      expect(signedResponse.status).toBe(501);
-
-      const signedError = (await signedResponse.json()) as { code: string };
-
-      expect(signedError.code).toBe("VIFX_EXPO_DEV_CLIENT_SIGNING_UNSUPPORTED");
+      // A signature-capable client still gets the manifest, served unsigned.
+      expect(signedResponse.status).toBe(200);
+      expect(signedResponse.headers.get("content-type")).toContain("multipart/mixed");
+      expect(signedResponse.headers.get("expo-signature")).toBeNull();
+      expect(await signedResponse.text()).toContain('"launchAsset"');
     } finally {
       await server.close();
     }

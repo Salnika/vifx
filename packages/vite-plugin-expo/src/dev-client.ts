@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { VifxError, serializeVifxError } from "@vifx/errors";
 import type { VifxJsonObject } from "@vifx/types";
 
 /**
@@ -12,13 +11,14 @@ import type { VifxJsonObject } from "@vifx/types";
  *   `manifest` part whose content type is `application/json`.
  * - `expo-protocol-version` is echoed back as `0` only when the client explicitly
  *   requests protocol 0; otherwise the current Vifx default of `1` is preserved.
- * - `expo-expect-signature` (and the `expo-expects-signature` spelling) requests a
- *   code-signed manifest, which the Vifx dev server does not support; the response
- *   is a structured `VIFX_EXPO_DEV_CLIENT_SIGNING_UNSUPPORTED` error.
+ * - `expo-expect-signature` (and the `expo-expects-signature` spelling) advertises
+ *   that the client can verify a signed manifest. The Vifx dev server does not sign
+ *   manifests, so the manifest is served unsigned (no `expo-signature` header) —
+ *   Expo Go and expo-dev-client accept unsigned manifests in development, matching
+ *   @expo/cli when no code-signing certificate is configured.
  */
 
 const DEV_CLIENT_LAUNCH_HOST = "expo-development-client";
-const EXPO_SIGNATURE_REQUEST_HEADERS = ["expo-expect-signature", "expo-expects-signature"] as const;
 
 export interface ManifestNegotiationRequest {
   /**
@@ -61,17 +61,6 @@ function acceptsMultipartMixed(request: ManifestNegotiationRequest) {
   return parseAcceptedTypes(readHeader(request, "accept")).includes("multipart/mixed");
 }
 
-function readSignatureRequestHeader(request: ManifestNegotiationRequest) {
-  for (const headerName of EXPO_SIGNATURE_REQUEST_HEADERS) {
-    const value = readHeader(request, headerName);
-    if (value !== null) {
-      return { name: headerName, value };
-    }
-  }
-
-  return null;
-}
-
 function resolveResponseProtocolVersion(request: ManifestNegotiationRequest) {
   return readHeader(request, "expo-protocol-version") === "0" ? "0" : "1";
 }
@@ -103,28 +92,14 @@ export function negotiateManifestResponse(options: {
   request: ManifestNegotiationRequest;
 }): NegotiatedManifestResponse {
   const protocolVersion = resolveResponseProtocolVersion(options.request);
-  const signatureRequest = readSignatureRequestHeader(options.request);
 
-  if (signatureRequest) {
-    const error = new VifxError({
-      code: "VIFX_EXPO_DEV_CLIENT_SIGNING_UNSUPPORTED",
-      message: `The manifest request sent "${signatureRequest.name}", but manifest code signing is unsupported by the Vifx dev server.`,
-      hint: "Remove the code-signing requirement (for example expo-updates codeSigningCertificate) from the development client, or use Expo CLI for signed manifests.",
-      docsPath: "/reference/packages#vifxvite-plugin-expo",
-    });
-
-    return {
-      body: `${JSON.stringify(serializeVifxError(error))}\n`,
-      headers: {
-        "Cache-Control": "private, max-age=0",
-        "Content-Type": "application/json; charset=utf-8",
-        "expo-protocol-version": protocolVersion,
-        "expo-sfv-version": "0",
-      },
-      status: 501,
-    };
-  }
-
+  // A client may advertise `expo-expect-signature` to say it can verify a signed
+  // manifest. The Vifx dev server does not sign manifests, so we serve the manifest
+  // unsigned (omitting the `expo-signature` header). Expo Go and expo-dev-client
+  // accept unsigned manifests in development — matching @expo/cli when no
+  // code-signing certificate is configured. Returning an error here previously
+  // broke loading on physical devices that send the header but tolerate unsigned
+  // dev manifests.
   const stringifiedManifest = JSON.stringify(options.manifestJson);
 
   if (acceptsMultipartMixed(options.request)) {
