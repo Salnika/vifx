@@ -32,6 +32,8 @@ import {
   resolveDevClientScheme,
 } from "./dev-client.ts";
 import { createDevtools, type VifxExpoDevtools } from "./devtools.ts";
+import { createHotChannel, createHotErrorPayload } from "./hot.ts";
+import { createBundleWatcher } from "./watch.ts";
 import { createExpoGoMessageChannel } from "./websocket.ts";
 
 export {
@@ -104,6 +106,7 @@ export interface VifxExpoGoDevServer {
   server: HttpServer;
   sourceMapUrl: string | null;
   url: string;
+  watching: boolean;
 }
 
 function resolvePublicEnv(
@@ -1121,6 +1124,36 @@ export async function buildExpoBundle(
   };
 }
 
+interface ExpoGoServedBundle {
+  assets: VifxBuildAssetArtifact[];
+  bundleSource: string;
+  sourceMapPath: string | null;
+  sourceMapText: string | null;
+}
+
+/**
+ * Snapshots freshly built bundle artifacts into memory so requests keep being
+ * served from the last good build while `emptyOutDir` wipes the output
+ * directory during rebuilds.
+ */
+async function loadExpoGoServedBundle(
+  projectRoot: string,
+  artifacts: VifxBundleArtifacts,
+): Promise<ExpoGoServedBundle> {
+  const bundleSource = await readFile(path.resolve(projectRoot, artifacts.bundle.path), "utf8");
+  const sourceMapPath = artifacts.sourceMap?.path ?? null;
+  const sourceMapText = sourceMapPath
+    ? await readFile(path.resolve(projectRoot, sourceMapPath), "utf8").catch(() => null)
+    : null;
+
+  return {
+    assets: artifacts.assets,
+    bundleSource,
+    sourceMapPath,
+    sourceMapText,
+  };
+}
+
 function readRequestBody(request: IncomingMessage) {
   return new Promise<string>((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -1162,10 +1195,11 @@ export async function startExpoGoDevServer(
   const entry = options.entry ?? "./index.js";
   const mainModuleName = normalizeMainModuleName(entry);
   const { exp, packageJson } = await readExpoAppManifest(projectRoot, options.appConfigPath);
-  const bundle = await buildExpoBundle({
+  const outDir = options.outDir ?? `.vifx/expo-go/${options.platform}`;
+  const bundleOptions: VifxExpoPluginOptions = {
     ...options,
     entry,
-    outDir: options.outDir ?? `.vifx/expo-go/${options.platform}`,
+    outDir,
     projectRoot,
     publicEnvPrefix: options.publicEnvPrefix,
     reactNativeCompat: "none",
@@ -1173,7 +1207,9 @@ export async function startExpoGoDevServer(
     shimJsxRuntime: options.shimJsxRuntime ?? false,
     shimReact: options.shimReact ?? false,
     shimReactNative: options.shimReactNative ?? false,
-  });
+  };
+  const bundle = await buildExpoBundle(bundleOptions);
+  let servedBundle = await loadExpoGoServedBundle(projectRoot, bundle);
   const bundleUrlPath = await createExpoGoBundleUrlPath({
     exp,
     hermes: options.hermes,
@@ -1185,6 +1221,24 @@ export async function startExpoGoDevServer(
   const emittedAssetsRoot = path.join(projectRoot, path.dirname(bundle.bundle.path), "assets");
   const messageChannel = createExpoGoMessageChannel();
   let devtools: VifxExpoDevtools | null = null;
+  const hotChannel = createHotChannel();
+
+  const rebuildServedBundle = async () => {
+    hotChannel.broadcastUpdateStart();
+
+    try {
+      const artifacts = await buildExpoBundle(bundleOptions);
+      servedBundle = await loadExpoGoServedBundle(projectRoot, artifacts);
+      messageChannel.broadcast("reload");
+      hotChannel.broadcastUpdateDone();
+    } catch (error) {
+      hotChannel.broadcastError(createHotErrorPayload(error));
+      console.error(
+        "[vifx] Expo Go rebuild failed; still serving the last good bundle.",
+        error instanceof Error ? (error.stack ?? error.message) : error,
+      );
+    }
+  };
 
   const server = createHttpServer(async (request, response) => {
     const method = request.method ?? "GET";
@@ -1205,7 +1259,7 @@ export async function startExpoGoDevServer(
       const negotiated = negotiateManifestResponse({
         manifestJson: buildManifest({
           bundleUrl,
-          assets: bundle.assets,
+          assets: servedBundle.assets,
           exp,
           hostUri,
           mainModuleName,
@@ -1226,14 +1280,22 @@ export async function startExpoGoDevServer(
     }
 
     if (isBundlePath(requestUrl.pathname)) {
-      const bundleSource = await readFile(path.resolve(projectRoot, bundle.bundle.path), "utf8");
-      writeTextResponse(response, 200, bundleSource, "application/javascript; charset=utf-8");
+      writeTextResponse(
+        response,
+        200,
+        servedBundle.bundleSource,
+        "application/javascript; charset=utf-8",
+      );
       return;
     }
 
-    if (isSourceMapPath(requestUrl.pathname) && bundle.sourceMap) {
-      const sourceMap = await readFile(path.resolve(projectRoot, bundle.sourceMap.path), "utf8");
-      writeTextResponse(response, 200, sourceMap, "application/json; charset=utf-8");
+    if (isSourceMapPath(requestUrl.pathname) && servedBundle.sourceMapText !== null) {
+      writeTextResponse(
+        response,
+        200,
+        servedBundle.sourceMapText,
+        "application/json; charset=utf-8",
+      );
       return;
     }
 
@@ -1258,7 +1320,7 @@ export async function startExpoGoDevServer(
       const parsed = JSON.parse(body || "{}") as { stack?: VifxJsonValue[] };
       const stack = await symbolicateStack({
         projectRoot,
-        sourceMapPath: bundle.sourceMap?.path ?? null,
+        sourceMapPath: servedBundle.sourceMapPath,
         stack: Array.isArray(parsed.stack) ? parsed.stack : [],
       });
 
@@ -1278,6 +1340,10 @@ export async function startExpoGoDevServer(
     response.end("Not found\n");
   });
   server.on("upgrade", (request, socket, head) => {
+    if (hotChannel.handleUpgrade(request, socket, head)) {
+      return;
+    }
+
     if (devtools?.handleUpgrade(request, socket, head)) {
       return;
     }
@@ -1285,6 +1351,20 @@ export async function startExpoGoDevServer(
     if (!messageChannel.handleUpgrade(request, socket, head)) {
       socket.destroy();
     }
+  });
+
+  const watcher = await createBundleWatcher({
+    ignore: [outDir],
+    onEvent: (event) => {
+      if (event.type === "watch-error") {
+        console.error(
+          "[vifx] Expo Go file watching is unavailable; automatic reloads are disabled.",
+          event.error instanceof Error ? event.error.message : event.error,
+        );
+      }
+    },
+    projectRoot,
+    rebuild: rebuildServedBundle,
   });
 
   await listen(server, host, strictPort ? port : 0);
@@ -1313,6 +1393,8 @@ export async function startExpoGoDevServer(
     bundleUrl: `${baseUrl}${bundleUrlPath}`,
     close: async () => {
       await devtools?.close();
+      await watcher.close();
+      await hotChannel.close();
       messageChannel.closeAll();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
@@ -1327,6 +1409,7 @@ export async function startExpoGoDevServer(
     hmr: "reload",
     host,
     hostUri,
+    hotSocketUrl: `${baseUrl.replace(/^http:/u, "ws:")}/hot`,
     inspectorProxyUrl: devtools.inspectorProxyUrl,
     manifestUrl,
     messageSocketUrl: `${baseUrl.replace(/^http:/u, "ws:")}/message`,
@@ -1338,6 +1421,7 @@ export async function startExpoGoDevServer(
     server,
     sourceMapUrl: bundle.sourceMap ? `${baseUrl}${sourceMapUrlPath}` : null,
     url: baseUrl,
+    watching: watcher.watching,
   };
 }
 
@@ -1397,3 +1481,20 @@ export async function startExpoDevServer(
     url: `http://${displayHost}:${actualPort}`,
   };
 }
+
+export {
+  createHotChannel,
+  createHotErrorPayload,
+  type VifxHotChannel,
+  type VifxHotErrorDescription,
+  type VifxHotErrorPayload,
+  type VifxHotMessage,
+  type VifxHotModule,
+  type VifxHotUpdate,
+} from "./hot.ts";
+export {
+  createBundleWatcher,
+  type CreateBundleWatcherOptions,
+  type VifxBundleWatcher,
+  type VifxBundleWatcherEvent,
+} from "./watch.ts";

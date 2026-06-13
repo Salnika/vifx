@@ -35,6 +35,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_EXPO_DEV_REQUIRES_WEB_COMPAT`                | An Expo dev target must opt into `reactNativeCompat: "web"` before browser serving.                               |
 | `VIFX_EXPO_DEV_TARGET_NOT_FOUND`                   | No configured Expo dev target matched the requested platform.                                                     |
 | `VIFX_EXPO_DEV_TARGETS_MISSING`                    | The config does not contain any Expo dev targets.                                                                 |
+| `VIFX_EXPO_DEV_WATCH_UNAVAILABLE`                  | The Expo Go dev server could not watch the project for changes; automatic reloads are disabled.                  |
 | `VIFX_EXPO_EXPORT_DUPLICATE_PLATFORM`              | Expo export generation received more than one bundle for the same platform.                                       |
 | `VIFX_EXPO_EXPORT_INVALID_PLATFORM`                | An Expo export command received an unsupported platform value.                                                    |
 | `VIFX_EXPO_EXPORT_NOT_FOUND`                       | The Expo export inspector could not find the requested export root.                                               |
