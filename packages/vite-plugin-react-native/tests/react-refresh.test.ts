@@ -12,25 +12,21 @@ const PROJECT_ROOT = "/project";
 const COMPONENT_ID = path.join(PROJECT_ROOT, "src", "App.tsx");
 const NODE_MODULE_ID = path.join(PROJECT_ROOT, "node_modules", "react-native", "index.js");
 
-const COMPONENT_SOURCE = [
-  "export default function App() {",
-  "  return null;",
-  "}",
-].join("\n");
+const COMPONENT_SOURCE = ["export default function App() {", "  return null;", "}"].join("\n");
 
 /**
  * A representative module body as `react-refresh/babel` emits it: a default
  * component export plus the `$RefreshReg$` / `$RefreshSig$` instrumentation.
  */
 const REFRESH_BABEL_OUTPUT = [
-  'var _s = $RefreshSig$();',
+  "var _s = $RefreshSig$();",
   "function App() {",
   "  _s();",
   "  return null;",
   "}",
   "_s(App, 'deadbeef');",
   "module.exports.default = App;",
-  '_c = App;',
+  "_c = App;",
   "var _c;",
   '$RefreshReg$(_c, "App");',
 ].join("\n");
@@ -121,16 +117,24 @@ test("applyReactRefreshTransform runs react-refresh/babel as CommonJS through th
   expect(result.code).toBe(REFRESH_BABEL_OUTPUT);
   expect(calls).toHaveLength(1);
 
-  const { options } = calls[0];
+  const call = calls.at(0);
+  if (!call) {
+    throw new Error("expected applyReactRefreshTransform to invoke babel");
+  }
+  const { options } = call;
 
   // The real react-refresh/babel plugin is resolved and threaded (not a second
   // bundled babel), with skipEnvCheck so the dev-only env assertion is bypassed.
   const plugins = options.plugins as Array<[string, Record<string, unknown>]>;
   expect(Array.isArray(plugins)).toBe(true);
   expect(plugins).toHaveLength(1);
-  expect(plugins[0][0]).toContain("react-refresh");
-  expect(plugins[0][0]).toMatch(/babel/u);
-  expect(plugins[0][1]).toEqual({ skipEnvCheck: true });
+  const reactRefreshPlugin = plugins.at(0);
+  if (!reactRefreshPlugin) {
+    throw new Error("expected a react-refresh babel plugin entry");
+  }
+  expect(reactRefreshPlugin[0]).toContain("react-refresh");
+  expect(reactRefreshPlugin[0]).toMatch(/babel/u);
+  expect(reactRefreshPlugin[1]).toEqual({ skipEnvCheck: true });
 
   // The project preset is reused.
   expect(options.presets).toEqual(["/stub/preset.js"]);
@@ -192,7 +196,7 @@ test("wrapWithRefreshRegistration glue registers against the moduleId and restor
   const body = [
     "var sig = $RefreshSig$();",
     "function Comp() { return null; }",
-    'module.exports.default = Comp;',
+    "module.exports.default = Comp;",
     '$RefreshReg$(Comp, "Comp");',
   ].join("\n");
   const wrapped = wrapWithRefreshRegistration(body, "src/Comp.tsx");
