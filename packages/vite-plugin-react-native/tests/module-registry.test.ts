@@ -89,9 +89,7 @@ const RICH_FIXTURE_FILES: Record<string, string> = {
     "}));",
     "",
   ].join("\n"),
-  "order/side-a.js": ['import "./side-b.js";', 'globalThis.__order.push("side-a");', ""].join(
-    "\n",
-  ),
+  "order/side-a.js": ['import "./side-b.js";', 'globalThis.__order.push("side-a");', ""].join("\n"),
   "order/side-b.js": ['globalThis.__order.push("side-b");', ""].join("\n"),
   "cycle/a.js": [
     'import { bValue, readAValue } from "./b.js";',
@@ -300,7 +298,10 @@ test(
       generatedLine,
       generatedColumn,
     );
-    expect(entry.originalSource?.endsWith("cycle/b.js")).toBe(true);
+    if (!("originalSource" in entry)) {
+      throw new Error("Expected a source map entry for the readAValue declaration.");
+    }
+    expect(entry.originalSource.endsWith("cycle/b.js")).toBe(true);
     expect(entry.originalLine).toBe(2);
   },
   BUILD_TIMEOUT,

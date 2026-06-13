@@ -118,7 +118,10 @@ export async function planMetroEntryModule(
 
   const entrySpecifier = isPathLikeEntry(options.entry)
     ? toPosixSpecifier(
-        path.relative(path.dirname(generatedEntryPath), path.resolve(options.projectRoot, options.entry)),
+        path.relative(
+          path.dirname(generatedEntryPath),
+          path.resolve(options.projectRoot, options.entry),
+        ),
       )
     : options.entry;
 

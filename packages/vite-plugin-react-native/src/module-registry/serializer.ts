@@ -240,7 +240,7 @@ function rewriteRequires(chunk: StagedChunk, moduleIds: Map<string, number>): Re
 }
 
 const VLQ_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-const VLQ_CHAR_TO_VALUE = new Map([...VLQ_CHARS].map((char, index) => [char, index]));
+const VLQ_CHAR_TO_VALUE = new Map(VLQ_CHARS.split("").map((char, index) => [char, index]));
 
 function decodeVlqSegment(segment: string): number[] {
   const values: number[] = [];
@@ -373,11 +373,7 @@ interface MergedMapBuilder {
   sourcesContent: (string | null)[];
 }
 
-function internSource(
-  builder: MergedMapBuilder,
-  source: string,
-  content: string | null,
-): number {
+function internSource(builder: MergedMapBuilder, source: string, content: string | null): number {
   const existing = builder.sourceIndices.get(source);
   if (existing !== undefined) {
     if (builder.sourcesContent[existing] == null && content != null) {

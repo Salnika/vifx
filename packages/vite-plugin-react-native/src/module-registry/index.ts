@@ -66,14 +66,20 @@ interface RawOutputItem {
 
 function collectStagedChunks(buildResult: unknown): StagedChunk[] {
   const outputs = (Array.isArray(buildResult) ? buildResult : [buildResult]).flatMap((result) =>
-    result !== null && typeof result === "object" && Array.isArray((result as { output?: unknown }).output)
+    result !== null &&
+    typeof result === "object" &&
+    Array.isArray((result as { output?: unknown }).output)
       ? ((result as { output: RawOutputItem[] }).output ?? [])
       : [],
   );
 
   const chunks: StagedChunk[] = [];
   for (const item of outputs) {
-    if (item.type !== "chunk" || typeof item.fileName !== "string" || typeof item.code !== "string") {
+    if (
+      item.type !== "chunk" ||
+      typeof item.fileName !== "string" ||
+      typeof item.code !== "string"
+    ) {
       continue;
     }
     const rawMap = item.map;
