@@ -168,12 +168,12 @@ CONTRACT_TEST("the bundle route serves a non-empty pre-bundled module graph", as
     // statements must have been bundled away.
     if (/(^|\n)\s*import\s/u.test(bundle.body)) {
       throw new Error(
-        'bundle route contract: the served bundle must not contain top-level `import ` statements.',
+        "bundle route contract: the served bundle must not contain top-level `import ` statements.",
       );
     }
     if (/(^|\n)\s*export\s/u.test(bundle.body)) {
       throw new Error(
-        'bundle route contract: the served bundle must not contain top-level `export ` statements.',
+        "bundle route contract: the served bundle must not contain top-level `export ` statements.",
       );
     }
   });
@@ -234,66 +234,63 @@ CONTRACT_TEST("the /assets route refuses path traversal outside the project", as
   });
 });
 
-CONTRACT_TEST(
-  "POST /symbolicate maps a bundle stack frame back to original sources",
-  async () => {
-    await withServer(async (handle) => {
-      const sourceMapUrl = handle.server.sourceMapUrl;
-      if (!sourceMapUrl) {
-        throw new Error("/symbolicate contract: server did not expose a source-map URL.");
-      }
-      const sourceMap = (await handle.fetchUrl(sourceMapUrl)).json<{
-        sources: string[];
-      }>();
+CONTRACT_TEST("POST /symbolicate maps a bundle stack frame back to original sources", async () => {
+  await withServer(async (handle) => {
+    const sourceMapUrl = handle.server.sourceMapUrl;
+    if (!sourceMapUrl) {
+      throw new Error("/symbolicate contract: server did not expose a source-map URL.");
+    }
+    const sourceMap = (await handle.fetchUrl(sourceMapUrl)).json<{
+      sources: string[];
+    }>();
 
-      // Drive a position guaranteed to be in the map by replaying its own
-      // mappings: probe the bundled grid for the first symbolicatable entry.
-      const { SourceMap } = await import("node:module");
-      const instance = new SourceMap(
-        sourceMap as unknown as ConstructorParameters<typeof SourceMap>[0],
-      );
-      let frame: { column: number; lineNumber: number } | null = null;
-      for (let line = 0; line < 400 && !frame; line += 1) {
-        for (let column = 0; column < 400; column += 1) {
-          const entry = instance.findEntry(line, column);
-          if ("originalSource" in entry && entry.originalSource) {
-            frame = { column: column + 1, lineNumber: line + 1 };
-            break;
-          }
+    // Drive a position guaranteed to be in the map by replaying its own
+    // mappings: probe the bundled grid for the first symbolicatable entry.
+    const { SourceMap } = await import("node:module");
+    const instance = new SourceMap(
+      sourceMap as unknown as ConstructorParameters<typeof SourceMap>[0],
+    );
+    let frame: { column: number; lineNumber: number } | null = null;
+    for (let line = 0; line < 400 && !frame; line += 1) {
+      for (let column = 0; column < 400; column += 1) {
+        const entry = instance.findEntry(line, column);
+        if ("originalSource" in entry && entry.originalSource) {
+          frame = { column: column + 1, lineNumber: line + 1 };
+          break;
         }
       }
-      if (!frame) {
-        throw new Error("/symbolicate contract: could not find a symbolicatable bundle position.");
-      }
+    }
+    if (!frame) {
+      throw new Error("/symbolicate contract: could not find a symbolicatable bundle position.");
+    }
 
-      const response = await handle.postJson("/symbolicate", {
-        stack: [{ file: "index.bundle", ...frame }],
-      });
-      if (response.status !== 200) {
-        throw new Error(
-          `POST /symbolicate contract: expected 200, received ${String(response.status)}.`,
-        );
-      }
-
-      const symbolication = response.json<{ stack: Array<{ file?: string; source?: string }> }>();
-      if (symbolication.stack.length !== 1) {
-        throw new Error(
-          `POST /symbolicate contract: expected one symbolicated frame, received ${String(
-            symbolication.stack.length,
-          )}.`,
-        );
-      }
-      const symbolicatedSource = symbolication.stack[0]?.source;
-      if (!symbolicatedSource || !sourceMap.sources.includes(symbolicatedSource)) {
-        throw new Error(
-          `POST /symbolicate contract: frame.source (${String(
-            symbolicatedSource,
-          )}) must be one of the source map's original sources.`,
-        );
-      }
+    const response = await handle.postJson("/symbolicate", {
+      stack: [{ file: "index.bundle", ...frame }],
     });
-  },
-);
+    if (response.status !== 200) {
+      throw new Error(
+        `POST /symbolicate contract: expected 200, received ${String(response.status)}.`,
+      );
+    }
+
+    const symbolication = response.json<{ stack: Array<{ file?: string; source?: string }> }>();
+    if (symbolication.stack.length !== 1) {
+      throw new Error(
+        `POST /symbolicate contract: expected one symbolicated frame, received ${String(
+          symbolication.stack.length,
+        )}.`,
+      );
+    }
+    const symbolicatedSource = symbolication.stack[0]?.source;
+    if (!symbolicatedSource || !sourceMap.sources.includes(symbolicatedSource)) {
+      throw new Error(
+        `POST /symbolicate contract: frame.source (${String(
+          symbolicatedSource,
+        )}) must be one of the source map's original sources.`,
+      );
+    }
+  });
+});
 
 CONTRACT_TEST(
   "/message WebSocket answers getid + getpeers and routes peer-to-peer frames",
@@ -435,9 +432,7 @@ CONTRACT_TEST("an unknown route responds 404", async () => {
   await withServer(async (handle) => {
     const response = await handle.get("/this-route-does-not-exist");
     if (response.status !== 404) {
-      throw new Error(
-        `unknown-route contract: expected 404, received ${String(response.status)}.`,
-      );
+      throw new Error(`unknown-route contract: expected 404, received ${String(response.status)}.`);
     }
   });
 });

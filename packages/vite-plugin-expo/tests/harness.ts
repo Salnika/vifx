@@ -201,8 +201,9 @@ export async function canListenOnLocalhost(): Promise<boolean> {
   });
 }
 
-export interface TestServerOverrides
-  extends Partial<Omit<StartExpoDevServerOptions, "platform" | "projectRoot">> {
+export interface TestServerOverrides extends Partial<
+  Omit<StartExpoDevServerOptions, "platform" | "projectRoot">
+> {
   platform?: StartExpoDevServerOptions["platform"];
 }
 
