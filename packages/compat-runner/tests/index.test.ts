@@ -11,7 +11,7 @@ test("runCompatSuite executes the vifx adapter against the compatibility cases",
   });
 
   expect(report.status).toBe("PASS");
-  expect(report.totalCases).toBe(15);
+  expect(report.totalCases).toBe(27);
   expect(report.failedCases).toBe(0);
 });
 
@@ -21,8 +21,28 @@ test("runCompatSuite executes the Metro reference adapter against the compatibil
   });
 
   expect(report.status).toBe("PASS");
-  expect(report.totalCases).toBe(15);
+  expect(report.totalCases).toBe(27);
   expect(report.failedCases).toBe(0);
+});
+
+test("the vifx library matrix reflects the synthetic-package support snapshot", async () => {
+  const report = await runCompatSuite({ adapter: "vifx" });
+  const statusByPackage = new Map(report.libraryMatrix.map((row) => [row.packageName, row.status]));
+
+  expect(report.libraryMatrix).toHaveLength(12);
+  // Pure-JS surface resolves and bundles fully.
+  expect(statusByPackage.get("react-native-safe-area-context")).toBe("pass");
+  // A native module bundles but cannot run from a bundler build.
+  expect(statusByPackage.get("react-native-gesture-handler")).toBe("partial");
+  // Untranspiled JSX in a published .js file fails to parse without a Babel opt-in.
+  expect(statusByPackage.get("react-native-vector-icons")).toBe("fail");
+});
+
+test("the Metro library matrix records every library case as skipped", async () => {
+  const report = await runCompatSuite({ adapter: "metro" });
+
+  expect(report.libraryMatrix).toHaveLength(12);
+  expect(report.libraryMatrix.every((row) => row.status === "skip")).toBe(true);
 });
 
 test("inspectProject returns doctor-friendly metadata", async () => {

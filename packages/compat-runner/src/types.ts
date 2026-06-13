@@ -1,6 +1,7 @@
 import type {
   CompatCase,
   CompatCaseOutcome,
+  CompatCaseStatus,
   CompatCategory,
   FixtureId,
   FixtureManifest,
@@ -75,6 +76,20 @@ export interface CompatReportCase extends CompatCaseOutcome {
   fixturePath: string;
 }
 
+/**
+ * One row of the library support matrix for the adapter under report. Captures
+ * the observed status (pass/partial/fail/skip) plus the human-readable detail
+ * the adapter produced, so terminal/markdown reporters and the docs page can
+ * render the snapshot without re-running the suite.
+ */
+export interface CompatLibraryMatrixRow {
+  caseId: string;
+  packageName: string;
+  status: CompatCaseStatus;
+  detail: string;
+  docsPath: string;
+}
+
 export interface CompatRunReport {
   adapterId: CompatAdapterId;
   generatedAt: string;
@@ -84,4 +99,6 @@ export interface CompatRunReport {
   status: "PASS" | "FAIL";
   categories: CompatCategoryReport[];
   cases: CompatReportCase[];
+  /** Present when the run included any "libraries" category cases. */
+  libraryMatrix: CompatLibraryMatrixRow[];
 }

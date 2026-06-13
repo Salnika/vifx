@@ -364,7 +364,9 @@ export const compatCases: CompatCase[] = [
         },
       },
     },
-    notes: ["Synthetic replica of the pure-JS insets surface (no native module on the resolved entry)."],
+    notes: [
+      "Synthetic replica of the pure-JS insets surface (no native module on the resolved entry).",
+    ],
     docsPath: "/compat/libraries#react-native-safe-area-context",
   },
   {

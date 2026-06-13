@@ -6,7 +6,7 @@ import {
 } from "@vifx/compat";
 import { metroAdapter } from "./adapters/metro/index.ts";
 import { vifxAdapter } from "./adapters/vifx/index.ts";
-import { buildCategoryReports } from "./reporters.ts";
+import { buildCategoryReports, buildLibraryMatrix } from "./reporters.ts";
 import type { CompatAdapter, CompatAdapterId, CompatRunOptions, CompatRunReport } from "./types.ts";
 
 function getAdapter(adapterId: CompatAdapterId): CompatAdapter {
@@ -60,6 +60,7 @@ export async function runCompatSuite(options: CompatRunOptions): Promise<CompatR
     status: failedCases === 0 ? "PASS" : "FAIL",
     categories: buildCategoryReports(cases),
     cases,
+    libraryMatrix: buildLibraryMatrix(cases),
   };
 }
 
@@ -71,5 +72,5 @@ export {
   inspectProject,
   resolvePlatformFile,
 } from "./primitives.ts";
-export { formatCompatReport } from "./reporters.ts";
+export { buildLibraryMatrix, formatCompatReport } from "./reporters.ts";
 export * from "./types.ts";

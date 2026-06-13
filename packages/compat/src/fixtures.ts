@@ -85,7 +85,13 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     relativePath: "fixtures/libs/react-native-gesture-handler",
     projectType: "react-native",
     packageManager: "pnpm",
-    features: ["library-fixture", "synthetic-package", "exports-map", "native-module", "ts-source-entry"],
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "exports-map",
+      "native-module",
+      "ts-source-entry",
+    ],
     notes: [
       "Synthetic replica with an exports map and a react-native condition pointing at TypeScript sources that reach into a native module.",
     ],
@@ -96,7 +102,13 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     relativePath: "fixtures/libs/react-native-screens",
     projectType: "react-native",
     packageManager: "pnpm",
-    features: ["library-fixture", "synthetic-package", "native-component", "jsx-source", "ts-source-entry"],
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "native-component",
+      "jsx-source",
+      "ts-source-entry",
+    ],
     notes: [
       "Synthetic replica registering a native host component (RNSScreen) from a TSX react-native entry.",
     ],
@@ -118,7 +130,13 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     relativePath: "fixtures/libs/react-native-svg",
     projectType: "react-native",
     packageManager: "pnpm",
-    features: ["library-fixture", "synthetic-package", "native-component", "jsx-source", "ts-source-entry"],
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "native-component",
+      "jsx-source",
+      "ts-source-entry",
+    ],
     notes: [
       "Synthetic replica registering native host components (RNSVGSvgView, RNSVGPath) from a TSX react-native entry.",
     ],
@@ -129,7 +147,13 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     relativePath: "fixtures/libs/expo-image",
     projectType: "react-native",
     packageManager: "pnpm",
-    features: ["library-fixture", "synthetic-package", "expo-module", "exports-map", "native-component"],
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "expo-module",
+      "exports-map",
+      "native-component",
+    ],
     notes: [
       "Synthetic Expo module shipping precompiled build/ output that renders a native view via a vendored expo-modules-core.",
     ],
@@ -140,7 +164,13 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     relativePath: "fixtures/libs/flash-list",
     projectType: "react-native",
     packageManager: "pnpm",
-    features: ["library-fixture", "synthetic-package", "scoped-package", "native-component", "transitive-dep"],
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "scoped-package",
+      "native-component",
+      "transitive-dep",
+    ],
     notes: [
       "Synthetic scoped package building on a vendored recyclerlistview and rendering a native AutoLayoutView.",
     ],
@@ -151,7 +181,13 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     relativePath: "fixtures/libs/expo-sqlite",
     projectType: "react-native",
     packageManager: "pnpm",
-    features: ["library-fixture", "synthetic-package", "expo-module", "native-module", "exports-map"],
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "expo-module",
+      "native-module",
+      "exports-map",
+    ],
     notes: [
       "Synthetic Expo module opening a database through the ExpoSQLite native module via a vendored expo-modules-core.",
     ],
@@ -173,7 +209,13 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     relativePath: "fixtures/libs/lottie-react-native",
     projectType: "react-native",
     packageManager: "pnpm",
-    features: ["library-fixture", "synthetic-package", "native-component", "jsx-source", "ts-source-entry"],
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "native-component",
+      "jsx-source",
+      "ts-source-entry",
+    ],
     notes: [
       "Synthetic replica rendering a native animation view (LottieAnimationView) from a TSX react-native entry.",
     ],
@@ -184,7 +226,13 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     relativePath: "fixtures/libs/nativewind",
     projectType: "react-native",
     packageManager: "pnpm",
-    features: ["library-fixture", "synthetic-package", "css-import", "babel-required", "ts-source-entry"],
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "css-import",
+      "babel-required",
+      "ts-source-entry",
+    ],
     notes: [
       "Synthetic replica whose consumer imports a Tailwind CSS entry; the real toolchain pairs it with a Babel preset and PostCSS pipeline.",
     ],
@@ -195,7 +243,13 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     relativePath: "fixtures/libs/react-native-webview",
     projectType: "react-native",
     packageManager: "pnpm",
-    features: ["library-fixture", "synthetic-package", "native-component", "jsx-source", "ts-source-entry"],
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "native-component",
+      "jsx-source",
+      "ts-source-entry",
+    ],
     notes: [
       "Synthetic replica rendering a native RNCWebView host component from a TSX react-native entry.",
     ],

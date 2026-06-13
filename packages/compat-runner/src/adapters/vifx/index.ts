@@ -50,10 +50,21 @@ function getBundleArtifacts(fixturePath: string, platform: "ios" | "android", en
   return bundle;
 }
 
+// Strip ANSI colour codes (with or without a leading ESC) from bundler errors.
+// eslint-disable-next-line no-control-regex
+const ANSI_ESCAPE_PATTERN = /\u001b?\[[0-9;]*m/g;
+
 function summarizeBuildFailure(error: unknown) {
   const vifxError = toVifxError(error);
-  const summary = `${vifxError.code}: ${vifxError.message}`.replace(/\s+/g, " ").trim();
-  return summary.length > 400 ? `${summary.slice(0, 400)}…` : summary;
+  const summary = `${vifxError.code}: ${vifxError.message}`
+    // Drop terminal colour codes so the detail is plain text in JSON/markdown reports.
+    .replace(ANSI_ESCAPE_PATTERN, "")
+    // Collapse volatile temp build directories to a stable marker so the snapshot
+    // is deterministic across machines and runs.
+    .replace(/[^\s]*vifx-compat-bundle-[^\s:]*/g, "<tmp>")
+    .replace(/\s+/g, " ")
+    .trim();
+  return summary.length > 240 ? `${summary.slice(0, 240)}…` : summary;
 }
 
 async function runLibraryBuildOperation(

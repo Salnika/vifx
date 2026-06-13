@@ -41,8 +41,16 @@ export default defineConfig({
   staged: {
     "*": "vp check --fix",
   },
-  fmt: {},
-  lint: { options: { typeAware: true, typeCheck: true } },
+  // Synthetic library fixtures under fixtures/libs are checked in (the .gitignore
+  // negates their node_modules) so the compat runner can bundle them, but they
+  // intentionally import uninstalled react/react-native and ship the publishing
+  // quirks we are testing. They are fixtures, not source, so exclude them from
+  // format, lint, and type checking.
+  fmt: { ignorePatterns: ["fixtures/libs/**"] },
+  lint: {
+    ignorePatterns: ["fixtures/libs/**"],
+    options: { typeAware: true, typeCheck: true },
+  },
   run: {
     cache: true,
   },
