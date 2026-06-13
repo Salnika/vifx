@@ -307,10 +307,10 @@ test("export-embed alias writes the iOS asset layout", async () => {
   expect(result.stderr).not.toContain("production semantics pending");
 
   expect((await stat(bundleOutput)).isFile()).toBe(true);
-  expect(await listFilesRecursively(assetsDest)).toEqual([
-    "assetmap.json",
-    "assets/src/assets/icon.svg",
-  ]);
+  const assetFiles = await listFilesRecursively(assetsDest);
+  expect(assetFiles).toEqual(["assetmap.json", "assets/src/assets/icon.svg"]);
+  // The intermediate build out dir must never leak into the prod asset layout.
+  expect(assetFiles.some((file) => file.includes(".vifx"))).toBe(false);
 
   // Without --sourcemap-output the bundle has no dangling source map comment.
   const bundleContents = await readFile(bundleOutput, "utf8");
