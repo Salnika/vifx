@@ -115,17 +115,15 @@ test("project Babel runs the project's real worklets plugin over app AND library
   await mkdir(path.join(reanimatedRoot, "src"), { recursive: true });
   await writeFile(
     path.join(reanimatedRoot, "package.json"),
-    JSON.stringify({ main: "src/index.js", name: "react-native-reanimated", version: "3.0.0" }, null, 2),
+    JSON.stringify(
+      { main: "src/index.js", name: "react-native-reanimated", version: "3.0.0" },
+      null,
+      2,
+    ),
   );
   await writeFile(
     path.join(reanimatedRoot, "src", "animation.js"),
-    [
-      "export function libraryWorklet() {",
-      '  "worklet";',
-      "  return 1;",
-      "}",
-      "",
-    ].join("\n"),
+    ["export function libraryWorklet() {", '  "worklet";', "  return 1;", "}", ""].join("\n"),
   );
 
   // First-party app source with its own worklet.
