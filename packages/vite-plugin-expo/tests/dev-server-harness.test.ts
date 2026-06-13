@@ -183,8 +183,10 @@ CONTRACT_TEST(
   "the source-map route serves a valid v3 source map for the served bundle",
   async () => {
     await withServer(async (handle) => {
-      const manifest = (await handle.get("/manifest")).json<ExpoGoManifest>();
-      const sourceMapUrl = `${manifest.launchAsset.url}.map`;
+      const sourceMapUrl = handle.server.sourceMapUrl;
+      if (!sourceMapUrl) {
+        throw new Error("source-map route contract: server did not expose a source-map URL.");
+      }
       const sourceMap = await handle.fetchUrl(sourceMapUrl);
 
       if (sourceMap.status !== 200) {
@@ -236,8 +238,11 @@ CONTRACT_TEST(
   "POST /symbolicate maps a bundle stack frame back to original sources",
   async () => {
     await withServer(async (handle) => {
-      const manifest = (await handle.get("/manifest")).json<ExpoGoManifest>();
-      const sourceMap = (await handle.fetchUrl(`${manifest.launchAsset.url}.map`)).json<{
+      const sourceMapUrl = handle.server.sourceMapUrl;
+      if (!sourceMapUrl) {
+        throw new Error("/symbolicate contract: server did not expose a source-map URL.");
+      }
+      const sourceMap = (await handle.fetchUrl(sourceMapUrl)).json<{
         sources: string[];
       }>();
 
