@@ -173,7 +173,7 @@ export async function writeProdAssets(
 
     for (const variant of variants) {
       const destinationPath = getProdAssetDestPath(options.platform, asset, variant.scale);
-      const absoluteDestination = path.join(assetsDest, ...destinationPath.split("/"));
+      const absoluteDestination = resolveContainedDestination(assetsDest, destinationPath, asset);
 
       await mkdir(path.dirname(absoluteDestination), { recursive: true });
       await copyAssetVariant(variant.filePath, absoluteDestination, asset);
@@ -248,6 +248,37 @@ function assertHasVariants(asset: ProdLayoutAssetInput) {
       type: asset.type,
     },
   });
+}
+
+/**
+ * Resolves a relative production destination against the assets dest and
+ * guarantees the result stays inside it. The per-platform path builders
+ * already neutralize "../" segments, but asset metadata ultimately originates
+ * from the project on disk, so this is the last line of defense against a
+ * crafted httpServerLocation escaping the output directory via path traversal.
+ */
+function resolveContainedDestination(
+  assetsDest: string,
+  destinationPath: string,
+  asset: ProdLayoutAssetInput,
+): string {
+  const absoluteDestination = path.resolve(assetsDest, ...destinationPath.split("/"));
+  const relative = path.relative(assetsDest, absoluteDestination);
+
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new VifxError({
+      code: "VIFX_PROD_ASSET_WRITE_FAILED",
+      message: `Asset destination "${destinationPath}" resolves outside of the assets destination directory.`,
+      hint: "Ensure the asset's httpServerLocation does not contain path traversal sequences.",
+      details: {
+        destination: absoluteDestination,
+        name: asset.name,
+        type: asset.type,
+      },
+    });
+  }
+
+  return absoluteDestination;
 }
 
 async function copyAssetVariant(

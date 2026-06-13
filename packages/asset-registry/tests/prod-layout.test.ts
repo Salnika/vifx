@@ -228,3 +228,26 @@ test("rejects asset groups without variants", async () => {
     }),
   ).rejects.toMatchObject({ code: "VIFX_PROD_ASSET_VARIANT_MISSING" });
 });
+
+test("refuses to write assets whose destination escapes the assets dest", async () => {
+  const assetsDest = await createTemporaryDirectory();
+  const escaping = path.join(FIXTURE_ROOT, "assets", "icon.png");
+
+  // A crafted asset name with traversal segments resolves above assetsDest;
+  // writeProdAssets must reject instead of clobbering files outside the tree.
+  await expect(
+    writeProdAssets(
+      [
+        {
+          httpServerLocation: "/assets",
+          name: "../../evil",
+          type: "png",
+          variants: [{ filePath: escaping, scale: 1 }],
+        },
+      ],
+      { assetsDest, platform: "ios" },
+    ),
+  ).rejects.toMatchObject({ code: "VIFX_PROD_ASSET_WRITE_FAILED" });
+
+  expect(await listFilesRecursively(assetsDest)).toEqual([]);
+});
