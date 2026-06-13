@@ -89,6 +89,7 @@ export interface VifxExpoDevServer {
 }
 
 export interface VifxExpoGoDevServer {
+  broadcast?: (method: string, params?: Record<string, unknown>) => void;
   bundleUrl: string;
   close: () => Promise<void>;
   devClientUrl?: string;
@@ -1434,6 +1435,9 @@ export async function startExpoGoDevServer(
   });
 
   return {
+    broadcast: (method: string, params?: Record<string, unknown>) => {
+      messageChannel.broadcast(method, params as VifxJsonValue | undefined);
+    },
     bundleUrl: `${baseUrl}${bundleUrlPath}`,
     close: async () => {
       await devtools?.close();

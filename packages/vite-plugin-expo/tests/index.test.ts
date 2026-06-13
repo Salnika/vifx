@@ -526,6 +526,51 @@ NETWORK_SERVER_TESTS(
 );
 
 NETWORK_SERVER_TESTS(
+  "startExpoGoDevServer exposes a broadcast that reaches connected message clients",
+  async () => {
+    const projectRoot = await copyFixture("expo-basic");
+
+    await writeNativeReactNativePackage(projectRoot);
+    await writeNativeExpoPackage(projectRoot);
+
+    const server = await startExpoGoDevServer({
+      entry: "./index.js",
+      platform: "ios",
+      port: 0,
+      projectRoot,
+    });
+
+    try {
+      expect(server.broadcast).toBeTypeOf("function");
+
+      const messageSocket = await openWebSocket(server.messageSocketUrl);
+
+      try {
+        const reloadPromise = waitForWebSocketMessage(messageSocket);
+        server.broadcast?.("reload");
+        const reload = JSON.parse(await reloadPromise) as { method: string };
+
+        expect(reload.method).toBe("reload");
+
+        const devMenuPromise = waitForWebSocketMessage(messageSocket);
+        server.broadcast?.("devMenu", { source: "vifx-test" });
+        const devMenu = JSON.parse(await devMenuPromise) as {
+          method: string;
+          params: { source?: string };
+        };
+
+        expect(devMenu.method).toBe("devMenu");
+        expect(devMenu.params.source).toBe("vifx-test");
+      } finally {
+        messageSocket.close();
+      }
+    } finally {
+      await server.close();
+    }
+  },
+);
+
+NETWORK_SERVER_TESTS(
   "startExpoGoDevServer can emit an explicit public host for Expo Go URLs",
   async () => {
     const projectRoot = await copyFixture("expo-basic");

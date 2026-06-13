@@ -10,6 +10,74 @@ import {
 import { EXPO_SDK_SUPPORT, SUPPORTED_EXPO_SDK_VERSIONS } from "@vifx/expo-export";
 import { expect, test } from "vite-plus/test";
 import { executeCli } from "../src/index.ts";
+import { EXPO_GO_DEV_KEY_HINT, attachExpoGoDevKeys } from "../src/commands/expo-dev.ts";
+import type { VifxExpoGoDevServer } from "@vifx/vite-plugin-expo";
+
+interface FakeStdin {
+  isTTY: boolean;
+  isRaw: boolean;
+  setRawMode: (mode: boolean) => FakeStdin;
+  resume: () => void;
+  pause: () => void;
+  on: (event: string, listener: (chunk: Buffer) => void) => void;
+  off: (event: string, listener: (chunk: Buffer) => void) => void;
+  emitData: (chunk: Buffer) => void;
+}
+
+function createFakeStdin(options: { isTTY: boolean }): FakeStdin {
+  const listeners = new Set<(chunk: Buffer) => void>();
+  const stdin: FakeStdin = {
+    isTTY: options.isTTY,
+    isRaw: false,
+    setRawMode(mode: boolean) {
+      stdin.isRaw = mode;
+      return stdin;
+    },
+    resume() {},
+    pause() {},
+    on(event, listener) {
+      if (event === "data") {
+        listeners.add(listener);
+      }
+    },
+    off(event, listener) {
+      if (event === "data") {
+        listeners.delete(listener);
+      }
+    },
+    emitData(chunk: Buffer) {
+      for (const listener of listeners) {
+        listener(chunk);
+      }
+    },
+  };
+  return stdin;
+}
+
+function createBroadcastSpyServer(): {
+  server: VifxExpoGoDevServer;
+  calls: Array<{ method: string; params?: Record<string, unknown> }>;
+} {
+  const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
+  const server = {
+    broadcast(method: string, params?: Record<string, unknown>) {
+      calls.push({ method, ...(params === undefined ? {} : { params }) });
+    },
+  } as unknown as VifxExpoGoDevServer;
+  return { calls, server };
+}
+
+function withFakeStdin<T>(stdin: FakeStdin, run: () => T): T {
+  const descriptor = Object.getOwnPropertyDescriptor(process, "stdin");
+  Object.defineProperty(process, "stdin", { configurable: true, value: stdin });
+  try {
+    return run();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(process, "stdin", descriptor);
+    }
+  }
+}
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "../../../fixtures");
 
@@ -1085,4 +1153,55 @@ test("setup includes Metro config migration notes for projects with a metro conf
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Metro config migration:");
   expect(result.stdout).toContain("react-native-svg-transformer");
+});
+
+test("expo dev keybindings broadcast reload on r and dev menu on m", () => {
+  const stdin = createFakeStdin({ isTTY: true });
+  const { calls, server } = createBroadcastSpyServer();
+
+  const detach = withFakeStdin(stdin, () => attachExpoGoDevKeys(server));
+
+  expect(detach).toBeTypeOf("function");
+  expect(stdin.isRaw).toBe(true);
+
+  stdin.emitData(Buffer.from("r"));
+  stdin.emitData(Buffer.from("m"));
+  stdin.emitData(Buffer.from("x"));
+
+  expect(calls).toEqual([{ method: "reload" }, { method: "devMenu" }]);
+
+  detach?.();
+  expect(stdin.isRaw).toBe(false);
+
+  // Detached: further keys are ignored.
+  stdin.emitData(Buffer.from("r"));
+  expect(calls).toHaveLength(2);
+});
+
+test("expo dev keybindings are skipped without an interactive TTY", () => {
+  const stdin = createFakeStdin({ isTTY: false });
+  const { calls, server } = createBroadcastSpyServer();
+
+  const detach = withFakeStdin(stdin, () => attachExpoGoDevKeys(server));
+
+  expect(detach).toBeUndefined();
+  expect(stdin.isRaw).toBe(false);
+
+  stdin.emitData(Buffer.from("r"));
+  expect(calls).toHaveLength(0);
+});
+
+test("expo dev keybindings are skipped when the server has no broadcast", () => {
+  const stdin = createFakeStdin({ isTTY: true });
+  const server = {} as VifxExpoGoDevServer;
+
+  const detach = withFakeStdin(stdin, () => attachExpoGoDevKeys(server));
+
+  expect(detach).toBeUndefined();
+  expect(stdin.isRaw).toBe(false);
+});
+
+test("expo dev exposes its keybinding hint string", () => {
+  expect(EXPO_GO_DEV_KEY_HINT).toContain("r reload");
+  expect(EXPO_GO_DEV_KEY_HINT).toContain("m dev menu");
 });
