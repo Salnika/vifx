@@ -72,6 +72,7 @@ export interface VifxExpoDevServer {
 }
 
 export interface VifxExpoGoDevServer {
+  broadcast?: (method: string, params?: Record<string, unknown>) => void;
   bundleUrl: string;
   close: () => Promise<void>;
   eventsSocketUrl: string;
@@ -1691,6 +1692,9 @@ export async function startExpoGoDevServer(
   const hostUri = `${displayHost}:${String(actualPort)}`;
 
   return {
+    broadcast: (method: string, params?: Record<string, unknown>) => {
+      messageChannel.broadcast(method, params as VifxJsonValue | undefined);
+    },
     bundleUrl: `${baseUrl}${bundleUrlPath}`,
     close: () =>
       new Promise((resolve, reject) => {

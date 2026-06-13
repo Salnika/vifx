@@ -2,13 +2,10 @@ import { formatVifxError, serializeVifxError, toVifxError } from "@vifx/errors";
 import { runBuildCommand } from "./commands/build.ts";
 import { runCompatRunCommand } from "./commands/compat-run.ts";
 import { runDoctorCommand } from "./commands/doctor.ts";
-import {
-  EXPO_HELP,
-  runExpoAuditCommand,
-  runExpoDevCommand,
-  runExpoExportCommand,
-  runExpoSmokeCommand,
-} from "./commands/expo-audit.ts";
+import { EXPO_HELP, runExpoAuditCommand } from "./commands/expo-audit.ts";
+import { runExpoDevCommand } from "./commands/expo-dev.ts";
+import { runExpoExportCommand } from "./commands/expo-export.ts";
+import { runExpoSmokeCommand } from "./commands/expo-smoke.ts";
 import { runHermesCompileCommand } from "./commands/hermes-compile.ts";
 import { runInitCommand } from "./commands/init.ts";
 import { runInspectCommand } from "./commands/inspect.ts";
