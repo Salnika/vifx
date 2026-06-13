@@ -29,6 +29,9 @@ export default defineConfig({
       "@vifx/source-map-tools": fileURLToPath(
         new URL("./packages/source-map-tools/src/index.ts", import.meta.url),
       ),
+      "@vifx/transform-cache": fileURLToPath(
+        new URL("./packages/transform-cache/src/index.ts", import.meta.url),
+      ),
       "@vifx/types": fileURLToPath(new URL("./packages/types/src/index.ts", import.meta.url)),
       "@vifx/vite-plugin-expo": fileURLToPath(
         new URL("./packages/vite-plugin-expo/src/index.ts", import.meta.url),

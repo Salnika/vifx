@@ -95,10 +95,18 @@ export interface VifxBuildAssetArtifact {
   hash?: string;
 }
 
+export interface VifxTransformCacheStats {
+  hits: number;
+  misses: number;
+  writes: number;
+  errors: number;
+}
+
 export interface VifxBundleArtifacts {
   appConfigPath?: string;
   assets: VifxBuildAssetArtifact[];
   bundle: VifxBundleFileArtifact;
+  cacheStats?: VifxTransformCacheStats;
   entry: string;
   hermesBytecodePath?: string;
   mode: Exclude<VifxVitePluginMode, "none">;
@@ -223,6 +231,7 @@ export interface VifxBundleTargetConfig {
   shimJsxRuntime?: boolean;
   shimReact?: boolean;
   shimReactNative?: boolean;
+  transformCache?: boolean;
 }
 
 export interface VifxViteConfig {
@@ -264,6 +273,7 @@ export interface VifxReactNativePluginOptions {
   shimJsxRuntime?: boolean;
   shimReact?: boolean;
   shimReactNative?: boolean;
+  transformCache?: boolean;
 }
 
 export interface VifxExpoPluginOptions extends Omit<
