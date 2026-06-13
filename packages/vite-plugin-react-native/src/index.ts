@@ -1,4 +1,5 @@
 import { access, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -35,6 +36,7 @@ import type {
 import {
   createBabelPipeline,
   isExpoPackageSourcePath,
+  isTransformableJavaScriptPath,
   shouldTransformJsxFile,
   stripQuery,
   toPosixPath,

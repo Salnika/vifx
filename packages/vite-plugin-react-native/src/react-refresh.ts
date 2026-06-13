@@ -105,7 +105,7 @@ export function shouldApplyReactRefresh(input: ShouldApplyReactRefreshInput): bo
 }
 
 export interface ProjectBabelLike {
-  presetPath: string;
+  presetPath: string | null;
   transformAsync: (
     code: string,
     options: Record<string, unknown>,
@@ -199,7 +199,7 @@ export async function applyReactRefreshTransform(
       configFile: false,
       filename: id,
       plugins: [[reactRefreshPlugin, { skipEnvCheck: true }]],
-      presets: [babel.presetPath],
+      presets: babel.presetPath ? [babel.presetPath] : [],
       sourceMaps: true,
     });
   } catch (cause) {
