@@ -17,6 +17,13 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_CONFIG_MISSING`                              | Project inspection did not find a `vifx.config.*` file.                                                           |
 | `VIFX_CONFIG_NOT_FOUND`                            | A required or explicitly requested config file was missing.                                                       |
 | `VIFX_CORE_MISSING_PRIMITIVE`                      | A lazy core primitive could not be loaded from its package.                                                       |
+| `VIFX_DEV_BUNDLE_NOT_FOUND`                        | The dev server could not find an existing bundle artifact to serve.                                               |
+| `VIFX_DEV_INVALID_PLATFORM`                        | The dev command received an unsupported platform value.                                                           |
+| `VIFX_DEV_INVALID_PORT`                            | The dev command received a malformed port value.                                                                  |
+| `VIFX_DEV_PLATFORM_REQUIRED`                       | Multiple dev targets exist and the command needs an explicit platform.                                            |
+| `VIFX_DEV_REQUIRES_REACT_NATIVE`                   | `vifx dev` was run outside a bare React Native project.                                                           |
+| `VIFX_DEV_TARGET_NOT_FOUND`                        | No configured dev target matched the requested platform.                                                          |
+| `VIFX_DEV_TARGETS_MISSING`                         | The config does not contain any React Native dev targets.                                                         |
 | `VIFX_EXPERIMENTAL_EXPO`                           | Expo support falls outside the current supported corridor for the inspected workflow.                             |
 | `VIFX_EXPO_CONFIG_NOT_FOUND`                       | The Expo layer could not find or read app config metadata.                                                        |
 | `VIFX_EXPO_DEV_INVALID_PLATFORM`                   | An Expo dev command received an unsupported platform value.                                                       |

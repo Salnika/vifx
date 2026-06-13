@@ -1,6 +1,7 @@
 import { formatVifxError, serializeVifxError, toVifxError } from "@vifx/errors";
 import { runBuildCommand } from "./commands/build.ts";
 import { runCompatRunCommand } from "./commands/compat-run.ts";
+import { runDevCommand } from "./commands/dev.ts";
 import { runDoctorCommand } from "./commands/doctor.ts";
 import {
   EXPO_HELP,
@@ -32,6 +33,7 @@ Commands:
   expo smoke [path]             Smoke-test the Vifx Expo Go server endpoints.
   doctor [path]                 Check project readiness and support boundaries.
   build [path]                  Build Vifx bundle targets from vifx.config.*.
+  dev [path]                    Start a Metro-compatible dev server for bare React Native projects.
   run [path]                    Serve a built Vifx runtime locally.
   inspect [path]                Inspect project primitives.
   compat run [options]          Run compatibility cases with the vifx adapter.
@@ -116,6 +118,10 @@ export async function executeCli(
 
     if (argv[0] === "build") {
       return await runBuildCommand(argv.slice(1), cwd);
+    }
+
+    if (argv[0] === "dev") {
+      return await runDevCommand(argv.slice(1), cwd);
     }
 
     if (argv[0] === "run") {

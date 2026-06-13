@@ -162,6 +162,9 @@ importers:
       '@vifx/config':
         specifier: workspace:*
         version: link:../config
+      '@vifx/core':
+        specifier: workspace:*
+        version: link:../core
       '@vifx/errors':
         specifier: workspace:*
         version: link:../errors
@@ -177,6 +180,9 @@ importers:
       '@vifx/metro-inspect':
         specifier: workspace:*
         version: link:../metro-inspect
+      '@vifx/source-map-tools':
+        specifier: workspace:*
+        version: link:../source-map-tools
       '@vifx/types':
         specifier: workspace:*
         version: link:../types
@@ -192,6 +198,9 @@ importers:
       vite:
         specifier: npm:@voidzero-dev/vite-plus-core@latest
         version: '@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.12.4)(esbuild@0.28.1)(typescript@5.9.3)'
+      ws:
+        specifier: 'catalog:'
+        version: 8.20.1
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -199,6 +208,9 @@ importers:
       '@types/qrcode-terminal':
         specifier: ^0.12.2
         version: 0.12.2
+      '@types/ws':
+        specifier: 'catalog:'
+        version: 8.18.1
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

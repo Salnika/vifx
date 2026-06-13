@@ -1,6 +1,7 @@
 import type { CompatReportFormat } from "@vifx/compat-runner";
 
 export interface CliResult {
+  close?: () => Promise<void>;
   exitCode: number;
   stdout: string;
   stderr: string;
