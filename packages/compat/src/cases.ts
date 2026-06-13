@@ -543,8 +543,8 @@ export const compatCases: CompatCase[] = [
       packageName: "react-native-vector-icons",
       toolchains: {
         vifx: {
-          status: "fail",
-          note: "The published entry ships untranspiled JSX inside a .js file. The default build does not transform JSX in node_modules .js files, so the bundle fails to parse. Metro applies the React Native Babel preset here; vifx needs the babel-pipeline unit (jsxInPackages / babelInPackages opt-in).",
+          status: "pass",
+          note: "The published entry ships untranspiled JSX inside a .js file. The integrated project-derived Babel pipeline runs node_modules sources through the React Native preset on native platforms (as Metro does), so the JSX is transpiled and the bundle builds.",
         },
         metro: {
           status: "skip",

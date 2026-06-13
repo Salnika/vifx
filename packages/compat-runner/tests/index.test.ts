@@ -34,8 +34,10 @@ test("the vifx library matrix reflects the synthetic-package support snapshot", 
   expect(statusByPackage.get("react-native-safe-area-context")).toBe("pass");
   // A native module bundles but cannot run from a bundler build.
   expect(statusByPackage.get("react-native-gesture-handler")).toBe("partial");
-  // Untranspiled JSX in a published .js file fails to parse without a Babel opt-in.
-  expect(statusByPackage.get("react-native-vector-icons")).toBe("fail");
+  // Untranspiled JSX in a published .js file: the integrated project-derived Babel
+  // pipeline runs node_modules sources through the RN preset on native (like Metro),
+  // so the JSX is transpiled and the bundle builds.
+  expect(statusByPackage.get("react-native-vector-icons")).toBe("pass");
 });
 
 test("the Metro library matrix records every library case as skipped", async () => {

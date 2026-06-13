@@ -2357,11 +2357,23 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         const originalId = id.slice(TRANSFORM_PREFIX.length);
         const source = await readFile(originalId, "utf8");
         const decision = await pipeline.decideTransform(originalId, source);
+
         if (decision.strategy === "project-babel") {
           const transformed = await transformWithProjectBabel(source, originalId, decision);
           if (transformed) {
             return transformed.code;
           }
+
+          // No usable project Babel runtime: only fall through to OXC where a
+          // JSX-style rule still applies. Files that need no transform (e.g. the
+          // module-registry entry glue) pass through untouched so the bundler
+          // keeps their native ESM semantics.
+          const fallback = await pipeline.decideBabelUnavailableFallback(originalId);
+          if (fallback.strategy !== "oxc") {
+            return source;
+          }
+        } else if (decision.strategy !== "oxc") {
+          return source;
         }
 
         const transformed = await runOxcTransform(source, originalId);
@@ -2400,28 +2412,31 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         if (decision.strategy === "project-babel") {
           // Project source under metro + dev gets React Refresh wired through
           // the project's own Babel runtime, replacing the plain project-babel
-          // transform for those files.
+          // transform for those files. React Refresh wraps the module body in a
+          // factory, so the project Babel preset must first lower ESM `import`
+          // statements to CommonJS — without a usable preset (e.g. internal
+          // module-registry entry glue in preset-less projects) we skip the
+          // wrap and let the normal project-babel/OXC path handle the file.
+          const refreshRuntime = await loadProjectBabelRuntime(state.projectRoot);
           if (
+            refreshRuntime?.presetPath &&
             shouldApplyReactRefresh({
               options: { mode: state.mode, moduleFormat: state.moduleFormat },
               id,
               projectRoot: state.projectRoot,
             })
           ) {
-            const runtime = await loadProjectBabelRuntime(state.projectRoot);
-            if (runtime) {
-              const refreshed = await applyReactRefreshTransform({
-                code,
-                id,
-                babel: runtime,
-                platform: state.resolvePlatform,
-                projectRoot: state.projectRoot,
-              });
-              return {
-                code: wrapWithRefreshRegistration(refreshed.code, reactRefreshModuleId(id, state)),
-                map: null,
-              };
-            }
+            const refreshed = await applyReactRefreshTransform({
+              code,
+              id,
+              babel: refreshRuntime,
+              platform: state.resolvePlatform,
+              projectRoot: state.projectRoot,
+            });
+            return {
+              code: wrapWithRefreshRegistration(refreshed.code, reactRefreshModuleId(id, state)),
+              map: null,
+            };
           }
 
           const transformed = await transformWithProjectBabel(code, id, decision);
