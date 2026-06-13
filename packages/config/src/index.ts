@@ -93,6 +93,7 @@ const VITE_TARGET_KEYS = new Set([
   "shimJsxRuntime",
   "shimReact",
   "shimReactNative",
+  "transformCache",
 ]);
 
 export function defineVifxConfig<T extends VifxConfigInput>(config: T) {
@@ -509,6 +510,14 @@ function normalizeBundleTargets(value: unknown, fieldName: string, source = "con
                 source,
                 `${fieldName}[${index}].shimReactNative`,
               ),
+        transformCache:
+          parsedTarget.transformCache === undefined
+            ? undefined
+            : expectBoolean(
+                parsedTarget.transformCache,
+                source,
+                `${fieldName}[${index}].transformCache`,
+              ),
       } satisfies VifxBundleTargetConfig;
     }),
     (target) =>
@@ -527,6 +536,7 @@ function normalizeBundleTargets(value: unknown, fieldName: string, source = "con
         target.shimReact === undefined ? "" : target.shimReact ? "1" : "0",
         target.shimReactNative === undefined ? "" : target.shimReactNative ? "1" : "0",
         target.shimJsxRuntime === undefined ? "" : target.shimJsxRuntime ? "1" : "0",
+        target.transformCache === undefined ? "" : target.transformCache ? "1" : "0",
       ].join(":"),
   );
 }

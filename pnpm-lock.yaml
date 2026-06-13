@@ -548,6 +548,9 @@ importers:
       '@vifx/source-map-tools':
         specifier: workspace:*
         version: link:../source-map-tools
+      '@vifx/transform-cache':
+        specifier: workspace:*
+        version: link:../transform-cache
       '@vifx/types':
         specifier: workspace:*
         version: link:../types
