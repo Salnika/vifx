@@ -241,3 +241,43 @@ test(".cjs and .mjs configs are discovered", async () => {
     true,
   );
 });
+
+test("a broken .mjs config degrades to the static scan instead of throwing", async () => {
+  const projectRoot = await createProject({
+    "metro.config.mjs": "export default { resolver: { resolveRequest: (\n",
+  });
+
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  expect(analysis.found).toBe(true);
+  expect(analysis.extraction).toBe("static");
+  expect(
+    analysis.unsupported.some((entry) => entry.code === "VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST"),
+  ).toBe(true);
+});
+
+test("a config exported as a factory function degrades to the static scan", async () => {
+  const projectRoot = await createProject({
+    "metro.config.js": "module.exports = function () { return { serializer: { x() {} } }; };\n",
+  });
+
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  // A function is not a plain config object, so evaluation yields no object and
+  // the static scan takes over (rather than crashing or returning empty).
+  expect(analysis.found).toBe(true);
+  expect(analysis.extraction).toBe("static");
+});
+
+test("re-analyzing the same config returns a stable result", async () => {
+  const projectRoot = await createProject({
+    "metro.config.js": 'module.exports = { resolver: { assetExts: ["png", "lottie"] } };\n',
+  });
+
+  const first = await analyzeMetroConfig(projectRoot);
+  const second = await analyzeMetroConfig(projectRoot);
+
+  expect(second.extraction).toBe("evaluated");
+  expect(second.hints).toEqual(first.hints);
+  expect(second.unsupported).toEqual(first.unsupported);
+});
