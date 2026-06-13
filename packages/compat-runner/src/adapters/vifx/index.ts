@@ -59,9 +59,13 @@ function summarizeBuildFailure(error: unknown) {
   const summary = `${vifxError.code}: ${vifxError.message}`
     // Drop terminal colour codes so the detail is plain text in JSON/markdown reports.
     .replace(ANSI_ESCAPE_PATTERN, "")
-    // Collapse volatile temp build directories to a stable marker so the snapshot
-    // is deterministic across machines and runs.
-    .replace(/[^\s]*vifx-compat-bundle-[^\s:]*/g, "<tmp>")
+    // Cut the code-frame (box-drawing render of the offending source) and anything
+    // after it: it carries a volatile temp path and raw source (including angle
+    // brackets that break Markdown/Vue rendering of the docs support matrix).
+    .replace(/[─-╿].*$/su, "")
+    // Collapse any volatile temp build directories that survive to a stable,
+    // bracket-free marker so the snapshot is deterministic across machines.
+    .replace(/\S*vifx-compat-bundle-\S*/g, "[tmp]")
     .replace(/\s+/g, " ")
     .trim();
   return summary.length > 240 ? `${summary.slice(0, 240)}…` : summary;
