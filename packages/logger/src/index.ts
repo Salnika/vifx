@@ -340,6 +340,13 @@ export function formatVifxWarning(message: string) {
 export function createSpinner(options: VifxSpinnerOptions): Ora {
   return ora({
     color: "cyan",
+    // Ora's default discardStdin puts stdin in raw mode while spinning and
+    // restores the *previous* (cooked) mode on succeed()/stop(). That stop runs
+    // after a long-lived command (e.g. `expo dev`) has already installed its own
+    // raw-mode keybindings, silently reverting them — keys then echo as cooked
+    // line input and never fire. Leaving stdin alone keeps interactive
+    // keybindings working; transient build spinners don't need to mute input.
+    discardStdin: false,
     isEnabled: options.enabled,
     isSilent: options.silent,
     stream: options.stream ?? process.stderr,
