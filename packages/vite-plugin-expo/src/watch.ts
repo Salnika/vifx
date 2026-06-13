@@ -61,7 +61,9 @@ function createIgnoredPathMatcher(projectRoot: string, ignore: string[]) {
     }
 
     const segments = relativePath.split("/");
-    if (segments.some((segment) => segment.startsWith(".") || DEFAULT_IGNORED_SEGMENTS.has(segment))) {
+    if (
+      segments.some((segment) => segment.startsWith(".") || DEFAULT_IGNORED_SEGMENTS.has(segment))
+    ) {
       return true;
     }
 

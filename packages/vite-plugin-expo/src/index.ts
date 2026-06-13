@@ -1693,7 +1693,12 @@ export async function startExpoGoDevServer(
     }
 
     if (isSourceMapPath(requestUrl.pathname) && servedBundle.sourceMapText !== null) {
-      writeTextResponse(response, 200, servedBundle.sourceMapText, "application/json; charset=utf-8");
+      writeTextResponse(
+        response,
+        200,
+        servedBundle.sourceMapText,
+        "application/json; charset=utf-8",
+      );
       return;
     }
 
