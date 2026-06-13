@@ -42,9 +42,14 @@ export function resolveBundleMode(options: VifxResolveBundleModeOptions): VifxBu
  *
  * `__DEV__` and `process.env.NODE_ENV` follow the bundle mode, never the
  * platform: native bundles previously hard-coded `__DEV__` to true and web
- * bundles to false, which made production native builds impossible.
+ * bundles to false, which made production native builds impossible. As a
+ * deliberate consequence, the web runtime preview (a dev-only browser surface
+ * with no production build path) now follows the resolved mode too, so it
+ * defaults to `__DEV__: true` / `NODE_ENV: "development"` instead of the old
+ * hard-coded production flavor.
  * `process.env.EXPO_OS` is only injected for native resolution so the web
- * define table keeps its existing shape.
+ * define table keeps its existing shape (web detects the platform through
+ * `Platform.OS`, and never carried an `EXPO_OS` define).
  */
 export function resolveDefines(options: VifxResolveDefinesOptions): Record<string, string> {
   const defines: Record<string, string> = {
