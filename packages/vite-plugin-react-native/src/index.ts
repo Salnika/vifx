@@ -66,6 +66,7 @@ import {
   shouldApplyReactRefresh,
   wrapWithRefreshRegistration,
 } from "./react-refresh.ts";
+import { VIFX_HMR_CLIENT_SOURCE } from "./hmr-client.ts";
 
 export {
   resolveBuildMinify,
@@ -1697,22 +1698,9 @@ async function renderCompat(
         "export default TurboModuleRegistry;",
       ].join("\n");
     case "react-native/Libraries/Utilities/HMRClient":
-      return [
-        "const HMRClient = {",
-        "  disable() {},",
-        "  enable() {},",
-        "  hasError() {",
-        "    return false;",
-        "  },",
-        "  isEnabled() {",
-        "    return false;",
-        "  },",
-        "  registerBundle() {},",
-        "  setup() {},",
-        "};",
-        "",
-        "export default HMRClient;",
-      ].join("\n");
+      // Real Vifx HMR client (inert unless globalThis.__VIFX_HMR_URL is injected
+      // for a dev metro bundle); see hmr-client.ts.
+      return VIFX_HMR_CLIENT_SOURCE;
     case "@expo/metro-runtime":
       if (state.resolvePlatform === "web") {
         return ["export {};", ""].join("\n");
