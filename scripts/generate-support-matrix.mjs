@@ -35,6 +35,17 @@ const STATUS_LEGEND = {
   skip: "Not exercised by this toolchain.",
 };
 
+// Make a value safe inside a GFM table cell rendered by VitePress (which parses
+// Markdown as Vue): escape pipes, and neutralize angle brackets and `{{ }}`
+// interpolation so adapter-provided text can never break `docs build`.
+function toMarkdownCell(value) {
+  return value
+    .replace(/\|/g, "\\|")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\{\{/g, "&#123;&#123;");
+}
+
 // Render a GFM table with column-aligned cells matching the oxfmt style, so the
 // generated section is already formatter-stable (vp check / --check agree).
 function formatTable(headers, rows) {
@@ -68,7 +79,7 @@ function buildSection(vifxReport) {
     vifxReport.libraryMatrix.map((row) => [
       `\`${row.packageName}\``,
       row.status,
-      row.detail.replace(/\|/g, "\\|"),
+      toMarkdownCell(row.detail),
     ]),
   );
 

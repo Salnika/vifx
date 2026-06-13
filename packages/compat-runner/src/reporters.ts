@@ -23,13 +23,6 @@ export function buildLibraryMatrix(cases: CompatReportCase[]): CompatLibraryMatr
     });
 }
 
-const LIBRARY_STATUS_LABELS: Record<CompatLibraryMatrixRow["status"], string> = {
-  pass: "pass",
-  partial: "partial",
-  fail: "fail",
-  skip: "skip",
-};
-
 function createCategoryLine(categoryReport: CompatCategoryReport, width: number) {
   return `${categoryReport.category.padEnd(width)} ${categoryReport.status.padEnd(4)} ${categoryReport.passed}/${categoryReport.total}`;
 }
@@ -107,7 +100,7 @@ export function formatCompatReport(report: CompatRunReport, format: CompatReport
             "| --- | --- | --- |",
             ...report.libraryMatrix.map(
               (row) =>
-                `| \`${row.packageName}\` | ${LIBRARY_STATUS_LABELS[row.status]} | ${row.detail.replace(/\|/g, "\\|")} |`,
+                `| \`${row.packageName}\` | ${row.status} | ${row.detail.replace(/\|/g, "\\|")} |`,
             ),
           ];
 
@@ -147,7 +140,7 @@ export function formatCompatReport(report: CompatRunReport, format: CompatReport
             "Library support matrix:",
             ...report.libraryMatrix.map(
               (row) =>
-                `  ${row.packageName.padEnd(libraryWidth)}  ${LIBRARY_STATUS_LABELS[row.status].padEnd(7)}  ${row.detail}`,
+                `  ${row.packageName.padEnd(libraryWidth)}  ${row.status.padEnd(7)}  ${row.detail}`,
             ),
           ];
         })();
