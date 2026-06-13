@@ -14,6 +14,9 @@ export default defineConfig({
       ),
       "@vifx/config": fileURLToPath(new URL("./packages/config/src/index.ts", import.meta.url)),
       "@vifx/errors": fileURLToPath(new URL("./packages/errors/src/index.ts", import.meta.url)),
+      "@vifx/expo-config-plugin": fileURLToPath(
+        new URL("./packages/expo-config-plugin/src/index.ts", import.meta.url),
+      ),
       "@vifx/expo-export": fileURLToPath(
         new URL("./packages/expo-export/src/index.ts", import.meta.url),
       ),

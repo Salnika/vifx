@@ -28,6 +28,7 @@ export interface SetupPlan {
   detectedExpoVersion: string | null;
   detectedProjectType: "expo" | "react-native" | "unknown";
   detectedReactNativeVersion: string | null;
+  experimentalEmbed: boolean;
   expoGo: boolean;
   expoRouter: boolean;
   iosHostPresent: boolean;
@@ -729,6 +730,83 @@ export async function planInit(projectRoot: string, options: { force?: boolean }
   } satisfies InitPlan;
 }
 
+const VIFX_EXPO_CONFIG_PLUGIN_NAME = "@vifx/expo-config-plugin";
+
+function hasVifxExpoConfigPlugin(plugins: unknown[]) {
+  return plugins.some(
+    (entry) =>
+      entry === VIFX_EXPO_CONFIG_PLUGIN_NAME ||
+      (Array.isArray(entry) && entry[0] === VIFX_EXPO_CONFIG_PLUGIN_NAME),
+  );
+}
+
+async function planExperimentalEmbedAppJsonChange(projectRoot: string) {
+  const appJsonPath = path.join(projectRoot, "app.json");
+
+  if (!(await pathExists(appJsonPath))) {
+    throw new VifxError({
+      code: "VIFX_SETUP_APP_JSON_REQUIRED",
+      message: `--experimental-embed requires a static app.json at "${projectRoot}".`,
+      hint: `Dynamic app configs are not codemodded. Add "${VIFX_EXPO_CONFIG_PLUGIN_NAME}" to the "plugins" array of your Expo app config manually.`,
+      docsPath: "/guide/native-builds",
+      details: {
+        appJsonPath,
+        projectRoot,
+      },
+    });
+  }
+
+  const before = await fs.readFile(appJsonPath, "utf8");
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(before);
+  } catch (error) {
+    throw new VifxError({
+      code: "VIFX_PROJECT_INVALID_APP_JSON",
+      cause: error,
+      details: {
+        appJsonPath,
+      },
+      hint: "Fix app.json before planning the experimental embed setup.",
+      message: `Invalid app.json syntax at "${appJsonPath}".`,
+    });
+  }
+
+  if (!isJsonRecord(parsed)) {
+    throw new VifxError({
+      code: "VIFX_PROJECT_INVALID_APP_JSON",
+      details: {
+        appJsonPath,
+      },
+      hint: "Expected app.json to contain a JSON object before planning the experimental embed setup.",
+      message: `Invalid app.json shape at "${appJsonPath}".`,
+    });
+  }
+
+  const root = { ...parsed };
+  const expoConfig = isJsonRecord(root.expo) ? { ...root.expo } : null;
+  const target = expoConfig ?? root;
+  const plugins = Array.isArray(target.plugins) ? [...target.plugins] : [];
+
+  if (hasVifxExpoConfigPlugin(plugins)) {
+    return null;
+  }
+
+  plugins.push(VIFX_EXPO_CONFIG_PLUGIN_NAME);
+  target.plugins = plugins;
+
+  if (expoConfig) {
+    root.expo = expoConfig;
+  }
+
+  return createPlannedFileChange({
+    after: withTrailingNewline(JSON.stringify(root, null, 2)),
+    before,
+    path: "app.json",
+  });
+}
+
 function createSetupProjectTypeHint(projectRoot: string, detectedProjectType: string) {
   if (detectedProjectType === "react-native") {
     return `Use "vifx migrate react-native ${projectRoot}" for the manual bare React Native path, or "vifx init ${projectRoot}" to author a config yourself.`;
@@ -739,7 +817,12 @@ function createSetupProjectTypeHint(projectRoot: string, detectedProjectType: st
 
 export async function planExpoSetup(
   projectRoot: string,
-  options: { expoGo?: boolean; force?: boolean; withViteConfig?: boolean } = {},
+  options: {
+    experimentalEmbed?: boolean;
+    expoGo?: boolean;
+    force?: boolean;
+    withViteConfig?: boolean;
+  } = {},
 ): Promise<SetupPlan> {
   const inspection = await inspectProject(projectRoot);
 
@@ -809,12 +892,21 @@ export async function planExpoSetup(
     }
   }
 
+  if (options.experimentalEmbed) {
+    const appJsonChange = await planExperimentalEmbedAppJsonChange(projectRoot);
+
+    if (appJsonChange) {
+      changes.push(appJsonChange);
+    }
+  }
+
   return {
     appDirectory: templateOptions.appDirectory,
     changes,
     detectedExpoVersion: inspection.expoVersion,
     detectedProjectType: inspection.projectType,
     detectedReactNativeVersion: inspection.reactNativeVersion,
+    experimentalEmbed: Boolean(options.experimentalEmbed),
     expoGo: Boolean(options.expoGo),
     expoRouter: templateOptions.expoRouter,
     iosHostPresent: templateOptions.iosHostPresent,
