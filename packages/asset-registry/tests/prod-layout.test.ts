@@ -222,9 +222,9 @@ test("rejects asset groups without variants", async () => {
   const assetsDest = await createTemporaryDirectory();
 
   await expect(
-    writeProdAssets(
-      [{ httpServerLocation: "/assets", name: "ghost", type: "png", variants: [] }],
-      { assetsDest, platform: "android" },
-    ),
+    writeProdAssets([{ httpServerLocation: "/assets", name: "ghost", type: "png", variants: [] }], {
+      assetsDest,
+      platform: "android",
+    }),
   ).rejects.toMatchObject({ code: "VIFX_PROD_ASSET_VARIANT_MISSING" });
 });

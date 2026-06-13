@@ -153,7 +153,8 @@ test("export:embed warns about extra positional arguments", () => {
 });
 
 test("rewriteTrailingSourceMapComment only touches the trailing comment", () => {
-  const bundle = 'var x = "//# sourceMappingURL=fake.map";\ncode();\n//# sourceMappingURL=index.bundle.map\n';
+  const bundle =
+    'var x = "//# sourceMappingURL=fake.map";\ncode();\n//# sourceMappingURL=index.bundle.map\n';
 
   expect(rewriteTrailingSourceMapComment(bundle, "main.jsbundle.map")).toBe(
     'var x = "//# sourceMappingURL=fake.map";\ncode();\n//# sourceMappingURL=main.jsbundle.map\n',
@@ -255,9 +256,9 @@ test("export:embed writes the Android bundle, source map, and prod assets", asyn
   expect(parsed.sourcemapOutput).toBe(sourcemapOutput);
   expect(parsed.assets?.assetsDest).toBe(assetsDest);
   expect(parsed.assets?.count).toBe(1);
-  expect(parsed.warnings.some((warning) => warning.startsWith("production semantics pending"))).toBe(
-    true,
-  );
+  expect(
+    parsed.warnings.some((warning) => warning.startsWith("production semantics pending")),
+  ).toBe(true);
   expect(parsed.warnings.some((warning) => warning.includes("--unknown-future-flag"))).toBe(true);
 
   expect((await stat(bundleOutput)).isFile()).toBe(true);
