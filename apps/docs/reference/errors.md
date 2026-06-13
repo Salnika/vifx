@@ -26,6 +26,9 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_DEV_TARGET_NOT_FOUND`                        | No configured dev target matched the requested platform.                                                          |
 | `VIFX_DEV_TARGETS_MISSING`                         | The config does not contain any React Native dev targets.                                                         |
 | `VIFX_DEVTOOLS_MIDDLEWARE_FAILED`                  | The React Native DevTools middleware failed while handling an inspector proxy request.                            |
+| `VIFX_DYNAMIC_CONTEXT_MODE_UNSUPPORTED`            | A `require.context` call requested a context mode other than the supported `sync` mode.                          |
+| `VIFX_DYNAMIC_CONTEXT_NOT_STATIC`                  | A `require.context` call used arguments that cannot be statically analyzed at build time.                         |
+| `VIFX_DYNAMIC_IMPORT_NOT_STATIC`                   | A native bundle contains a dynamic `import()` whose specifier is not a string literal.                            |
 | `VIFX_EXPERIMENTAL_EXPO`                           | Expo support falls outside the current supported corridor for the inspected workflow.                             |
 | `VIFX_EXPO_CONFIG_NOT_FOUND`                       | The Expo layer could not find or read app config metadata.                                                        |
 | `VIFX_EXPO_DEV_CLIENT_SIGNING_UNSUPPORTED`         | A manifest request demanded a code-signed response, which the Vifx dev server does not support.                   |

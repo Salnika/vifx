@@ -37,6 +37,12 @@ import {
   isNativeCompatMockEnabled,
   warnNativeCompatPreviewOnce,
 } from "./compat-gate.ts";
+import { transformDynamicImport } from "./dynamic/dynamic-import.ts";
+import {
+  REQUIRE_CONTEXT_PREFIX,
+  renderRequireContextModule,
+  transformRequireContext,
+} from "./dynamic/require-context.ts";
 import {
   resolveBuildMinify,
   resolveBundleMode,
@@ -2406,6 +2412,10 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       };
     },
     async load(id) {
+      if (id.startsWith(REQUIRE_CONTEXT_PREFIX)) {
+        return await renderRequireContextModule(id);
+      }
+
       if (id.startsWith(COMPAT_PREFIX)) {
         return await renderCompat(id, state);
       }
@@ -2437,45 +2447,90 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       return renderShim(id, state.platform);
     },
     async transform(code, id, _options): Promise<TransformResult | null> {
-      if (!id.startsWith(TRANSFORM_PREFIX)) {
-        const compatPathId = resolveCompatPath(id);
-        if (compatPathId) {
-          const compatCode = await renderCompat(compatPathId, state);
-          if (compatCode !== null) {
-            return {
-              code: compatCode,
-              map: null,
-            };
+      const applyBaseTransform = async (): Promise<TransformResult | null> => {
+        if (!id.startsWith(TRANSFORM_PREFIX)) {
+          const compatPathId = resolveCompatPath(id);
+          if (compatPathId) {
+            const compatCode = await renderCompat(compatPathId, state);
+            if (compatCode !== null) {
+              return {
+                code: compatCode,
+                map: null,
+              };
+            }
           }
         }
-      }
 
-      if (shouldTransformWithProjectBabel(id, state)) {
-        const transformed = await transformWithProjectBabel(code, id, true);
-        if (transformed) {
-          return transformed;
+        if (shouldTransformWithProjectBabel(id, state)) {
+          const transformed = await transformWithProjectBabel(code, id, true);
+          if (transformed) {
+            return transformed;
+          }
         }
-      }
 
-      if (shouldTransformProjectSourceWithBabel(id, state)) {
-        const transformed = await transformWithProjectBabel(code, id, false);
-        if (transformed) {
-          return transformed;
+        if (shouldTransformProjectSourceWithBabel(id, state)) {
+          const transformed = await transformWithProjectBabel(code, id, false);
+          if (transformed) {
+            return transformed;
+          }
         }
-      }
 
-      if (
-        !shouldTransformJsxFile(id, state.jsxInPackages) &&
-        !shouldTransformExpoPackageSource(id, state)
-      ) {
-        return null;
-      }
+        if (
+          !shouldTransformJsxFile(id, state.jsxInPackages) &&
+          !shouldTransformExpoPackageSource(id, state)
+        ) {
+          return null;
+        }
 
-      const transformed = await runOxcTransform(code, id);
+        const transformed = await runOxcTransform(code, id);
+
+        return {
+          code: transformed.code,
+          map: (transformed.map as TransformResult["map"]) ?? null,
+        };
+      };
+      const applyDynamicModuleTransforms = (baseCode: string): string | null => {
+        const sourceId = id.startsWith(TRANSFORM_PREFIX) ? id.slice(TRANSFORM_PREFIX.length) : id;
+        if (sourceId.startsWith("\0") || !isTransformableJavaScriptPath(sourceId)) {
+          return null;
+        }
+
+        const filePath = stripQuery(sourceId);
+        let currentCode = baseCode;
+        let transformed = false;
+
+        const contextResult = transformRequireContext({
+          code: currentCode,
+          filePath,
+          projectRoot: state.projectRoot,
+        });
+        if (contextResult) {
+          currentCode = contextResult.code;
+          transformed = true;
+        }
+
+        const importResult = transformDynamicImport({
+          code: currentCode,
+          filePath,
+          resolvePlatform: state.resolvePlatform,
+        });
+        if (importResult) {
+          currentCode = importResult.code;
+          transformed = true;
+        }
+
+        return transformed ? currentCode : null;
+      };
+      const baseResult = await applyBaseTransform();
+      const dynamicCode = applyDynamicModuleTransforms(baseResult?.code ?? code);
+
+      if (dynamicCode === null) {
+        return baseResult;
+      }
 
       return {
-        code: transformed.code,
-        map: (transformed.map as TransformResult["map"]) ?? null,
+        code: dynamicCode,
+        map: null,
       };
     },
     async resolveId(source, importer) {
@@ -2494,7 +2549,11 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         return shimId;
       }
 
-      if (source.startsWith(COMPAT_PREFIX) || source.startsWith(TRANSFORM_PREFIX)) {
+      if (
+        source.startsWith(COMPAT_PREFIX) ||
+        source.startsWith(REQUIRE_CONTEXT_PREFIX) ||
+        source.startsWith(TRANSFORM_PREFIX)
+      ) {
         return source;
       }
 
