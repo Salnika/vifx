@@ -32,7 +32,7 @@ Options:
   --help      Show this message.
 `;
 
-const EXPO_GO_DEV_KEY_HINT = "Keys: r reload  m dev menu";
+export const EXPO_GO_DEV_KEY_HINT = "Keys: r reload  m dev menu";
 const CTRL_C_BYTE = 0x03;
 const CTRL_D_BYTE = 0x04;
 
@@ -40,8 +40,10 @@ const CTRL_D_BYTE = 0x04;
  * Wires TTY keybindings for the Expo Go dev server. Returns a cleanup function
  * that detaches the listener and restores the terminal mode. Returns undefined
  * when no interactive TTY is available so callers skip the hint line.
+ *
+ * Exported for unit testing; not part of the public CLI surface.
  */
-function attachExpoGoDevKeys(server: VifxExpoGoDevServer): (() => void) | undefined {
+export function attachExpoGoDevKeys(server: VifxExpoGoDevServer): (() => void) | undefined {
   const stdin = process.stdin;
   const broadcast = server.broadcast;
   if (broadcast === undefined || !stdin.isTTY || typeof stdin.setRawMode !== "function") {
