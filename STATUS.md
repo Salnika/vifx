@@ -1,154 +1,65 @@
-    1480      fromFile: generatedEntryPath,
-    1481 +    mainFields: options.mainFields,
-    1482      projectRoot: options.projectRoot,
-         ⋮
-    1519    jsxInPackages?: string[];
-    1520 +  mainFields?: string[];
-    1521    outDir: string;
-         ⋮
-    1536            extensions: options.extensions,
-    1537 +          mainFields: options.mainFields,
-    1538            outDir: options.outDir,
-         ⋮
-    1551      jsxInPackages: normalizeJsxInPackages(options.jsxInPackages),
-    1552 +    mainFields: normalizeMainFields("web", options.mainFields),
-    1553      platform: options.platform,
+# Vifx Status
 
-• Edited packages/vite-plugin-react-native/src/index.ts (+1 -0)
-1918 jsxInPackages: options.jsxInPackages,
-1919 + mainFields: options.mainFields,
-1920 outDir: absoluteOutDir,
+> Living status snapshot. Last updated: **2026-06-13**.
+> Authoritative roadmap: [`PLAN.md`](./PLAN.md) + [`docs/adr/`](./docs/adr/).
+> Product corridor & acceptance gate: [`SPECS.md`](./SPECS.md).
+> What shipped / what's next: [`NEXT.md`](./NEXT.md).
 
-• Explored
-└ Read build.ts, run.ts, expo-audit.ts
+## Headline
 
-• Edited packages/cli/src/commands/build.ts (+1 -0)
-135 jsxInPackages: target.jsxInPackages,
-136 + mainFields: loaded.config.resolver.mainFields,
-137 outDir: target.outDir,
+Vifx has crossed the bootable-bundle line and is building out the full Metro
+replacement. A real Expo SDK 54 app (HNewsPro) loads in Expo Go from a
+Vifx/Vite-built bundle on iOS and Android, with manifest, bundle, source map,
+assets, symbolication, and reload messaging served **without Metro**
+(`PLAN.md` §2.1). The roadmap (`PLAN.md` §4, phases 0–6) has been executed as a
+**20-unit parallel batch**; see `NEXT.md` for the unit list.
 
-• Edited packages/cli/src/commands/run.ts (+1 -0)
-330 jsxInPackages: target.jsxInPackages,
-331 + mainFields: loaded.config.resolver.mainFields,
-332 outDir: target.outDir,
+## Corridor state (per `PLAN.md` §2.1)
 
-• Edited packages/cli/src/commands/expo-audit.ts (+2 -0)
-369 projectRoot: string,
-370 + mainFields?: string[],
-371 ): Promise<ExpoBuildResult> {
-⋮
-379 jsxInPackages: target.jsxInPackages,
-380 + mainFields,
-381 outDir: target.outDir,
+Demonstrably working:
 
-• Explored
-└ Search buildExpoTarget\( in expo-audit.ts
+- **Expo Go corridor (V2):** `startExpoGoDevServer` serves `/`, `/manifest`,
+  `/index.exp`, bundle + source-map routes, `/assets/*` (with path-traversal
+  guards), `/status`, POST `/symbolicate`, and `/message` + `/events`
+  WebSockets, validated by HNewsPro smoke runs (iOS & Android manifests 200,
+  ~3.2 MB bundles, 700+ source-map sources, sampled assets 200, symbolication
+  resolving, WS reload round-trip).
+- **Resolution engine** (`@vifx/platform-resolver`): platform extension
+  ordering, `exports` conditions, native-safe `mainFields`, workspace
+  discovery, case-ambiguity detection.
+- **Asset pipeline** (`@vifx/asset-registry`): scale variants, binary dimension
+  parsing, deterministic hashing, manifest asset mutation.
+- **Hermes & source maps:** `hermesc` discovery + bytecode compilation, source
+  map validation/comparison/symbolication.
+- **CLI & evidence culture:** `--json` everywhere, setup/codemods touching only
+  Vifx-owned files, captured-Metro fixtures + a metro-vs-vifx compat runner in
+  CI.
 
-• Edited packages/cli/src/commands/expo-audit.ts (+3 -1)
-1138 for (const target of targets) {
-1139 - builds.push(await buildExpoTarget(target, loaded.config.projectRoot));
-1139 + builds.push(
-1140 + await buildExpoTarget(target, loaded.config.projectRoot, loaded.config.resolver.mainFields),
-1141 + );
-1142 }
+## Decisions
 
-• Edited packages/cli/src/commands/expo-audit.ts (+3 -0)
-600 jsxInPackages: target.jsxInPackages,
-601 + mainFields: loaded.config.resolver.mainFields,
-602 platform: target.platform,
-⋮
-955 jsxInPackages: target.jsxInPackages,
-956 + mainFields: loaded.config.resolver.mainFields,
-957 platform: target.platform,
-⋮
-1031 jsxInPackages: target.jsxInPackages,
-1032 + mainFields: loaded.config.resolver.mainFields,
-1033 outDir: target.outDir,
+The architecture decisions behind the batch are recorded as ADRs (all Accepted,
+2026-06-10):
 
-─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+- [ADR-001](./docs/adr/ADR-001-bundle-format.md) — Metro module-registry dev
+  bundle, scope-hoisted IIFE in prod.
+- [ADR-002](./docs/adr/ADR-002-transform-strategy.md) — real Babel where
+  required, OXC fast path, persistent transform cache, `compatPreview`-gated
+  mocks.
+- [ADR-003](./docs/adr/ADR-003-client-targets.md) — Expo Go SDK 54 gate,
+  expo-dev-client primary from SDK 55.
+- [ADR-004](./docs/adr/ADR-004-sdk-matrix.md) — SDK 54 validated, 55/56
+  experimental, benchmarks track latest Metro.
+- [ADR-005](./docs/adr/ADR-005-web-platform.md) — web via real
+  react-native-web + Vite, secondary, not a native blocker.
 
-• Le nouveau souci vient d’un paquet dual-entry: en natif, résoudre module avant main fait charger punycode.es6.js sous un require() CommonJS, ce qui casse punycode.ucs2. J’ai ajouté mainFields au plugin et je force l’ordre natif sûr react-
-native, main, module lorsque l’ancien défaut web était utilisé.
+## Known gaps / next
 
-• Ran pnpm --filter @vifx/vite-plugin-react-native test
-└ $ vp test run
-RUN /Users/alexis.salnikoff/workspace/perso/projects/software/vifx/packages/vite-plugin-react-native
-… +5 lines (ctrl + t to view transcript)
-Duration 1.03s (transform 51ms, setup 0ms, import 114ms, tests 712ms, environment 0ms)
+Tracked in `NEXT.md` and `PLAN.md` §4 Phases 6–7: SDK 55→validated cadence,
+library long-tail compat (Reanimated-on-native worklets as the canary),
+benchmarks vs latest Metro, device E2E in CI, and adoption (support matrix,
+migration guides, public beta).
 
-• Ran pnpm --filter @vifx/vite-plugin-react-native run build
-└ $ vp pack
-ℹ entry: src/index.ts
-… +6 lines (ctrl + t to view transcript)
-ℹ 3 files, total: 136.58 kB
-✔ Build complete in 403ms
+## History
 
-• Ran pnpm --filter @vifx/vite-plugin-expo run build
-└ $ vp pack
-ℹ entry: src/index.ts
-… +6 lines (ctrl + t to view transcript)
-ℹ 3 files, total: 120.02 kB
-✔ Build complete in 353ms
-
-✔ You approved codex to run pnpm --filter @vifx/vite-plugin-expo test this time
-
-• Ran pnpm --filter @vifx/vite-plugin-expo test
-└ $ vp test run
-RUN /Users/alexis.salnikoff/workspace/perso/projects/software/vifx/packages/vite-plugin-expo
-… +5 lines (ctrl + t to view transcript)
-Duration 464ms (transform 65ms, setup 0ms, import 135ms, tests 145ms, environment 0ms)
-
-✔ You approved codex to run ps -axo pid,ppid,command | rg 'node ./bin/vifx.mjs expo dev|vifx expo dev /Us... this time
-
-• Ran ps -axo pid,ppid,command | rg 'node ./bin/vifx.mjs expo dev|vifx expo dev /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro|port 55888'
-└ 37790 51565 /Users/alexis.salnikoff/.vite-plus/js_runtime/node/24.16.0/bin/node /Users/alexis.salnikoff/.nvm/versions/node/v22.18.0/bin/pnpm --filter @vifx/cli vifx expo dev /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro
---platform ios --expo-go --host 0.0.0.0 --public-host 127.0.0.1 --port 55888 --json
-… +3 lines (ctrl + t to view transcript)
-80075 51565 /bin/zsh -c ps -axo pid,ppid,command | rg 'node ./bin/vifx.mjs expo dev|vifx expo dev /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro|port 55888'
-80095 80075 rg node ./bin/vifx.mjs expo dev|vifx expo dev /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro|port 55888
-
-• Ran kill 37790
-└ (no output)
-
-• Ran pnpm --filter @vifx/cli vifx expo dev /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro --platform ios --expo-go --host 0.0.0.0 --public-host 127.0.0.1 --port 55888 --json
-└ $ node ./bin/vifx.mjs expo dev /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro --platform ios --expo-go --host 0.0.0.0 --public-host 127.0.0.1 --port 55888 --json
-(node:37858) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro/vifx.config.ts?t=1779562082891 is not specified and it doesn't parse as CommonJS.
-… +23 lines (ctrl + t to view transcript)
-[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @vifx/cli@0.1.0 vifx: `node ./bin/vifx.mjs expo dev /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro --platform ios --expo-go --host 0.0.0.0 --public-host 127.0.0.1 --port 55888 --json`
-Command failed with signal "SIGTERM"
-
-✔ You approved codex to run pnpm --filter @vifx/cli vifx expo dev /Users/alexis.salnikoff/workspace/perso... this time
-
-• Ran pnpm --filter @vifx/cli vifx expo dev /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro --platform ios --expo-go --host 0.0.0.0 --public-host 127.0.0.1 --port 55888 --json
-└ $ node ./bin/vifx.mjs expo dev /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro --platform ios --expo-go --host 0.0.0.0 --public-host 127.0.0.1 --port 55888 --json
-(node:82093) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro/vifx.config.ts?t=1779562532800 is not specified and it doesn't parse as CommonJS.
-… +20 lines (ctrl + t to view transcript)
-"url": "http://127.0.0.1:55888"
-}
-
-• Explored
-└ Search node_modules/punycode/(punycode\.js|punycode\.es6\.js)|module\.exports = punycode|exports.default = \{ in index.bundle
-
-• Ran /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro/node*modules/.pnpm/react-native@0.81.5*@babel+core@7.29.0_@types+react@19.1.17_react@19.1.0/node_modules/react-native/sdks/hermesc/osx-bin/hermesc -emit-binary -out /
-│ private/tmp/vifx-hnewspro-ios-after-mainfields.hbc /Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro/.vifx/expo-go/ios/index.bundle
-└ (no output)
-
-• Running xcrun simctl terminate booted host.exp.Exponent
-
-✔ You approved codex to run xcrun simctl terminate booted host.exp.Exponent this time
-
-• Ran xcrun simctl terminate booted host.exp.Exponent
-└ (no output)
-
-✔ You approved codex to run xcrun simctl openurl booted exp://127.0.0.1:55888 this time
-
-• Ran xcrun simctl openurl booted exp://127.0.0.1:55888
-└ (no output)
-
-✔ You approved codex to run xcrun simctl io booted screenshot /private/tmp/vifx-hnewspro-expo-go-after-ma... this time
-
-• Ran xcrun simctl io booted screenshot /private/tmp/vifx-hnewspro-expo-go-after-mainfields.png
-└ Wrote screenshot to: /private/tmp/vifx-hnewspro-expo-go-after-mainfields.png
-
-• Viewed Image
-└ /private/tmp/vifx-hnewspro-expo-go-after-mainfields.png
+This file previously contained a pasted assistant-session transcript; it was
+replaced with this living status doc per `PLAN.md` §2.3.
