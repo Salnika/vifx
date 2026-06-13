@@ -20,7 +20,9 @@ import { symbolicateStackFrame } from "@vifx/source-map-tools";
 import {
   buildModuleRegistryBundle,
   reactNative,
+  resolveBuildMinify,
   resolveBundleMode,
+  resolveOutputOptions,
 } from "@vifx/vite-plugin-react-native";
 import type {
   VifxBuildAssetArtifact,
@@ -1106,21 +1108,35 @@ export async function buildExpoBundle(
 
   const inputEntry = await createExpoBuildInputEntry(projectRoot, absoluteOutDir, entry);
 
+  // Production parity for the Expo native bundle path. Development keeps the
+  // validated Expo Go corridor output (scope-hoisted ESM, no minify); production
+  // (e.g. `vifx export:embed --dev false`) minifies with Oxc and emits a single
+  // IIFE script, matching buildReactNativeBundle. The __DEV__/NODE_ENV/EXPO_OS
+  // defines are already mode-aware through the reactNative plugin's config hook.
+  const mode = resolveBundleMode(options);
+  const outputOptions =
+    mode === "production"
+      ? resolveOutputOptions({
+          mode,
+          moduleFormat: "hoisted",
+          platform: options.platform,
+        })
+      : { entryFileNames: "index.bundle", format: "es" as const };
+
   await build({
     appType: "custom",
     build: {
       assetsInlineLimit: 0,
       cssCodeSplit: false,
       emptyOutDir: true,
-      minify: false,
+      minify: resolveBuildMinify(mode),
       outDir,
       rollupOptions: {
         input: inputEntry,
         output: {
           assetFileNames: "assets/[name][extname]",
           chunkFileNames: "chunks/[name].js",
-          entryFileNames: "index.bundle",
-          format: "es",
+          ...outputOptions,
         },
       },
       sourcemap: true,

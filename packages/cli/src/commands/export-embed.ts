@@ -482,12 +482,6 @@ export async function runExportEmbedCommand(argv: string[], cwd: string): Promis
   const minify = args.minify ?? !args.dev;
   const mode = args.dev ? ("development" as const) : ("production" as const);
 
-  if (!args.dev || minify) {
-    warnings.push(
-      'production semantics pending: --dev false / --minify true were forwarded as mode "production", but this Vifx version still emits a development-flavored bundle.',
-    );
-  }
-
   const bundleOutput = path.resolve(cwd, args.bundleOutput);
   const sourcemapOutput =
     args.sourcemapOutput === undefined ? undefined : path.resolve(cwd, args.sourcemapOutput);
