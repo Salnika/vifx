@@ -194,10 +194,7 @@ export function createExpoDevServerLifetime(server: VifxExpoDevServer) {
   });
 }
 
-export function createExpoGoDevServerLifetime(
-  server: VifxExpoGoDevServer,
-  onClose?: () => void,
-) {
+export function createExpoGoDevServerLifetime(server: VifxExpoGoDevServer, onClose?: () => void) {
   return new Promise<number>((resolve) => {
     let settled = false;
 
