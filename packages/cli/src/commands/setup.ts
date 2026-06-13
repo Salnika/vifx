@@ -3,6 +3,7 @@ import { createInterface } from "node:readline/promises";
 import { applyPlannedChanges, planExpoSetup, type PlannedFileChange } from "@vifx/codemods";
 import { VifxError } from "@vifx/errors";
 import { parseFlags } from "../lib/args.ts";
+import { analyzeMetroConfig, type MetroConfigAnalysis } from "../lib/metro-config.ts";
 import type { CliResult, ExecuteCliOptions } from "../types.ts";
 
 export const SETUP_HELP = `Usage: vifx setup [path] [--yes] [--dry-run] [--json] [--force] [--expo-go] [--with-vite-config]
@@ -38,6 +39,33 @@ function formatChangeSummary(changes: PlannedFileChange[]) {
   }
 
   return changes.map((change) => `  [${change.kind}] ${change.path}`);
+}
+
+function formatMetroMigrationNotes(analysis: MetroConfigAnalysis): string[] {
+  if (!analysis.found) {
+    return [];
+  }
+
+  const lines = ["", "Metro config migration:", `  Detected ${analysis.path ?? "metro config"}.`];
+
+  if (analysis.extraction === "static") {
+    lines.push("  (config could not be evaluated; notes come from a static scan)");
+  }
+
+  for (const feature of analysis.unsupported) {
+    lines.push(`  [unsupported] ${feature.source}: ${feature.suggestion}`);
+  }
+
+  for (const hint of analysis.hints) {
+    const target = hint.vifxConfigKey ? ` -> vifx.config.ts ${hint.vifxConfigKey}` : "";
+    lines.push(`  [${hint.severity}] ${hint.source}: ${hint.suggestion}${target}`);
+  }
+
+  if (analysis.unsupported.length === 0 && analysis.hints.length === 0) {
+    lines.push("  No migration actions detected.");
+  }
+
+  return lines;
 }
 
 function createNextCommands(options: {
@@ -103,6 +131,7 @@ function renderTerminalSetup(options: {
   dryRun: boolean;
   expoRouter: boolean;
   iosHostPresent: boolean;
+  metroNotes: string[];
   nextCommands: string[];
   projectRoot: string;
   targetPath: string;
@@ -145,6 +174,7 @@ function renderTerminalSetup(options: {
     "  - This setup does not install Expo Updates runtime support.",
     "",
     statusLine,
+    ...options.metroNotes,
     "",
     "Next commands:",
     ...options.nextCommands.map((command) => `  ${command}`),
@@ -194,6 +224,7 @@ export async function runSetupCommand(
     force: Boolean(parsed.flags.force),
     withViteConfig: Boolean(parsed.flags["with-vite-config"]),
   });
+  const metroConfigMigration = await analyzeMetroConfig(projectRoot);
   const dryRun = Boolean(parsed.flags["dry-run"] || (parsed.flags.json && !parsed.flags.yes));
   const nextCommands = createNextCommands({
     expoGo: plan.expoGo,
@@ -247,6 +278,7 @@ export async function runSetupCommand(
           applied,
           withViteConfig: plan.withViteConfig,
           nextCommands,
+          metroConfigMigration,
         },
         null,
         2,
@@ -268,6 +300,7 @@ export async function runSetupCommand(
       expoGo: plan.expoGo,
       expoRouter: plan.expoRouter,
       iosHostPresent: plan.iosHostPresent,
+      metroNotes: formatMetroMigrationNotes(metroConfigMigration),
       nextCommands,
       projectRoot: plan.projectRoot,
       targetPath,
