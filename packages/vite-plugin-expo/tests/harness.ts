@@ -81,8 +81,8 @@ export async function createExpoGoTestProject(
         expo: {
           icon: "./assets/icon.png",
           name,
+          sdkVersion,
           slug,
-          sdkVersion: "54.0.0",
         },
       },
       null,
@@ -211,6 +211,8 @@ export interface TestServerHandle {
   server: VifxExpoGoDevServer;
   /** GET helper that resolves the response + parsed text/JSON. */
   get: (pathname: string) => Promise<HttpProbe>;
+  /** GET helper for an absolute URL (manifest emits absolute asset/bundle URLs). */
+  fetchUrl: (url: string) => Promise<HttpProbe>;
   /** POST helper (JSON body) for `/symbolicate`. */
   postJson: (pathname: string, body: unknown) => Promise<HttpProbe>;
   /** Open a `ws` client against `/message` (resolves once OPEN). */
@@ -246,6 +248,7 @@ export async function startTestServer(
   });
 
   const openSockets = new Set<TestSocket>();
+  let closed = false;
 
   const probe = async (response: Response): Promise<HttpProbe> => {
     const body = await response.text();
@@ -271,8 +274,15 @@ export async function startTestServer(
         socket.close();
       }
       openSockets.clear();
+      // Idempotent: the underlying http server's close() rejects if called when
+      // already stopped, so the harness guards repeat teardown to a no-op.
+      if (closed) {
+        return;
+      }
+      closed = true;
       await server.close();
     },
+    fetchUrl: async (url) => probe(await fetch(url)),
     get: async (pathname) => probe(await fetch(`${server.url}${pathname}`)),
     openEventsClient: () => openClient("/events"),
     openMessageClient: () => openClient("/message"),
