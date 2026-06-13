@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { LibraryBuildResult } from "@vifx/compat";
 import { inspectMetroProject } from "@vifx/metro-inspect";
 import type { CompatAdapter } from "../../types.ts";
 import {
@@ -92,6 +93,16 @@ export const metroAdapter: CompatAdapter = {
           sourceMapPresent: Boolean(report.sourceMap),
           valid: report.sourceMap?.valid ?? false,
         };
+      }
+      case "library-build": {
+        // Repo policy: live Metro is never spawned, so library cases are
+        // registered as skipped for the Metro reference adapter.
+        return {
+          packageName: compatCase.operation.packageName,
+          toolchain: "metro",
+          status: "skip",
+          detail: "not exercised against live Metro",
+        } satisfies LibraryBuildResult;
       }
       default: {
         return {

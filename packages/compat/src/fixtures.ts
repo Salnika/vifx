@@ -79,6 +79,50 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
       "Synthetic replica of react-native-builder-bob packaging with a react-native field pointing at TypeScript sources.",
     ],
   },
+  {
+    id: "lib-react-native-gesture-handler",
+    title: "Library: react-native-gesture-handler",
+    relativePath: "fixtures/libs/react-native-gesture-handler",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "exports-map", "native-module", "ts-source-entry"],
+    notes: [
+      "Synthetic replica with an exports map and a react-native condition pointing at TypeScript sources that reach into a native module.",
+    ],
+  },
+  {
+    id: "lib-react-native-screens",
+    title: "Library: react-native-screens",
+    relativePath: "fixtures/libs/react-native-screens",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "native-component", "jsx-source", "ts-source-entry"],
+    notes: [
+      "Synthetic replica registering a native host component (RNSScreen) from a TSX react-native entry.",
+    ],
+  },
+  {
+    id: "lib-react-native-safe-area-context",
+    title: "Library: react-native-safe-area-context",
+    relativePath: "fixtures/libs/react-native-safe-area-context",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "pure-js", "jsx-source", "ts-source-entry"],
+    notes: [
+      "Synthetic replica modelling the pure-JS insets surface (no native module access on the resolved entry).",
+    ],
+  },
+  {
+    id: "lib-react-native-svg",
+    title: "Library: react-native-svg",
+    relativePath: "fixtures/libs/react-native-svg",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "native-component", "jsx-source", "ts-source-entry"],
+    notes: [
+      "Synthetic replica registering native host components (RNSVGSvgView, RNSVGPath) from a TSX react-native entry.",
+    ],
+  },
 ];
 
 const FIXTURE_MANIFEST_MAP = new Map(FIXTURE_MANIFESTS.map((fixture) => [fixture.id, fixture]));

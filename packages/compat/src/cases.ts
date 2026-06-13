@@ -247,4 +247,154 @@ export const compatCases: CompatCase[] = [
     },
     docsPath: "/compat/monorepo#workspace-resolution",
   },
+  {
+    id: "lib-react-native-reanimated",
+    title: "react-native-reanimated bundles from its react-native TS source entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-reanimated",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-reanimated",
+      platform: "ios",
+      bundleProbes: ["withTiming"],
+      partialAspects: [
+        "worklet directives are not compiled to UI-thread worklets without the Reanimated Babel plugin (see the babel-pipeline unit)",
+      ],
+    },
+    expected: {
+      packageName: "react-native-reanimated",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the react-native field to TypeScript sources and bundles them, but 'worklet' directives are stripped instead of compiled. Real worklets need the Reanimated Babel plugin from the babel-pipeline unit.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: [
+      "Synthetic replica of react-native-builder-bob packaging (extensionless entries, react-native field at TS sources, 'worklet' directives).",
+    ],
+    docsPath: "/compat/libraries#react-native-reanimated",
+  },
+  {
+    id: "lib-react-native-gesture-handler",
+    title: "react-native-gesture-handler bundles from its exports/react-native TS entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-gesture-handler",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-gesture-handler",
+      platform: "ios",
+      bundleProbes: ["attachGestureHandler", "gestureHandlerRootHOC"],
+      partialAspects: [
+        "the RNGestureHandlerModule native module is only registered on a device, so gesture recognition does not run from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "react-native-gesture-handler",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the exports map / react-native condition to TypeScript sources and bundles them. The native gesture module is unavailable at build time, so the JS surface bundles but gestures do not run.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica with an exports map plus a native-module dependency."],
+    docsPath: "/compat/libraries#react-native-gesture-handler",
+  },
+  {
+    id: "lib-react-native-screens",
+    title: "react-native-screens bundles its TSX native-component entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-screens",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-screens",
+      platform: "ios",
+      bundleProbes: ["Screen", "ScreenContainer"],
+      partialAspects: [
+        "the RNSScreen native host component is only available on a device, so native screen containers do not mount from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "react-native-screens",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Transpiles the TSX react-native entry and bundles it, but the RNSScreen native component is not registered at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica registering a native host component from a TSX entry."],
+    docsPath: "/compat/libraries#react-native-screens",
+  },
+  {
+    id: "lib-react-native-safe-area-context",
+    title: "react-native-safe-area-context bundles its pure-JS TSX entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-safe-area-context",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-safe-area-context",
+      platform: "ios",
+      bundleProbes: ["getSafeAreaInsets", "SafeAreaProvider"],
+      partialAspects: [],
+    },
+    expected: {
+      packageName: "react-native-safe-area-context",
+      toolchains: {
+        vifx: {
+          status: "pass",
+          note: "Pure-JS insets surface: the TSX react-native entry transpiles and bundles with no native module dependency, fully reproducing its build-time behavior.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica of the pure-JS insets surface (no native module on the resolved entry)."],
+    docsPath: "/compat/libraries#react-native-safe-area-context",
+  },
+  {
+    id: "lib-react-native-svg",
+    title: "react-native-svg bundles its TSX native-component entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-svg",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-svg",
+      platform: "ios",
+      bundleProbes: ["Svg", "Path"],
+      partialAspects: [
+        "the RNSVGSvgView and RNSVGPath native host components are only available on a device, so SVG rendering does not run from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "react-native-svg",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Transpiles the TSX react-native entry and bundles it, but the RNSVG native components are not registered at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica registering native host components from a TSX entry."],
+    docsPath: "/compat/libraries#react-native-svg",
+  },
 ];
