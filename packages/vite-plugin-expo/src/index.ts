@@ -17,7 +17,11 @@ import {
 } from "@vifx/asset-registry";
 import { VifxError } from "@vifx/errors";
 import { symbolicateStackFrame } from "@vifx/source-map-tools";
-import { reactNative, resolveBundleMode } from "@vifx/vite-plugin-react-native";
+import {
+  buildModuleRegistryBundle,
+  reactNative,
+  resolveBundleMode,
+} from "@vifx/vite-plugin-react-native";
 import type {
   VifxBuildAssetArtifact,
   VifxBundleArtifacts,
@@ -1060,6 +1064,45 @@ export async function buildExpoBundle(
   const entry = options.entry ?? "./index.js";
   const outDir = options.outDir ?? `.vifx/expo/${options.platform}`;
   const absoluteOutDir = path.resolve(projectRoot, outDir);
+
+  if ((options.moduleFormat ?? "hoisted") === "metro") {
+    const registry = await buildModuleRegistryBundle({
+      absoluteOutDir,
+      entry,
+      plugins: [
+        ...expo({
+          ...options,
+          entry,
+          projectRoot,
+        }),
+      ],
+      projectRoot,
+    });
+    const appConfigPath = await findExpoAppConfig(projectRoot, options.appConfigPath).catch(
+      () => undefined,
+    );
+    const bundleStats = await stat(registry.bundlePath);
+    const assets = await collectEmittedExpoAssets({
+      absoluteOutDir,
+      projectRoot,
+    });
+
+    return {
+      appConfigPath: appConfigPath ? relativeFrom(projectRoot, appConfigPath) : undefined,
+      assets,
+      bundle: {
+        path: relativeFrom(projectRoot, registry.bundlePath),
+        sizeBytes: bundleStats.size,
+      },
+      entry,
+      mode: "expo",
+      platform: options.platform,
+      projectRoot,
+      runtime: null,
+      sourceMap: await readSourceMapArtifact(projectRoot, registry.sourceMapPath),
+    };
+  }
+
   const inputEntry = await createExpoBuildInputEntry(projectRoot, absoluteOutDir, entry);
 
   await build({
