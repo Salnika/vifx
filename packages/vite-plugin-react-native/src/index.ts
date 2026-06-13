@@ -430,7 +430,7 @@ function resolveCompatId(
   return null;
 }
 
-function resolveCompatPath(filePath: string) {
+function resolveCompatPath(filePath: string, resolvePlatform: VifxPlatform) {
   const normalizedPath = toPosixPath(stripQuery(filePath));
   if (
     normalizedPath.endsWith("/node_modules/expo-router/_ctx.js") ||
@@ -472,16 +472,24 @@ function resolveCompatPath(filePath: string) {
     return createCompatId(REANIMATED_VALIDATE_WORKLETS_VERSION_ID);
   }
 
+  // Worklets internals are only intercepted on native: the renderer returns
+  // native-only shims (and `null` on web). Tagging them as compat virtual
+  // modules on web — where `renderCompat` returns `null` — would leave Rollup
+  // with an unloadable `\0vifx:compat:` id. Mirror the source-based guard above.
   if (
-    normalizedPath.endsWith("/node_modules/react-native-worklets/src/bundleUnpacker.ts") ||
-    normalizedPath.endsWith("/node_modules/react-native-worklets/lib/module/bundleUnpacker.js")
+    resolvePlatform !== "web" &&
+    (normalizedPath.endsWith("/node_modules/react-native-worklets/src/bundleUnpacker.ts") ||
+      normalizedPath.endsWith("/node_modules/react-native-worklets/lib/module/bundleUnpacker.js"))
   ) {
     return createCompatId(REACT_NATIVE_WORKLETS_BUNDLE_UNPACKER_ID);
   }
 
   if (
-    normalizedPath.endsWith("/node_modules/react-native-worklets/src/workletRuntimeEntry.ts") ||
-    normalizedPath.endsWith("/node_modules/react-native-worklets/lib/module/workletRuntimeEntry.js")
+    resolvePlatform !== "web" &&
+    (normalizedPath.endsWith("/node_modules/react-native-worklets/src/workletRuntimeEntry.ts") ||
+      normalizedPath.endsWith(
+        "/node_modules/react-native-worklets/lib/module/workletRuntimeEntry.js",
+      ))
   ) {
     return createCompatId(REACT_NATIVE_WORKLETS_RUNTIME_ENTRY_ID);
   }
@@ -2381,7 +2389,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         return transformed.code;
       }
 
-      const compatPathId = resolveCompatPath(id);
+      const compatPathId = resolveCompatPath(id, state.resolvePlatform);
       if (compatPathId) {
         return await renderCompat(compatPathId, state);
       }
@@ -2395,7 +2403,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     async transform(code, id, _options): Promise<TransformResult | null> {
       const applyBaseTransform = async (): Promise<TransformResult | null> => {
         if (!id.startsWith(TRANSFORM_PREFIX)) {
-          const compatPathId = resolveCompatPath(id);
+          const compatPathId = resolveCompatPath(id, state.resolvePlatform);
           if (compatPathId) {
             const compatCode = await renderCompat(compatPathId, state);
             if (compatCode !== null) {
@@ -2563,7 +2571,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
           state.assetFiles.add(resolvedPath);
         }
 
-        const compatPathId = resolveCompatPath(resolvedPath);
+        const compatPathId = resolveCompatPath(resolvedPath, state.resolvePlatform);
         if (compatPathId) {
           return compatPathId;
         }

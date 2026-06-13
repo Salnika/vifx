@@ -307,6 +307,79 @@ test("buildReactNativeBundle can use the built-in react-native-web compat layer"
   ).toContain('<div id="root"></div>');
 });
 
+test("buildReactNativeBundle does not tag react-native-worklets internals as compat on web", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+
+  const webRoot = path.join(projectRoot, "node_modules", "react-native-web");
+  await mkdir(webRoot, { recursive: true });
+  await writeFile(
+    path.join(webRoot, "package.json"),
+    JSON.stringify({ main: "index.js", name: "react-native-web" }, null, 2),
+  );
+  await writeFile(
+    path.join(webRoot, "index.js"),
+    [
+      "export const AppRegistry = { registerComponent(name, loader) { return { loader, name }; } };",
+      'export const Platform = { OS: "web", select(value) { return value?.web ?? value?.default ?? null; } };',
+      "export default { AppRegistry, Platform };",
+      "",
+    ].join("\n"),
+  );
+
+  // react-native-worklets internals (bundleUnpacker / workletRuntimeEntry) are
+  // native-only compat targets. On web they must resolve to their real source,
+  // not to a `\0vifx:compat:` virtual id the web renderer returns null for —
+  // which previously crashed the build with UNLOADABLE_DEPENDENCY.
+  const workletsSrc = path.join(projectRoot, "node_modules", "react-native-worklets", "src");
+  await mkdir(workletsSrc, { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "node_modules", "react-native-worklets", "package.json"),
+    JSON.stringify({ name: "react-native-worklets" }, null, 2),
+  );
+  await writeFile(
+    path.join(workletsSrc, "bundleUnpacker.ts"),
+    'export function bundleValueUnpacker() { return "web-worklets-unpacker"; }\n',
+  );
+  await writeFile(
+    path.join(workletsSrc, "workletRuntimeEntry.ts"),
+    'export function bundleModeInit() { return "web-worklets-entry"; }\n',
+  );
+  await writeFile(
+    path.join(workletsSrc, "index.ts"),
+    [
+      "import './workletRuntimeEntry';",
+      "export { bundleValueUnpacker } from './bundleUnpacker';",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import { AppRegistry } from "react-native";',
+      'import { bundleValueUnpacker } from "react-native-worklets/src/bundleUnpacker";',
+      'import { bundleModeInit } from "react-native-worklets/src/workletRuntimeEntry";',
+      'console.log("worklets web", bundleValueUnpacker(), bundleModeInit());',
+      'AppRegistry.registerComponent("BareApp", () => null);',
+      "",
+    ].join("\n"),
+  );
+
+  // Must build cleanly (this threw UNLOADABLE_DEPENDENCY before the fix).
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    outDir: ".vifx/helper-ios-worklets-web",
+    platform: "ios",
+    projectRoot,
+    reactNativeCompat: "web",
+    resolvePlatform: "web",
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+
+  expect(bundleSource).not.toContain("vifx:compat:react-native-worklets");
+  expect(bundleSource).toContain("web-worklets-unpacker");
+  expect(bundleSource).toContain("web-worklets-entry");
+});
+
 test("buildReactNativeBundle uses native Reanimated compat for Expo Go bundles when compatPreview is enabled", async () => {
   const projectRoot = await copyFixture("rn-bare-basic");
 
