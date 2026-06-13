@@ -1,5 +1,4 @@
 import { access, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -32,6 +31,15 @@ import type {
   VifxTransformCacheStats,
   VifxWebRuntimeArtifact,
 } from "@vifx/types";
+import {
+  createBabelPipeline,
+  isExpoPackageSourcePath,
+  shouldTransformJsxFile,
+  stripQuery,
+  toPosixPath,
+  type TransformDecision,
+} from "./babel/pipeline.ts";
+import { loadProjectBabelRuntime } from "./babel/project-config.ts";
 import {
   isGatedNativeCompatModule,
   isNativeCompatMockEnabled,
@@ -110,7 +118,6 @@ const WEB_COMPAT_SPECIFIERS = new Set([
 const EXPO_MODULES_CORE_DANGEROUS_INTERNAL_ID = "expo-modules-core/src/polyfill/dangerous-internal";
 const EXPO_ROUTER_FILE_EXTENSION_PATTERN = /\.[jt]sx?$/u;
 const EXPO_ROUTER_PLATFORM_EXTENSIONS = new Set(["android", "ios", "native", "web"]);
-const projectBabelRuntimeCache = new Map<string, Promise<ProjectBabelRuntime | null>>();
 
 /**
  * Bump when the transform pipeline output changes in a way that is not already
@@ -143,24 +150,9 @@ interface ReactNativePluginState {
   transformCache: TransformCache | null;
 }
 
-interface ProjectBabelRuntime {
-  presetPath: string;
-  transformAsync: (
-    code: string,
-    options: Record<string, unknown>,
-  ) => Promise<{
-    code?: string | null;
-    map?: unknown;
-  } | null>;
-}
-
 interface ExpoRouterContextEntry {
   contextKey: string;
   resolvedFilePath: string;
-}
-
-function toPosixPath(filePath: string) {
-  return filePath.split(path.sep).join("/");
 }
 
 function relativeFrom(basePath: string, targetPath: string) {
@@ -186,10 +178,6 @@ function normalizeConditions(platform: VifxPlatform, extraConditions?: string[])
 
 function normalizeExtensions(extensions?: string[]) {
   return dedupe((extensions ?? [...DEFAULT_EXTENSIONS]).map((extension) => extension.trim()));
-}
-
-function stripQuery(filePath: string) {
-  return filePath.replace(/[?#].*$/u, "");
 }
 
 function isPathLikeSpecifier(specifier: string) {
@@ -2013,26 +2001,6 @@ function normalizeMainFields(resolvePlatform: VifxPlatform, mainFields?: readonl
   return normalized;
 }
 
-function matchesNodeModulePackagePattern(id: string, packagePatterns: string[]) {
-  const normalizedId = toPosixPath(stripQuery(id));
-
-  return packagePatterns.some((packagePattern) => {
-    if (!normalizedId.includes("/node_modules/")) {
-      return false;
-    }
-
-    if (packagePattern.endsWith("-") || packagePattern.endsWith("/")) {
-      return normalizedId.includes(`/node_modules/${packagePattern}`);
-    }
-
-    return normalizedId.includes(`/node_modules/${packagePattern}/`);
-  });
-}
-
-function isTransformableJavaScriptPath(id: string) {
-  return /\.[cm]?[jt]sx?$/u.test(stripQuery(id));
-}
-
 async function pathExists(filePath: string) {
   try {
     await access(filePath);
@@ -2098,36 +2066,11 @@ function applyAliases(source: string, aliases: Record<string, string>, projectRo
   return null;
 }
 
-function shouldTransformJsxFile(id: string, jsxInPackages: string[]) {
-  if (!id.includes("/node_modules/") || !id.endsWith(".js")) {
-    return false;
-  }
-
-  return matchesNodeModulePackagePattern(id, jsxInPackages);
-}
-
 function shouldTransformExpoPackageSource(
   id: string,
   state: Pick<ReactNativePluginState, "reactNativeCompat" | "resolvePlatform">,
 ) {
-  if (state.reactNativeCompat !== "web" || state.resolvePlatform !== "web") {
-    return false;
-  }
-
-  if (!id.includes("/node_modules/")) {
-    return false;
-  }
-
-  const normalizedId = toPosixPath(stripQuery(id));
-  if (!/\.(jsx?|tsx?)$/u.test(normalizedId)) {
-    return false;
-  }
-
-  return (
-    normalizedId.includes("/node_modules/expo/") ||
-    normalizedId.includes("/node_modules/expo-") ||
-    normalizedId.includes("/node_modules/@expo/")
-  );
+  return isExpoPackageSourcePath(id, state.reactNativeCompat, state.resolvePlatform);
 }
 
 function inferOxcTransformLang(id: string): OxcTransformLang {
@@ -2160,75 +2103,6 @@ function createOxcTransformOptions(id: string) {
     lang,
     sourcemap: true,
   };
-}
-
-function shouldTransformWithProjectBabel(
-  id: string,
-  state: Pick<ReactNativePluginState, "babelInPackages" | "resolvePlatform">,
-) {
-  if (id.includes("\0") || !id.includes("/node_modules/") || !isTransformableJavaScriptPath(id)) {
-    return false;
-  }
-
-  if (state.resolvePlatform !== "web") {
-    return true;
-  }
-
-  return matchesNodeModulePackagePattern(id, state.babelInPackages);
-}
-
-function shouldTransformProjectSourceWithBabel(
-  id: string,
-  state: Pick<ReactNativePluginState, "projectRoot" | "resolvePlatform">,
-) {
-  if (state.resolvePlatform === "web" || id.includes("\0") || id.includes("/node_modules/")) {
-    return false;
-  }
-
-  if (!isTransformableJavaScriptPath(id)) {
-    return false;
-  }
-
-  const normalizedId = stripQuery(id);
-  const relativePath = path.relative(state.projectRoot, normalizedId);
-  return relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
-}
-
-async function loadProjectBabelRuntime(projectRoot: string): Promise<ProjectBabelRuntime | null> {
-  const cached = projectBabelRuntimeCache.get(projectRoot);
-  if (cached) {
-    return cached;
-  }
-
-  const runtimePromise = (async () => {
-    try {
-      const requireFromProject = createRequire(path.join(projectRoot, "package.json"));
-      const babel = requireFromProject("@babel/core") as {
-        transformAsync?: ProjectBabelRuntime["transformAsync"];
-      };
-
-      if (typeof babel.transformAsync !== "function") {
-        return null;
-      }
-
-      let presetPath: string;
-      try {
-        presetPath = requireFromProject.resolve("babel-preset-expo");
-      } catch {
-        presetPath = requireFromProject.resolve("@react-native/babel-preset");
-      }
-
-      return {
-        presetPath,
-        transformAsync: babel.transformAsync,
-      } satisfies ProjectBabelRuntime;
-    } catch {
-      return null;
-    }
-  })();
-
-  projectBabelRuntimeCache.set(projectRoot, runtimePromise);
-  return runtimePromise;
 }
 
 let pluginVersionCache: string | undefined;
@@ -2343,44 +2217,85 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     });
   };
 
-  const transformWithProjectBabel = async (code: string, id: string, isNodeModule: boolean) => {
+  const pipeline = createBabelPipeline({
+    babelInPackages: state.babelInPackages,
+    isDev: true,
+    jsxInPackages: state.jsxInPackages,
+    projectRoot: state.projectRoot,
+    reactNativeCompat: state.reactNativeCompat,
+    resolvePlatform: state.resolvePlatform,
+  });
+
+  const transformWithProjectBabel = async (
+    code: string,
+    id: string,
+    decision: Extract<TransformDecision, { strategy: "project-babel" }>,
+  ) => {
     const runtime = await loadProjectBabelRuntime(state.projectRoot);
 
     if (!runtime) {
       return null;
     }
 
+    const baseOptions = {
+      babelrc: false,
+      caller: {
+        bundler: "metro",
+        isDev: true,
+        isHMREnabled: false,
+        isNodeModule: decision.isNodeModule,
+        name: "vifx",
+        platform: state.resolvePlatform,
+        projectRoot: state.projectRoot,
+        supportsStaticESM: !decision.isNodeModule,
+      },
+      filename: id,
+      sourceMaps: true,
+    };
+
+    const projectConfig =
+      decision.configMode === "project-config" ? await pipeline.getProjectBabelConfig() : null;
+
+    let transformOptions: Record<string, unknown>;
+    if (projectConfig?.configFilePath) {
+      // Run the project's OWN configuration so its real plugins (worklets,
+      // nativewind, react-compiler, ...) execute.
+      transformOptions = {
+        ...baseOptions,
+        configFile: projectConfig.configFilePath,
+        cwd: state.projectRoot,
+        root: state.projectRoot,
+      };
+    } else if (runtime.presetPath) {
+      // Legacy fallback: only the resolved React Native preset runs.
+      transformOptions = {
+        ...baseOptions,
+        configFile: false,
+        presets: [runtime.presetPath],
+      };
+    } else {
+      // No project config matched and no preset is installed: project Babel
+      // has nothing to contribute, so defer to the OXC fast path.
+      return null;
+    }
+
+    // 09's pipeline decides the project-Babel options; 06's cache wraps the
+    // final compute so identical inputs reuse the on-disk transform result.
     const babelKeyParts = [
       code,
       "babel",
       {
-        isNodeModule,
+        configFilePath: projectConfig?.configFilePath ?? null,
+        configMode: decision.configMode,
+        isNodeModule: decision.isNodeModule,
         platform: state.resolvePlatform,
-        presetPath: runtime.presetPath,
-        supportsStaticESM: !isNodeModule,
+        presetPath: runtime.presetPath ?? null,
       },
       cacheRelativeId(id),
     ] as const;
 
     const transformed = await cachedTransform(babelKeyParts, async () => {
-      const output = await runtime.transformAsync(code, {
-        babelrc: false,
-        caller: {
-          bundler: "metro",
-          isDev: true,
-          isHMREnabled: false,
-          isNodeModule,
-          name: "vifx",
-          platform: state.resolvePlatform,
-          projectRoot: state.projectRoot,
-          supportsStaticESM: !isNodeModule,
-        },
-        configFile: false,
-        filename: id,
-        presets: [runtime.presetPath],
-        sourceMaps: true,
-      });
-
+      const output = await runtime.transformAsync(code, transformOptions);
       return {
         code: output?.code ?? "",
         map: (output?.map as TransformResult["map"]) ?? null,
@@ -2423,8 +2338,9 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       if (id.startsWith(TRANSFORM_PREFIX)) {
         const originalId = id.slice(TRANSFORM_PREFIX.length);
         const source = await readFile(originalId, "utf8");
-        if (shouldTransformWithProjectBabel(originalId, state)) {
-          const transformed = await transformWithProjectBabel(source, originalId, true);
+        const decision = await pipeline.decideTransform(originalId, source);
+        if (decision.strategy === "project-babel") {
+          const transformed = await transformWithProjectBabel(source, originalId, decision);
           if (transformed) {
             return transformed.code;
           }
@@ -2461,24 +2377,21 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
           }
         }
 
-        if (shouldTransformWithProjectBabel(id, state)) {
-          const transformed = await transformWithProjectBabel(code, id, true);
+        const decision = await pipeline.decideTransform(id, code);
+
+        if (decision.strategy === "project-babel") {
+          const transformed = await transformWithProjectBabel(code, id, decision);
           if (transformed) {
             return transformed;
           }
-        }
 
-        if (shouldTransformProjectSourceWithBabel(id, state)) {
-          const transformed = await transformWithProjectBabel(code, id, false);
-          if (transformed) {
-            return transformed;
+          // No usable project Babel runtime: fall back to OXC where a
+          // JSX-style rule still applies, mirroring the legacy chain.
+          const fallback = await pipeline.decideBabelUnavailableFallback(id);
+          if (fallback.strategy !== "oxc") {
+            return null;
           }
-        }
-
-        if (
-          !shouldTransformJsxFile(id, state.jsxInPackages) &&
-          !shouldTransformExpoPackageSource(id, state)
-        ) {
+        } else if (decision.strategy !== "oxc") {
           return null;
         }
 
