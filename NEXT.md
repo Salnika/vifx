@@ -11,27 +11,27 @@ The roadmap in `PLAN.md` (originally sequenced as phases 0–7) was executed as 
 **20-unit parallel batch** off a shared `batch/base`, each unit a focused PR.
 The decisions behind the work are recorded in ADR-001…005. Units, briefly:
 
-| Unit | Scope                                                                          |
-| ---- | ------------------------------------------------------------------------------ |
+| Unit | Scope                                                                              |
+| ---- | ---------------------------------------------------------------------------------- |
 | 01   | CLI split — break the `expo-audit.ts` monolith into `dev`/`export`/`smoke`/`audit` |
-| 02   | WebSocket layer — adopt/extract `ws` for the message + `/events` channels      |
-| 04   | `compatPreview` gate — demote JS mocks to explicit opt-in (ADR-002)            |
-| 05   | Watch + rebuild + `/hot` — file watcher driving incremental rebuilds           |
-| 06   | Persistent content-addressed transform cache (ADR-002)                         |
-| 07   | Metro module-registry dev bundle format (`__d`/`__r`) (ADR-001)               |
-| 08   | `react-refresh/babel` wiring for state-preserving Fast Refresh                 |
-| 09   | Real Babel pipeline auto-configured from the project `babel.config.js` (ADR-002) |
-| 10   | Library compat matrix (fixtures + compat-runner + support docs)                |
-| 11   | Generalized `require.context` and `import()` async-module support              |
-| 12   | DevTools / inspector proxy via `@react-native/dev-middleware`                   |
-| 13   | expo-dev-client support on a New-Arch SDK 55 app (ADR-003)                     |
-| 14   | Scope-hoisted IIFE production format + bundle modes (ADR-001)                  |
-| 15   | `vifx export:embed` for Xcode/Gradle release builds                            |
-| 16   | Expo config plugin to persist the embed patch across `expo prebuild`           |
-| 17   | SDK 55 / 56 experimental tiers + per-SDK fixtures (ADR-004)                    |
-| 18   | `metro.config.js` interop (migration hints from resolver fields)               |
-| 19   | Bare React Native dev server (`vifx start` / `vifx bundle`)                    |
-| 20   | Dev-loop harness / E2E coverage for the watch→rebuild→reload loop              |
+| 02   | WebSocket layer — adopt/extract `ws` for the message + `/events` channels          |
+| 04   | `compatPreview` gate — demote JS mocks to explicit opt-in (ADR-002)                |
+| 05   | Watch + rebuild + `/hot` — file watcher driving incremental rebuilds               |
+| 06   | Persistent content-addressed transform cache (ADR-002)                             |
+| 07   | Metro module-registry dev bundle format (`__d`/`__r`) (ADR-001)                    |
+| 08   | `react-refresh/babel` wiring for state-preserving Fast Refresh                     |
+| 09   | Real Babel pipeline auto-configured from the project `babel.config.js` (ADR-002)   |
+| 10   | Library compat matrix (fixtures + compat-runner + support docs)                    |
+| 11   | Generalized `require.context` and `import()` async-module support                  |
+| 12   | DevTools / inspector proxy via `@react-native/dev-middleware`                      |
+| 13   | expo-dev-client support on a New-Arch SDK 55 app (ADR-003)                         |
+| 14   | Scope-hoisted IIFE production format + bundle modes (ADR-001)                      |
+| 15   | `vifx export:embed` for Xcode/Gradle release builds                                |
+| 16   | Expo config plugin to persist the embed patch across `expo prebuild`               |
+| 17   | SDK 55 / 56 experimental tiers + per-SDK fixtures (ADR-004)                        |
+| 18   | `metro.config.js` interop (migration hints from resolver fields)                   |
+| 19   | Bare React Native dev server (`vifx start` / `vifx bundle`)                        |
+| 20   | Dev-loop harness / E2E coverage for the watch→rebuild→reload loop                  |
 
 (Units 01, 02, 03 are the Phase-0 cleanup; unit 03 is this governance/docs
 refresh.)

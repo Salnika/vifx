@@ -1,5 +1,11 @@
 # Roadmap
 
+> **Authoritative roadmap.** The full Metro replacement plan and its
+> architecture decisions are tracked in the repository at `PLAN.md` and
+> `docs/adr/` (ADR-001…005), with live status in `STATUS.md`. The plan was
+> executed as a 20-unit parallel batch; see `NEXT.md` for the unit breakdown.
+> The snapshot below predates that plan and is kept for historical context.
+
 ## Snapshot
 
 - Date: `2026-05-18`
