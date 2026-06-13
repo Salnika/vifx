@@ -329,6 +329,8 @@ export async function runRunCommand(argv: string[], cwd: string): Promise<CliRes
       hermes: target.hermes,
       jsxInPackages: target.jsxInPackages,
       mainFields: loaded.config.resolver.mainFields,
+      mode: target.mode,
+      moduleFormat: target.moduleFormat,
       outDir: target.outDir,
       platform: target.platform,
       projectRoot: loaded.config.projectRoot,

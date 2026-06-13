@@ -501,6 +501,71 @@ test("build --json uses vifx.config.ts targets to produce bundle artifacts", asy
   expect(parsed.results[0]?.durationMs).toBeGreaterThanOrEqual(0);
 });
 
+test("build --mode production emits a smaller minified bundle than development", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-build-mode-"));
+  const targetPath = path.join(tempRoot, "rn-bare-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "vifx.config.ts"),
+    [
+      "export default {",
+      "  vite: {",
+      '    mode: "react-native",',
+      "    targets: [",
+      "      {",
+      '        platform: "ios",',
+      '        entry: "./index.js",',
+      '        outDir: ".vifx/cli-build-mode/ios",',
+      "        hermes: false,",
+      "      },",
+      "    ],",
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
+
+  interface BuildJsonOutput {
+    results: Array<{
+      bundleMode: string;
+      result: { bundle: { path: string; sizeBytes: number } };
+    }>;
+  }
+
+  const developmentResult = await executeCli(["build", targetPath, "--json"]);
+  const developmentParsed = JSON.parse(developmentResult.stdout) as BuildJsonOutput;
+  const productionResult = await executeCli([
+    "build",
+    targetPath,
+    "--mode",
+    "production",
+    "--json",
+  ]);
+  const productionParsed = JSON.parse(productionResult.stdout) as BuildJsonOutput;
+  const productionBundleSource = await readFile(
+    path.join(targetPath, productionParsed.results[0]?.result.bundle.path ?? ""),
+    "utf8",
+  );
+
+  expect(developmentResult.exitCode).toBe(0);
+  expect(productionResult.exitCode).toBe(0);
+  expect(developmentParsed.results[0]?.bundleMode).toBe("development");
+  expect(productionParsed.results[0]?.bundleMode).toBe("production");
+  expect(productionParsed.results[0]?.result.bundle.sizeBytes).toBeLessThan(
+    developmentParsed.results[0]?.result.bundle.sizeBytes ?? 0,
+  );
+  expect(productionBundleSource).not.toContain("import.meta");
+});
+
+test("build rejects an unsupported --mode value", async () => {
+  const result = await executeCli(["build", ".", "--mode", "staging"]);
+
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("VIFX_BUILD_INVALID_MODE");
+  expect(result.stderr).toContain("--mode development or --mode production");
+});
+
 test("run --help prints runtime usage", async () => {
   const result = await executeCli(["run", "--help"]);
 

@@ -1,16 +1,19 @@
 import path from "node:path";
 import { loadVifxConfig } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
-import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
+import { buildReactNativeBundle, resolveBundleMode } from "@vifx/vite-plugin-react-native";
+import type { VifxBundleMode } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
+import { parseBundleModeFlag } from "../lib/mode.ts";
 import type { CliResult } from "../types.ts";
 
-const BUILD_HELP = `Usage: vifx build [path] [--platform ios|android|all] [--config <file>] [--verbose] [--json]
+const BUILD_HELP = `Usage: vifx build [path] [--platform ios|android|all] [--mode development|production] [--config <file>] [--verbose] [--json]
 
 Builds the configured Vifx bundle targets from vifx.config.*.
 
 Options:
   --platform  Restrict the build to one platform. Default: all configured targets.
+  --mode      Bundle mode override for every built target. Default: the per-target mode, or development.
   --config    Use a specific Vifx config file.
   --verbose   Show detailed diagnostic information.
   --json      Output machine-readable build results.
@@ -18,6 +21,7 @@ Options:
 `;
 
 interface BuildResult {
+  bundleMode: VifxBundleMode;
   durationMs: number;
   result: Awaited<ReturnType<typeof buildReactNativeBundle>>;
 }
@@ -52,6 +56,7 @@ function formatBuildResult(build: BuildResult) {
 
   return [
     `[${result.platform}]`,
+    `  Mode: ${build.bundleMode}`,
     `  Entry: ${result.entry}`,
     `  Bundle: ${result.bundle.path} (${formatBytes(result.bundle.sizeBytes)})`,
     `  Assets: ${result.assets.length}`,
@@ -68,7 +73,7 @@ function formatBuildResult(build: BuildResult) {
 export async function runBuildCommand(argv: string[], cwd: string): Promise<CliResult> {
   const parsed = parseFlags(argv, {
     booleanFlags: ["help", "json"],
-    stringFlags: ["config", "platform"],
+    stringFlags: ["config", "mode", "platform"],
     aliases: {
       "-h": "--help",
     },
@@ -93,6 +98,7 @@ export async function runBuildCommand(argv: string[], cwd: string): Promise<CliR
   const requestedPlatform = validateRequestedPlatform(
     typeof parsed.flags.platform === "string" ? parsed.flags.platform : undefined,
   );
+  const requestedMode = parseBundleModeFlag(parsed.flags.mode);
   const projectRoot = path.resolve(cwd, parsed.positional[0] ?? ".");
   const loaded = await loadVifxConfig({
     configFile: typeof parsed.flags.config === "string" ? parsed.flags.config : undefined,
@@ -134,6 +140,8 @@ export async function runBuildCommand(argv: string[], cwd: string): Promise<CliR
       hermes: target.hermes,
       jsxInPackages: target.jsxInPackages,
       mainFields: loaded.config.resolver.mainFields,
+      mode: requestedMode ?? target.mode,
+      moduleFormat: target.moduleFormat,
       outDir: target.outDir,
       platform: target.platform,
       projectRoot: loaded.config.projectRoot,
@@ -144,6 +152,7 @@ export async function runBuildCommand(argv: string[], cwd: string): Promise<CliR
       transformCache: target.transformCache,
     });
     results.push({
+      bundleMode: resolveBundleMode({ mode: requestedMode ?? target.mode }),
       durationMs: Date.now() - startedAt,
       result,
     });

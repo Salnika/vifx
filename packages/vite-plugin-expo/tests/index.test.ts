@@ -5,7 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { build } from "vite";
 import { expect, test } from "vite-plus/test";
-import { expo, findExpoAppConfig, startExpoDevServer, startExpoGoDevServer } from "../src/index.ts";
+import {
+  createExpoGoBundleUrlPath,
+  expo,
+  findExpoAppConfig,
+  startExpoDevServer,
+  startExpoGoDevServer,
+} from "../src/index.ts";
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "../../../fixtures");
 type SourceMapPayload = ConstructorParameters<typeof SourceMap>[0];
@@ -196,6 +202,28 @@ function waitForWebSocketMessage(socket: TestWebSocket) {
 }
 
 const NETWORK_SERVER_TESTS = (await canListenOnLocalhost()) ? test : test.skip;
+
+test("createExpoGoBundleUrlPath reflects the bundle mode through the dev query param", async () => {
+  const defaultUrlPath = await createExpoGoBundleUrlPath({
+    mainModuleName: "index",
+    platform: "ios",
+  });
+  const developmentUrlPath = await createExpoGoBundleUrlPath({
+    dev: true,
+    mainModuleName: "index",
+    platform: "ios",
+  });
+  const productionUrlPath = await createExpoGoBundleUrlPath({
+    dev: false,
+    mainModuleName: "index",
+    platform: "android",
+  });
+
+  expect(defaultUrlPath).toContain("dev=true");
+  expect(developmentUrlPath).toContain("dev=true");
+  expect(productionUrlPath).toContain("dev=false");
+  expect(productionUrlPath).toContain("platform=android");
+});
 
 test("findExpoAppConfig discovers app.json in the Expo fixture", async () => {
   const projectRoot = await copyFixture("expo-basic");

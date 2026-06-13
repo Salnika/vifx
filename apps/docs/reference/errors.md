@@ -8,6 +8,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_ASSET_INVALID_SCALE`                         | An asset scale group was malformed or inconsistent.                                                               |
 | `VIFX_ASSET_NOT_FOUND`                             | The requested asset file or asset group does not exist.                                                           |
 | `VIFX_ASSET_UNSUPPORTED_TYPE`                      | The requested asset type is outside the supported asset registry extensions.                                      |
+| `VIFX_BUILD_INVALID_MODE`                          | A build command received a bundle mode other than `development` or `production`.                                  |
 | `VIFX_BUILD_INVALID_PLATFORM`                      | A build command received an unsupported platform value.                                                           |
 | `VIFX_BUILD_TARGET_NOT_FOUND`                      | No configured build target matched the requested platform.                                                        |
 | `VIFX_BUILD_TARGETS_MISSING`                       | The config does not contain any Vite bundle targets.                                                              |
@@ -58,6 +59,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_HERMES_OUTPUT_MISSING`                       | Hermes completed without creating the requested bytecode output.                                                  |
 | `VIFX_HERMES_UNAVAILABLE`                          | No Hermes compiler was found through explicit path, env, workspace, or PATH.                                      |
 | `VIFX_MIGRATION_UNSAFE_CHANGE`                     | A requested migration step was too risky or targeted the wrong project type.                                      |
+| `VIFX_MODULE_FORMAT_UNSUPPORTED`                   | A bundle target requested the `metro` module format before Metro-graph serialization shipped.                    |
 | `VIFX_MONOREPO_EXPERIMENTAL`                       | Project inspection detected a workspace path that still depends on the current monorepo-limited support corridor. |
 | `VIFX_NO_ISSUES`                                   | Project inspection completed without finding actionable issues.                                                   |
 | `VIFX_PROD_ASSET_VARIANT_MISSING`                  | A production asset group reached the writer without any file variants to copy.                                    |
