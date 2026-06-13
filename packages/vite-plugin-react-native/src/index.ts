@@ -33,6 +33,11 @@ import type {
   VifxWebRuntimeArtifact,
 } from "@vifx/types";
 import {
+  isGatedNativeCompatModule,
+  isNativeCompatMockEnabled,
+  warnNativeCompatPreviewOnce,
+} from "./compat-gate.ts";
+import {
   resolveBuildMinify,
   resolveBundleMode,
   resolveDefines,
@@ -115,6 +120,7 @@ interface ReactNativePluginState {
   assetExtensions: string[];
   assetFiles: Set<string>;
   babelInPackages: string[];
+  compatPreview: boolean;
   conditions: string[];
   entry: string;
   extensions: string[];
@@ -361,7 +367,7 @@ function createTransformId(filePath: string) {
 
 function resolveCompatId(
   source: string,
-  state: Pick<ReactNativePluginState, "reactNativeCompat" | "resolvePlatform">,
+  state: Pick<ReactNativePluginState, "compatPreview" | "reactNativeCompat" | "resolvePlatform">,
 ) {
   if (state.reactNativeCompat === "web" && WEB_COMPAT_SPECIFIERS.has(source)) {
     return createCompatId(source);
@@ -382,7 +388,11 @@ function resolveCompatId(
     return createCompatId(source);
   }
 
-  if (state.resolvePlatform !== "web" && source === REANIMATED_NATIVE_COMPAT_ID) {
+  if (
+    source === REANIMATED_NATIVE_COMPAT_ID &&
+    isGatedNativeCompatModule(source) &&
+    isNativeCompatMockEnabled(state)
+  ) {
     return createCompatId(source);
   }
 
@@ -1807,6 +1817,7 @@ async function renderCompat(
         return null;
       }
 
+      warnNativeCompatPreviewOnce(REANIMATED_NATIVE_COMPAT_ID);
       return renderReanimatedNativeCompat();
     case REANIMATED_VALIDATE_WORKLETS_VERSION_ID:
       return [
@@ -2612,6 +2623,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
     assetFiles: new Set<string>(),
     babelInPackages: normalizeBabelInPackages(options.babelInPackages),
+    compatPreview: options.compatPreview ?? false,
     conditions: normalizeConditions(
       options.resolvePlatform ?? options.platform,
       options.conditions,
@@ -2768,6 +2780,7 @@ async function writeWebRuntimeArtifacts(options: {
   aliases?: Record<string, string>;
   assetExtensions?: string[];
   babelInPackages?: string[];
+  compatPreview?: boolean;
   conditions?: string[];
   entry: string;
   extensions?: string[];
@@ -2802,6 +2815,7 @@ async function writeWebRuntimeArtifacts(options: {
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
     assetFiles: new Set<string>(),
     babelInPackages: normalizeBabelInPackages(options.babelInPackages),
+    compatPreview: options.compatPreview ?? false,
     conditions: normalizeConditions("web", options.conditions),
     entry: previewEntry,
     extensions: normalizeExtensions(options.extensions),
@@ -3102,6 +3116,7 @@ export async function buildReactNativeBundle(
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
     assetFiles: new Set<string>(),
     babelInPackages: normalizeBabelInPackages(options.babelInPackages),
+    compatPreview: options.compatPreview ?? false,
     conditions: normalizeConditions(
       options.resolvePlatform ?? options.platform,
       options.conditions,
@@ -3236,6 +3251,7 @@ export async function buildReactNativeBundle(
           aliases: options.aliases,
           assetExtensions: options.assetExtensions,
           babelInPackages: options.babelInPackages,
+          compatPreview: state.compatPreview,
           conditions: options.conditions,
           entry,
           extensions: options.extensions,

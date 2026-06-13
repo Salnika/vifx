@@ -452,6 +452,7 @@ async function buildExpoTarget(
   const result = await buildReactNativeBundle({
     aliases: target.aliases,
     babelInPackages: target.babelInPackages,
+    compatPreview: target.compatPreview,
     entry: target.entry,
     env: process.env,
     hermes: target.hermes,
