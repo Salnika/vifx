@@ -74,6 +74,7 @@ const VIFX_VITE_CONFIG_FILE_NAMES = [
 function createTargetsSection(options: {
   aliases?: Record<string, string>;
   babelInPackages?: string[];
+  compatPreview?: boolean;
   entry: string;
   jsxInPackages?: string[];
   reactNativeCompat?: "web";
@@ -87,6 +88,13 @@ function createTargetsSection(options: {
       : [];
   const babelInPackagesLine = options.babelInPackages
     ? [`        babelInPackages: ${JSON.stringify(options.babelInPackages)},`]
+    : [];
+  const compatPreviewLine = options.compatPreview
+    ? [
+        "        // compatPreview enables Vifx's JS-only native compat mocks (e.g.",
+        "        // react-native-reanimated) so Expo Go boots until real worklets land.",
+        "        compatPreview: true,",
+      ]
     : [];
   const jsxInPackagesLine = options.jsxInPackages
     ? [`        jsxInPackages: ${JSON.stringify(options.jsxInPackages)},`]
@@ -111,6 +119,7 @@ function createTargetsSection(options: {
     "      {",
     ...aliasesLine,
     ...babelInPackagesLine,
+    ...compatPreviewLine,
     '        platform: "ios",',
     `        entry: ${JSON.stringify(options.entry)},`,
     "        hermes: false,",
@@ -124,6 +133,7 @@ function createTargetsSection(options: {
     "      {",
     ...aliasesLine,
     ...babelInPackagesLine,
+    ...compatPreviewLine,
     '        platform: "android",',
     `        entry: ${JSON.stringify(options.entry)},`,
     "        hermes: false,",
@@ -142,6 +152,7 @@ export function buildVifxConfigTemplate(
   options: {
     aliases?: Record<string, string>;
     babelInPackages?: string[];
+    compatPreview?: boolean;
     entry?: string;
     jsxInPackages?: string[];
     reactNativeCompat?: "web";
@@ -164,6 +175,7 @@ export function buildVifxConfigTemplate(
           ...createTargetsSection({
             aliases: options.aliases,
             babelInPackages: options.babelInPackages,
+            compatPreview: options.compatPreview,
             entry: options.entry ?? "./index.js",
             jsxInPackages: options.jsxInPackages,
             reactNativeCompat: options.reactNativeCompat,
@@ -201,6 +213,7 @@ export function buildVifxConfigTemplate(
 export function buildExpoSetupVifxConfigTemplate(options: {
   aliases?: Record<string, string>;
   babelInPackages?: string[];
+  compatPreview?: boolean;
   entry: string;
   jsxInPackages?: string[];
   reactNativeCompat?: "web";
@@ -222,6 +235,7 @@ export function buildExpoSetupVifxConfigTemplate(options: {
       ...createTargetsSection({
         aliases: options.aliases,
         babelInPackages: options.babelInPackages,
+        compatPreview: options.compatPreview,
         entry: options.entry,
         jsxInPackages: options.jsxInPackages,
         reactNativeCompat: options.reactNativeCompat,
@@ -768,6 +782,7 @@ export async function planExpoSetup(
       after: buildExpoSetupVifxConfigTemplate({
         aliases: templateOptions.aliases,
         babelInPackages: templateOptions.babelInPackages,
+        compatPreview: options.expoGo ? true : undefined,
         entry: templateOptions.entry,
         jsxInPackages: templateOptions.jsxInPackages,
         reactNativeCompat: options.expoGo ? undefined : templateOptions.reactNativeCompat,

@@ -324,6 +324,7 @@ export async function runRunCommand(argv: string[], cwd: string): Promise<CliRes
     const buildResult = await buildReactNativeBundle({
       aliases: target.aliases,
       babelInPackages: target.babelInPackages,
+      compatPreview: target.compatPreview,
       entry: target.entry,
       env: process.env,
       hermes: target.hermes,
