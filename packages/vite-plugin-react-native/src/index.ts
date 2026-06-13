@@ -26,6 +26,7 @@ import type {
   VifxBuildAssetArtifact,
   VifxBundleArtifacts,
   VifxBundleMode,
+  VifxModuleFormat,
   VifxPlatform,
   VifxReactNativePluginOptions,
   VifxTransformCacheStats,
@@ -58,6 +59,11 @@ import {
   resolveOutputOptions,
 } from "./modes.ts";
 import { buildModuleRegistryBundle } from "./module-registry/index.ts";
+import {
+  applyReactRefreshTransform,
+  shouldApplyReactRefresh,
+  wrapWithRefreshRegistration,
+} from "./react-refresh.ts";
 
 export {
   resolveBuildMinify,
@@ -140,6 +146,7 @@ interface ReactNativePluginState {
   jsxInPackages: string[];
   mainFields: string[];
   mode: VifxBundleMode;
+  moduleFormat?: VifxModuleFormat;
   platform: VifxReactNativePluginOptions["platform"];
   projectRoot: string;
   reactNativeCompat: NonNullable<VifxReactNativePluginOptions["reactNativeCompat"]>;
@@ -2125,6 +2132,15 @@ function resolvePluginVersion(): string {
 
 const dependencyVersionCache = new Map<string, string>();
 
+function reactRefreshModuleId(
+  id: string,
+  state: Pick<ReactNativePluginState, "projectRoot">,
+): string {
+  const normalizedId = stripQuery(id);
+  const relativePath = path.relative(state.projectRoot, normalizedId);
+  return toPosixPath(relativePath === "" ? path.basename(normalizedId) : relativePath);
+}
+
 function resolveDependencyVersion(name: string, fromUrl = import.meta.url): string {
   const cacheKey = `${fromUrl} ${name}`;
   const cached = dependencyVersionCache.get(cacheKey);
@@ -2380,6 +2396,32 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         const decision = await pipeline.decideTransform(id, code);
 
         if (decision.strategy === "project-babel") {
+          // Project source under metro + dev gets React Refresh wired through
+          // the project's own Babel runtime, replacing the plain project-babel
+          // transform for those files.
+          if (
+            shouldApplyReactRefresh({
+              options: { mode: state.mode, moduleFormat: state.moduleFormat },
+              id,
+              projectRoot: state.projectRoot,
+            })
+          ) {
+            const runtime = await loadProjectBabelRuntime(state.projectRoot);
+            if (runtime) {
+              const refreshed = await applyReactRefreshTransform({
+                code,
+                id,
+                babel: runtime,
+                platform: state.resolvePlatform,
+                projectRoot: state.projectRoot,
+              });
+              return {
+                code: wrapWithRefreshRegistration(refreshed.code, reactRefreshModuleId(id, state)),
+                map: null,
+              };
+            }
+          }
+
           const transformed = await transformWithProjectBabel(code, id, decision);
           if (transformed) {
             return transformed;
@@ -2608,6 +2650,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
       options.mainFields,
     ),
     mode: resolveBundleMode(options),
+    moduleFormat: options.moduleFormat,
     platform: options.platform,
     projectRoot,
     reactNativeCompat: options.reactNativeCompat ?? "none",
@@ -3101,6 +3144,7 @@ export async function buildReactNativeBundle(
       options.mainFields,
     ),
     mode,
+    moduleFormat,
     platform: options.platform,
     projectRoot,
     reactNativeCompat: options.reactNativeCompat ?? "none",
