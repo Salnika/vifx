@@ -165,6 +165,19 @@ export interface VifxExpoNoMetroWorkflowReport {
   title: string;
 }
 
+export type VifxExpoSdkSupportTier = "experimental" | "validated";
+
+export interface VifxExpoSdkSupportEntry {
+  notes: string[];
+  tier: VifxExpoSdkSupportTier;
+}
+
+export interface VifxExpoSdkSupportStatus {
+  notes: string[];
+  sdk: string | null;
+  tier: VifxExpoSdkSupportTier | "unknown" | "unsupported";
+}
+
 export interface VifxExpoNoMetroContractReport {
   appDirectory: boolean;
   decision: "blocked" | "partial" | "supported";
@@ -172,6 +185,7 @@ export interface VifxExpoNoMetroContractReport {
   expoVersion: string | null;
   projectRoot: string;
   reactNativeVersion: string | null;
+  sdkSupport: VifxExpoSdkSupportStatus;
   supportedExpoSdk: string;
   warnings: string[];
   workflows: VifxExpoNoMetroWorkflowReport[];

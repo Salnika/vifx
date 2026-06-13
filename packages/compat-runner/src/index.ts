@@ -67,9 +67,11 @@ export {
   collectAssetMetadata,
   collectAssetScaleGroup,
   detectPackageManager,
+  EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS,
   findWorkspaceRoot,
   inspectProject,
   resolvePlatformFile,
+  SUPPORTED_EXPO_SDK_MAJOR_VERSIONS,
 } from "./primitives.ts";
 export { formatCompatReport } from "./reporters.ts";
 export * from "./types.ts";

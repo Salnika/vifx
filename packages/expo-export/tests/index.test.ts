@@ -2,7 +2,13 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
-import { evaluateExpoNoMetroContract, inspectExpoExport, writeExpoExport } from "../src/index.ts";
+import {
+  evaluateExpoNoMetroContract,
+  formatSupportedExpoSdkList,
+  getSdkSupportTier,
+  inspectExpoExport,
+  writeExpoExport,
+} from "../src/index.ts";
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "../../../fixtures");
 
@@ -255,4 +261,51 @@ test("writeExpoExport generates inspectable bundles, manifests, metadata, and as
   expect(
     audit.workflows.find((workflow) => workflow.id === "export-artifacts")?.evidence,
   ).toContain("Vifx-generated export metadata detected.");
+});
+
+test("getSdkSupportTier classifies Expo SDK majors into honest support tiers", () => {
+  expect(getSdkSupportTier("~54.0.0")).toMatchObject({ sdk: "54", tier: "validated" });
+  expect(getSdkSupportTier("~55.0.0")).toMatchObject({ sdk: "55", tier: "experimental" });
+  expect(getSdkSupportTier("~56.0.0")).toMatchObject({ sdk: "56", tier: "experimental" });
+  expect(getSdkSupportTier("~57.0.0")).toMatchObject({ sdk: "57", tier: "unsupported" });
+  expect(getSdkSupportTier(null)).toMatchObject({ sdk: null, tier: "unknown" });
+
+  const experimentalNotes = getSdkSupportTier("~55.0.0").notes.join(" ");
+  expect(experimentalNotes).toContain("not device-validated");
+});
+
+test("evaluateExpoNoMetroContract accepts experimental SDKs with tier warnings by default", async () => {
+  const result = await evaluateExpoNoMetroContract({
+    projectRoot: path.join(FIXTURE_ROOT, "expo-sdk55-basic"),
+  });
+
+  expect(result.expoVersion).toBe("~55.0.0");
+  expect(result.supportedExpoSdk).toBe(formatSupportedExpoSdkList());
+  expect(result.sdkSupport.tier).toBe("experimental");
+  expect(result.sdkSupport.sdk).toBe("55");
+  expect(result.warnings.join(" ")).toContain("not device-validated");
+  expect(result.warnings.join(" ")).not.toContain("outside");
+});
+
+test("evaluateExpoNoMetroContract reports SDK 56 on the experimental tier", async () => {
+  const result = await evaluateExpoNoMetroContract({
+    projectRoot: path.join(FIXTURE_ROOT, "expo-sdk56-basic"),
+  });
+
+  expect(result.expoVersion).toBe("~56.0.0");
+  expect(result.sdkSupport.tier).toBe("experimental");
+  expect(result.sdkSupport.sdk).toBe("56");
+  expect(result.warnings.join(" ")).toContain("not device-validated");
+});
+
+test("evaluateExpoNoMetroContract keeps explicit supported SDK flag semantics", async () => {
+  const result = await evaluateExpoNoMetroContract({
+    projectRoot: path.join(FIXTURE_ROOT, "expo-sdk55-basic"),
+    supportedExpoSdk: "54",
+  });
+
+  expect(result.supportedExpoSdk).toBe("54");
+  expect(result.warnings.join(" ")).toContain(
+    'Expo dependency "~55.0.0" is outside the fixture-backed SDK 54 range.',
+  );
 });

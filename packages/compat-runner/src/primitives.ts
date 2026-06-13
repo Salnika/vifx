@@ -39,7 +39,15 @@ const VITE_CONFIG_FILENAMES = [
   "vite.config.js",
 ] as const;
 
-const SUPPORTED_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [54];
+// Mirrors the canonical EXPO_SDK_SUPPORT table in @vifx/expo-export, which is
+// built after this package and therefore cannot be imported here. The CLI test
+// suite asserts that this mirror stays in sync with the canonical table.
+export const SUPPORTED_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [54, 55, 56];
+export const EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [55, 56];
+const VALIDATED_EXPO_SDK_MAJOR_VERSIONS: readonly number[] =
+  SUPPORTED_EXPO_SDK_MAJOR_VERSIONS.filter(
+    (majorVersion) => !EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS.includes(majorVersion),
+  );
 const WALK_IGNORED_DIRECTORIES = new Set([".git", ".vifx", "dist", "node_modules"]);
 
 function toPosixPath(filePath: string) {
@@ -104,6 +112,11 @@ function parsePackageVersionMajor(rawVersion: string | null) {
 function isSupportedExpoVersion(rawVersion: string | null) {
   const majorVersion = parsePackageVersionMajor(rawVersion);
   return majorVersion === null || SUPPORTED_EXPO_SDK_MAJOR_VERSIONS.includes(majorVersion);
+}
+
+function isExperimentalExpoVersion(rawVersion: string | null) {
+  const majorVersion = parsePackageVersionMajor(rawVersion);
+  return majorVersion !== null && EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS.includes(majorVersion);
 }
 
 function parsePackageManager(rawValue: string | undefined) {
@@ -421,6 +434,14 @@ async function buildDiagnostics(
         summary: `Expo version "${inspection.expoVersion}" is outside the fixture-backed SDK range.`,
         hint: `Use Expo SDK ${SUPPORTED_EXPO_SDK_MAJOR_VERSIONS.join(", ")} for the current Vifx experiment path, or keep Metro/Expo CLI for this project.`,
         docsPath: "/reference/support-matrix#versions-and-scope",
+      });
+    } else if (isExperimentalExpoVersion(inspection.expoVersion)) {
+      diagnostics.push({
+        level: "warn",
+        code: "VIFX_PROJECT_EXPERIMENTAL_EXPO_SDK",
+        summary: `Expo version "${inspection.expoVersion}" is on the experimental support tier: static analysis and fixtures only, not device-validated.`,
+        hint: `Expo SDK ${VALIDATED_EXPO_SDK_MAJOR_VERSIONS.join(", ")} remains the device-validated gate. Keep Metro/Expo CLI as the fallback for device workflows on this SDK.`,
+        docsPath: "/reference/support-matrix#expo-sdk-support",
       });
     }
   }

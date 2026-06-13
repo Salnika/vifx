@@ -1,5 +1,7 @@
 import path from "node:path";
 import { inspectProject } from "@vifx/compat-runner";
+import { getSdkSupportTier } from "@vifx/expo-export";
+import type { VifxExpoSdkSupportStatus } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
 import type { CliResult } from "../types.ts";
 
@@ -37,6 +39,15 @@ function formatDiagnostic(diagnostic: {
   return lines.join("\n");
 }
 
+function formatExpoSdkSupportSection(sdkSupport: VifxExpoSdkSupportStatus) {
+  return [
+    "Expo SDK support:",
+    `  SDK: ${sdkSupport.sdk ?? "not detected"}`,
+    `  Tier: ${sdkSupport.tier}`,
+    ...sdkSupport.notes.map((note) => `  - ${note}`),
+  ].join("\n");
+}
+
 export async function runDoctorCommand(argv: string[], cwd: string): Promise<CliResult> {
   const parsed = parseFlags(argv, {
     booleanFlags: ["help", "json"],
@@ -63,16 +74,21 @@ export async function runDoctorCommand(argv: string[], cwd: string): Promise<Cli
 
   const targetPath = path.resolve(cwd, parsed.positional[0] ?? ".");
   const inspection = await inspectProject(targetPath);
+  const expoSdkSupport = getSdkSupportTier(inspection.expoVersion);
 
   if (parsed.flags.json) {
     return {
       exitCode: 0,
-      stdout: JSON.stringify(inspection, null, 2),
+      stdout: JSON.stringify({ ...inspection, expoSdkSupport }, null, 2),
       stderr: "",
     };
   }
 
   const workspaceRoot = path.relative(targetPath, inspection.workspaceRoot) || ".";
+  const expoSdkSupportSection =
+    inspection.projectType === "expo" || inspection.expoVersion !== null
+      ? [formatExpoSdkSupportSection(expoSdkSupport), ""]
+      : [];
 
   return {
     exitCode: 0,
@@ -91,6 +107,7 @@ export async function runDoctorCommand(argv: string[], cwd: string): Promise<Cli
       formatValue("Workspace root", workspaceRoot),
       formatValue("Hermes compiler", inspection.hermesCompilerPath ?? "unavailable"),
       "",
+      ...expoSdkSupportSection,
       "Issues:",
       inspection.diagnostics.length > 0
         ? inspection.diagnostics.map((diagnostic) => formatDiagnostic(diagnostic)).join("\n\n")

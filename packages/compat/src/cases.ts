@@ -50,6 +50,44 @@ export const compatCases: CompatCase[] = [
     docsPath: "/compat/doctor#project-detection",
   },
   {
+    id: "doctor.project-detection.expo-sdk55-basic",
+    title: "Expo SDK 55 projects are detected on the experimental support tier",
+    category: "doctor.projectDetection",
+    fixtureId: "expo-sdk55-basic",
+    operation: {
+      kind: "project-info",
+    },
+    expected: {
+      projectType: "expo",
+      packageManager: "pnpm",
+      expoVersion: "~55.0.0",
+      reactNativeVersion: "0.83.0",
+    },
+    docsPath: "/compat/doctor#project-detection",
+    notes: [
+      "Expo SDK 55 support is experimental: static analysis and fixtures only, not device-validated.",
+    ],
+  },
+  {
+    id: "doctor.project-detection.expo-sdk56-basic",
+    title: "Expo SDK 56 projects are detected on the experimental support tier",
+    category: "doctor.projectDetection",
+    fixtureId: "expo-sdk56-basic",
+    operation: {
+      kind: "project-info",
+    },
+    expected: {
+      projectType: "expo",
+      packageManager: "pnpm",
+      expoVersion: "~56.0.0",
+      reactNativeVersion: "0.84.0",
+    },
+    docsPath: "/compat/doctor#project-detection",
+    notes: [
+      "Expo SDK 56 support is experimental: static analysis and fixtures only, not device-validated.",
+    ],
+  },
+  {
     id: "resolver.platform-extensions.ios-file-wins",
     title: "iOS files win over native files",
     category: "resolver.platformExtensions",

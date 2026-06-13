@@ -34,7 +34,7 @@ Audits and runs the Expo no-Metro Vite bundling corridor. The --expo-go dev mode
 
 Options:
   --export-root     Optional existing Expo export directory to inspect.
-  --supported-sdk   Fixture-backed Expo SDK range to report against. Default: 54.
+  --supported-sdk   Explicit Expo SDK range to report against; overrides the support table. Default: SDK 54 (validated) plus 55 and 56 (experimental, static analysis only).
   --json            Output machine-readable JSON.
   --help            Show this message.
 `;
@@ -1086,6 +1086,7 @@ export async function runExpoAuditCommand(argv: string[], cwd: string): Promise<
       `Project root: ${report.projectRoot}`,
       `Decision: ${report.decision}`,
       `Supported Expo SDK: ${report.supportedExpoSdk}`,
+      `SDK support tier: ${report.sdkSupport.tier}${report.sdkSupport.sdk ? ` (SDK ${report.sdkSupport.sdk})` : ""}`,
       `Expo: ${report.expoVersion ?? "missing"}`,
       `React Native: ${report.reactNativeVersion ?? "missing"}`,
       `Expo Router: ${report.expoRouter ? "detected" : "missing"}`,
