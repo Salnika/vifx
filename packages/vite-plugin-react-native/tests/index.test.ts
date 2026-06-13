@@ -1402,3 +1402,115 @@ test("buildReactNativeBundle can opt out of React and React Native shims", async
   expect(bundleSource).toContain("runtime exports");
   expect(bundleSource).not.toContain("\\0vifx:shim:react-native");
 });
+
+async function writeJsxPackageFixture(projectRoot: string) {
+  const packageRoot = path.join(projectRoot, "node_modules", "vifx-jsx-cache");
+
+  await mkdir(packageRoot, { recursive: true });
+  await writeFile(
+    path.join(packageRoot, "package.json"),
+    JSON.stringify({ name: "vifx-jsx-cache", main: "index.js" }, null, 2),
+  );
+  await writeFile(
+    path.join(packageRoot, "index.js"),
+    [
+      'console.log("jsx cache package");',
+      "export default function CachedEntry() {",
+      '  return <div className="cached" />;',
+      "}",
+      "",
+    ].join("\n"),
+  );
+
+  return packageRoot;
+}
+
+test("buildReactNativeBundle reports transform cache stats and reuses them on a warm rebuild", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+  await writeJsxPackageFixture(projectRoot);
+
+  const buildOnce = () =>
+    buildReactNativeBundle({
+      entry: "vifx-jsx-cache",
+      jsxInPackages: ["vifx-jsx-cache"],
+      outDir: ".vifx/helper-ios-transform-cache",
+      platform: "ios",
+      projectRoot,
+    });
+
+  const cold = await buildOnce();
+  expect(cold.cacheStats).toBeDefined();
+  expect(cold.cacheStats?.misses ?? 0).toBeGreaterThan(0);
+  expect(cold.cacheStats?.writes ?? 0).toBeGreaterThan(0);
+  expect(cold.cacheStats?.hits).toBe(0);
+  expect(cold.cacheStats?.errors).toBe(0);
+
+  const warm = await buildOnce();
+  expect(warm.cacheStats?.hits ?? 0).toBeGreaterThan(0);
+  expect(warm.cacheStats?.misses).toBe(0);
+  expect(warm.cacheStats?.writes).toBe(0);
+  expect(warm.cacheStats?.errors).toBe(0);
+
+  const bundleSource = await readFile(path.join(projectRoot, warm.bundle.path), "utf8");
+  expect(bundleSource).toContain("jsx cache package");
+});
+
+test("buildReactNativeBundle omits cache stats when the transform cache is disabled", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+  await writeJsxPackageFixture(projectRoot);
+
+  const first = await buildReactNativeBundle({
+    entry: "vifx-jsx-cache",
+    jsxInPackages: ["vifx-jsx-cache"],
+    outDir: ".vifx/helper-ios-transform-cache-off",
+    platform: "ios",
+    projectRoot,
+    transformCache: false,
+  });
+  const second = await buildReactNativeBundle({
+    entry: "vifx-jsx-cache",
+    jsxInPackages: ["vifx-jsx-cache"],
+    outDir: ".vifx/helper-ios-transform-cache-off",
+    platform: "ios",
+    projectRoot,
+    transformCache: false,
+  });
+
+  expect(first.cacheStats).toBeUndefined();
+  expect(second.cacheStats).toBeUndefined();
+  const bundleSource = await readFile(path.join(projectRoot, second.bundle.path), "utf8");
+  expect(bundleSource).toContain("jsx cache package");
+});
+
+test("buildReactNativeBundle invalidates the transform cache when source content changes", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+  const packageRoot = await writeJsxPackageFixture(projectRoot);
+
+  const buildOnce = () =>
+    buildReactNativeBundle({
+      entry: "vifx-jsx-cache",
+      jsxInPackages: ["vifx-jsx-cache"],
+      outDir: ".vifx/helper-ios-transform-cache-invalidate",
+      platform: "ios",
+      projectRoot,
+    });
+
+  await buildOnce();
+
+  // Change the package source: the warm build must miss (and re-transform).
+  await writeFile(
+    path.join(packageRoot, "index.js"),
+    [
+      'console.log("jsx cache package edited");',
+      "export default function CachedEntry() {",
+      '  return <div className="edited" />;',
+      "}",
+      "",
+    ].join("\n"),
+  );
+
+  const afterEdit = await buildOnce();
+  expect(afterEdit.cacheStats?.misses ?? 0).toBeGreaterThan(0);
+  const bundleSource = await readFile(path.join(projectRoot, afterEdit.bundle.path), "utf8");
+  expect(bundleSource).toContain("jsx cache package edited");
+});
