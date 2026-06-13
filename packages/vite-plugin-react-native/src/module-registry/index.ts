@@ -5,6 +5,7 @@ import { VifxError } from "@vifx/errors";
 import { planMetroEntryModule, type MetroEntryPlan } from "./ordering.ts";
 import {
   serializeModuleRegistryBundle,
+  type SerializedModule,
   type StagedChunk,
   type StagedChunkSourceMap,
 } from "./serializer.ts";
@@ -22,11 +23,14 @@ export type { MetroEntryPlan, MetroEntryPlanOptions, OrderableModule } from "./o
 export { collectModuleGraph, serializeModuleRegistryBundle } from "./serializer.ts";
 export type {
   ComposedSourceMap,
+  SerializedModule,
   SerializedModuleRegistryBundle,
   SerializeModuleRegistryOptions,
   StagedChunk,
   StagedChunkSourceMap,
 } from "./serializer.ts";
+export { computeHmrUpdate } from "./hmr-delta.ts";
+export type { ComputeHmrUpdateOptions, HmrUpdate, HmrUpdateModule } from "./hmr-delta.ts";
 
 const BUNDLE_FILE_NAME = "index.bundle";
 const STAGING_DIR_NAME = ".module-registry-staging";
@@ -36,6 +40,13 @@ export interface BuildModuleRegistryBundleOptions {
   absoluteOutDir: string;
   /** User entry as configured (path-like or bare specifier). */
   entry: string;
+  /**
+   * Module id map from the previous build, so ids stay stable across rebuilds
+   * (required for Fast Refresh deltas to target the right module).
+   */
+  existingModuleIds?: ReadonlyMap<string, number>;
+  /** Emit the Fast Refresh runtime prelude (development bundles only). */
+  hmr?: boolean;
   /** Called for non-fatal setup notices (defaults to `console.warn`). */
   onWarn?: (message: string) => void;
   /** Vite plugins for the staging build (React Native or Expo pipeline). */
@@ -51,6 +62,10 @@ export interface ModuleRegistryBundleResult {
   entryModuleId: number;
   /** Number of `__d` module factories in the bundle. */
   moduleCount: number;
+  /** Stable module id map for this build (feed back as `existingModuleIds`). */
+  moduleIds: Map<string, number>;
+  /** Per-module factory blocks, for diffing into Fast Refresh deltas. */
+  modules: SerializedModule[];
   /** Entry planning outcome (polyfills, InitializeCore availability). */
   plan: MetroEntryPlan;
   /** Absolute path of the emitted `index.bundle.map`. */
@@ -179,6 +194,8 @@ export async function buildModuleRegistryBundle(
   const serialized = serializeModuleRegistryBundle({
     absoluteOutDir: options.absoluteOutDir,
     chunks,
+    existingModuleIds: options.existingModuleIds,
+    hmr: options.hmr,
     outputFileName: BUNDLE_FILE_NAME,
     stagingDir,
   });
@@ -199,6 +216,8 @@ export async function buildModuleRegistryBundle(
     bundlePath,
     entryModuleId: serialized.entryModuleId,
     moduleCount: serialized.moduleIds.size,
+    moduleIds: serialized.moduleIds,
+    modules: serialized.modules,
     plan,
     sourceMapPath,
   };

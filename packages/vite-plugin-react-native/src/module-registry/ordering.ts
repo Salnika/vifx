@@ -210,14 +210,35 @@ export function orderModules(modules: OrderableModule[], entryFileName: string):
 }
 
 /**
- * Assigns stable numeric module ids. Ids are derived from the emitted file
- * names sorted lexicographically, which is deterministic for identical
- * builds and independent of traversal order.
+ * Assigns stable numeric module ids.
+ *
+ * With no `existingIds`, ids are the file names sorted lexicographically and
+ * numbered 0..n-1 — deterministic for identical builds and independent of
+ * traversal order.
+ *
+ * Ids must be **stable across rebuilds** for Fast Refresh: an HMR delta
+ * re-`__d`s a module by id, so if adding or removing a file renumbered the
+ * others, the update would patch the wrong module. Passing the previous build's
+ * id map preserves every known file's id and assigns fresh ids (past the current
+ * maximum) only to newly seen files; a removed file keeps its id reserved so it
+ * is never reused for a different file.
  */
-export function assignModuleIds(fileNames: string[]): Map<string, number> {
-  const ids = new Map<string, number>();
-  for (const [index, fileName] of [...fileNames].sort().entries()) {
-    ids.set(fileName, index);
+export function assignModuleIds(
+  fileNames: string[],
+  existingIds?: ReadonlyMap<string, number>,
+): Map<string, number> {
+  const ids = new Map<string, number>(existingIds);
+  let nextId = 0;
+  for (const id of ids.values()) {
+    if (id >= nextId) {
+      nextId = id + 1;
+    }
+  }
+  for (const fileName of [...fileNames].sort()) {
+    if (!ids.has(fileName)) {
+      ids.set(fileName, nextId);
+      nextId += 1;
+    }
   }
   return ids;
 }

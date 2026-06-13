@@ -83,7 +83,14 @@ export type {
 export {
   buildModuleRegistryBundle,
   buildModuleRegistryPrelude,
+  computeHmrUpdate,
   MODULE_REGISTRY_PRELUDE,
+} from "./module-registry/index.ts";
+export type {
+  ComputeHmrUpdateOptions,
+  HmrUpdate,
+  HmrUpdateModule,
+  SerializedModule,
 } from "./module-registry/index.ts";
 export type {
   BuildModuleRegistryBundleOptions,

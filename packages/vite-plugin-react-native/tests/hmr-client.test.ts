@@ -51,7 +51,9 @@ function loadHmrClient(options: {
 }): HmrClient {
   const body = VIFX_HMR_CLIENT_SOURCE.replace("export default HMRClient;", "return HMRClient;");
   // Self-connect (setTimeout) is suppressed with a no-op so each test drives the
-  // lifecycle explicitly through enable()/setup().
+  // lifecycle explicitly through enable()/setup(). `new Function` is the point:
+  // it evaluates the injected client source exactly as the device runtime would.
+  // eslint-disable-next-line no-implied-eval
   const factory = new Function("globalThis", "WebSocket", "console", "setTimeout", body);
   return factory(
     options.globals,

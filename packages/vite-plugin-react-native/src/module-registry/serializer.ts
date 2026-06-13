@@ -1,7 +1,7 @@
 import path from "node:path";
 import { VifxError } from "@vifx/errors";
 import { assignModuleIds, orderModules, type OrderableModule } from "./ordering.ts";
-import { MODULE_REGISTRY_PRELUDE } from "./runtime.ts";
+import { buildModuleRegistryPrelude, MODULE_REGISTRY_PRELUDE } from "./runtime.ts";
 
 /**
  * Serializer for the Metro-compatible module-registry bundle format.
@@ -53,6 +53,14 @@ export interface SerializeModuleRegistryOptions {
   absoluteOutDir: string;
   /** Staged per-module chunks. Exactly one must have `isEntry: true`. */
   chunks: StagedChunk[];
+  /**
+   * Module id map from a previous build of this bundle. When provided, known
+   * file names keep their id so Fast Refresh deltas target the right module
+   * across rebuilds (see {@link assignModuleIds}).
+   */
+  existingModuleIds?: ReadonlyMap<string, number>;
+  /** Emit the Fast Refresh runtime prelude (development bundles only). */
+  hmr?: boolean;
   /** File name of the final bundle (used in the map and trailing comment). */
   outputFileName: string;
   /**
@@ -60,6 +68,26 @@ export interface SerializeModuleRegistryOptions {
    * `sources` entries are resolved relative to each chunk's location in it.
    */
   stagingDir: string;
+}
+
+/**
+ * One serialized module, exposed so a dev server can diff builds and emit Fast
+ * Refresh deltas without re-parsing the concatenated bundle.
+ */
+export interface SerializedModule {
+  /** Dependency module ids, in first-seen order (the `__d` dependency map). */
+  dependencyIds: number[];
+  /**
+   * The `__d(function (...) { <body> }` text — everything up to and including
+   * the factory's closing brace, but without the trailing `, <id>, <deps>);`.
+   * An HMR delta re-emits this as
+   * `<factory>, <id>, <deps>, undefined, <inverseDeps>);`.
+   */
+  factory: string;
+  /** Staged (posix) file name this module was emitted from. */
+  fileName: string;
+  /** Stable numeric module id. */
+  id: number;
 }
 
 export interface SerializedModuleRegistryBundle {
@@ -71,6 +99,8 @@ export interface SerializedModuleRegistryBundle {
   map: ComposedSourceMap;
   /** Module ids keyed by staged file name. */
   moduleIds: Map<string, number>;
+  /** Per-module factory blocks in bundle (dependency) order. */
+  modules: SerializedModule[];
 }
 
 export interface ComposedSourceMap {
@@ -492,7 +522,10 @@ export function serializeModuleRegistryBundle(
 
   const graph = collectModuleGraph(chunks);
   const orderedFileNames = orderModules(graph, entryChunk.fileName);
-  const moduleIds = assignModuleIds(chunks.map((chunk) => chunk.fileName));
+  const moduleIds = assignModuleIds(
+    chunks.map((chunk) => chunk.fileName),
+    options.existingModuleIds,
+  );
   const chunksByFileName = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
   const entryModuleId = moduleIds.get(entryChunk.fileName);
   if (entryModuleId === undefined) {
@@ -512,11 +545,13 @@ export function serializeModuleRegistryBundle(
     sourcesContent: [],
   };
 
-  const parts: string[] = [MODULE_REGISTRY_PRELUDE];
+  const prelude = options.hmr ? buildModuleRegistryPrelude({ hmr: true }) : MODULE_REGISTRY_PRELUDE;
+  const parts: string[] = [prelude];
+  const serializedModules: SerializedModule[] = [];
   // Line index (zero-based) at which the next appended part begins. The
   // prelude ends with a newline, so the count of newline characters is the
   // index of the line right after it.
-  let bundleLineOffset = countLines(MODULE_REGISTRY_PRELUDE) - 1;
+  let bundleLineOffset = countLines(prelude) - 1;
 
   for (const fileName of orderedFileNames) {
     const chunk = chunksByFileName.get(fileName);
@@ -529,8 +564,12 @@ export function serializeModuleRegistryBundle(
     }
 
     const rewrittenModule = rewriteRequires(chunk, moduleIds);
-    const header = `${MODULE_FACTORY_HEADER}\n`;
-    const footer = `\n}, ${moduleId}, ${JSON.stringify(rewrittenModule.dependencyIds)}); // ${fileName}\n`;
+    // The `__d(function (...) { <body> }` text, minus the `, <id>, <deps>);`
+    // tail. Keeping it separate lets HMR re-emit the same factory with an
+    // inverse-dependency argument without re-parsing the bundle. Composing
+    // `factory + tail` reproduces the previous `header + code + footer` bytes
+    // exactly, so the bundle and its source map are unchanged.
+    const factory = `${MODULE_FACTORY_HEADER}\n${rewrittenModule.code}\n}`;
 
     appendChunkMappings({
       builder,
@@ -541,8 +580,16 @@ export function serializeModuleRegistryBundle(
       stagingDir: options.stagingDir,
     });
 
-    const moduleText = header + rewrittenModule.code + footer;
+    const moduleText = `${factory}, ${moduleId}, ${JSON.stringify(
+      rewrittenModule.dependencyIds,
+    )}); // ${fileName}\n`;
     parts.push(moduleText);
+    serializedModules.push({
+      dependencyIds: rewrittenModule.dependencyIds,
+      factory,
+      fileName,
+      id: moduleId,
+    });
     bundleLineOffset += countLines(moduleText) - 1;
   }
 
@@ -567,5 +614,6 @@ export function serializeModuleRegistryBundle(
       version: 3,
     },
     moduleIds,
+    modules: serializedModules,
   };
 }
