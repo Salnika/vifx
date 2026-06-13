@@ -13,9 +13,8 @@ const cache = createTransformCache({
   version: "1",
 });
 
-const result = await cache.getOrCompute(
-  [code, "oxc", transformOptions, pluginVersion],
-  async () => transformWithOxc(code, id, transformOptions),
+const result = await cache.getOrCompute([code, "oxc", transformOptions, pluginVersion], async () =>
+  transformWithOxc(code, id, transformOptions),
 );
 
 cache.stats(); // { hits, misses, writes, errors }
