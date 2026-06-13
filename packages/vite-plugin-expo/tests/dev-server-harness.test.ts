@@ -71,7 +71,7 @@ interface ExpoGoManifest {
 CONTRACT_TEST(
   "GET / + /manifest + /index.exp serve an Expo Go manifest with protocol headers and fetchable assets",
   async () => {
-    await withServer(async (handle, project) => {
+    await withServer(async (handle) => {
       for (const route of ["/", "/manifest", "/index.exp"]) {
         const response = await handle.get(route);
         if (response.status !== 200) {
@@ -129,7 +129,6 @@ CONTRACT_TEST(
           )}.`,
         );
       }
-      void project;
     });
   },
 );
@@ -222,14 +221,17 @@ CONTRACT_TEST(
 
 CONTRACT_TEST("the /assets route refuses path traversal outside the project", async () => {
   await withServer(async (handle) => {
-    const traversal = await handle.get("/assets/../../package.json");
-
-    // The contract is "do not leak files above the served roots". A 200 carrying
-    // the JSON of the harness package manifest would be a traversal escape.
-    if (traversal.status === 200 && /"name"\s*:/u.test(traversal.body)) {
-      throw new Error(
-        "/assets traversal contract: `/assets/../../package.json` leaked file contents with a 200 response.",
-      );
+    // `fetch` collapses `..`/`%2e%2e` client-side, so the request never reaches
+    // the server's guard. A raw socket sends the path verbatim, exercising the
+    // server's own dot-segment defense. Both literal and percent-encoded forms
+    // must be rejected without leaking the file above the served roots.
+    for (const rawPath of ["/assets/../../package.json", "/assets/%2e%2e/%2e%2e/package.json"]) {
+      const traversal = await handle.getRaw(rawPath);
+      if (traversal.status === 200 && /"name"\s*:/u.test(traversal.body)) {
+        throw new Error(
+          `/assets traversal contract: \`${rawPath}\` leaked file contents with a 200 response.`,
+        );
+      }
     }
   });
 });

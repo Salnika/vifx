@@ -13,6 +13,7 @@
 
 import { createServer } from "node:http";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { connect } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { type RawData, WebSocket } from "ws";
@@ -214,6 +215,13 @@ export interface TestServerHandle {
   get: (pathname: string) => Promise<HttpProbe>;
   /** GET helper for an absolute URL (manifest emits absolute asset/bundle URLs). */
   fetchUrl: (url: string) => Promise<HttpProbe>;
+  /**
+   * Raw-socket GET that sends `rawPath` verbatim in the request line. Unlike
+   * `fetch`, this does NOT collapse `..`/percent-encoded dot segments, so the
+   * server's own path handling (e.g. the `/assets` traversal guard) is what is
+   * actually exercised.
+   */
+  getRaw: (rawPath: string) => Promise<RawProbe>;
   /** POST helper (JSON body) for `/symbolicate`. */
   postJson: (pathname: string, body: unknown) => Promise<HttpProbe>;
   /** Open a `ws` client against `/message` (resolves once OPEN). */
@@ -230,6 +238,40 @@ export interface HttpProbe {
   headers: Headers;
   json: <T = unknown>() => T;
   status: number;
+}
+
+export interface RawProbe {
+  /** Decoded response body (everything after the header terminator). */
+  body: string;
+  /** Parsed numeric status code from the HTTP status line. */
+  status: number;
+}
+
+/**
+ * Send a single GET request over a raw TCP socket with `rawPath` placed verbatim
+ * in the request line, then resolve the parsed status + body. Used to defeat the
+ * client-side URL normalization that `fetch` applies, so traversal-style paths
+ * reach the server unmodified.
+ */
+async function rawRequest(host: string, port: number, rawPath: string): Promise<RawProbe> {
+  const response = await new Promise<string>((resolve, reject) => {
+    const socket = connect(port, host, () => {
+      socket.write(`GET ${rawPath} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`);
+    });
+    const chunks: Buffer[] = [];
+    socket.on("data", (chunk: Buffer) => chunks.push(chunk));
+    socket.once("error", reject);
+    socket.once("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+  });
+
+  const separatorIndex = response.indexOf("\r\n\r\n");
+  const statusLine = response.slice(0, response.indexOf("\r\n"));
+  const status = Number.parseInt(statusLine.split(" ")[1] ?? "", 10);
+
+  return {
+    body: separatorIndex === -1 ? "" : response.slice(separatorIndex + 4),
+    status: Number.isNaN(status) ? 0 : status,
+  };
 }
 
 /**
@@ -285,6 +327,7 @@ export async function startTestServer(
     },
     fetchUrl: async (url) => probe(await fetch(url)),
     get: async (pathname) => probe(await fetch(`${server.url}${pathname}`)),
+    getRaw: (rawPath) => rawRequest(server.host, server.port, rawPath),
     openEventsClient: () => openClient("/events"),
     openMessageClient: () => openClient("/message"),
     postJson: async (pathname, body) =>
