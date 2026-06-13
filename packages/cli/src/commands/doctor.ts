@@ -75,8 +75,7 @@ function formatMetroMigrationSection(analysis: MetroConfigAnalysis) {
   ];
 
   if (entries.length === 0) {
-    lines.push("  INFO   VIFX_METRO_CONFIG_COMPATIBLE");
-    lines.push("         No migration actions detected for this Metro config.");
+    lines.push("  OK     No migration actions detected for this Metro config.");
   } else {
     lines.push(entries.join("\n\n"));
   }
