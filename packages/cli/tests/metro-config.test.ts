@@ -68,7 +68,9 @@ test("maps the svg transformer to a named recipe hint with a docs pointer", asyn
   expect(hint).toBeDefined();
   expect(hint?.severity).toBe("action");
   expect(hint?.suggestion).toContain("react-native-svg-transformer");
-  expect(hint?.suggestion).toContain("https://vifx.dev/migration/metro#react-native-svg-transformer");
+  expect(hint?.suggestion).toContain(
+    "https://vifx.dev/migration/metro#react-native-svg-transformer",
+  );
   expect(hint?.vifxConfigKey).toBe("plugins");
 });
 
@@ -182,7 +184,7 @@ test("falls back to a conservative static scan when the config is unparseable", 
       "module.exports = {",
       "  resolver: {",
       "    assetExts: [", // unterminated array + missing braces
-      '    resolveRequest: function (context) { return',
+      "    resolveRequest: function (context) { return",
       "",
     ].join("\n"),
   });
@@ -229,9 +231,13 @@ test(".cjs and .mjs configs are discovered", async () => {
 
   expect(cjsAnalysis.found).toBe(true);
   expect(cjsAnalysis.path).toBe("metro.config.cjs");
-  expect(cjsAnalysis.hints.some((entry) => entry.source.startsWith("metro.config.cjs:"))).toBe(true);
+  expect(cjsAnalysis.hints.some((entry) => entry.source.startsWith("metro.config.cjs:"))).toBe(
+    true,
+  );
 
   expect(mjsAnalysis.found).toBe(true);
   expect(mjsAnalysis.path).toBe("metro.config.mjs");
-  expect(mjsAnalysis.hints.some((entry) => entry.source.startsWith("metro.config.mjs:"))).toBe(true);
+  expect(mjsAnalysis.hints.some((entry) => entry.source.startsWith("metro.config.mjs:"))).toBe(
+    true,
+  );
 });

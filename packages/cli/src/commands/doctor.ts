@@ -55,9 +55,11 @@ function formatMetroHint(hint: MetroMigrationHint) {
 }
 
 function formatMetroUnsupported(feature: MetroUnsupportedFeature) {
-  return [`  UNSUP  ${feature.code}`, `         ${feature.source}`, `         ${feature.suggestion}`].join(
-    "\n",
-  );
+  return [
+    `  UNSUP  ${feature.code}`,
+    `         ${feature.source}`,
+    `         ${feature.suggestion}`,
+  ].join("\n");
 }
 
 function formatMetroMigrationSection(analysis: MetroConfigAnalysis) {

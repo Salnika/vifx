@@ -786,3 +786,95 @@ test("--debug sets VIFX_DEBUG environment variable", async () => {
     process.env.VIFX_DEBUG = originalDebug;
   }
 });
+
+test("doctor renders a Metro config migration section with mapped hints", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-metro-section-"));
+  const targetPath = path.join(tempRoot, "rn-bare-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "metro.config.js"),
+    [
+      "module.exports = {",
+      "  resolver: {",
+      '    assetExts: ["png", "lottie"],',
+      '    extraNodeModules: { "@app/core": "../core" },',
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
+
+  const result = await executeCli(["doctor", targetPath]);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("Metro config migration:");
+  expect(result.stdout).toContain("metro.config.js:resolver.assetExts");
+  expect(result.stdout).toContain("vifx.config.ts: assetExtensions");
+  expect(result.stdout).toContain("metro.config.js:resolver.extraNodeModules");
+});
+
+test("doctor omits the Metro config migration section when no metro config exists", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-metro-missing-"));
+  const targetPath = path.join(tempRoot, "app");
+
+  await mkdir(targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "package.json"),
+    JSON.stringify({ name: "app", version: "0.0.0" }, null, 2),
+  );
+
+  const result = await executeCli(["doctor", targetPath]);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).not.toContain("Metro config migration:");
+});
+
+test("doctor --json includes the metroConfigMigration analysis", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-metro-json-"));
+  const targetPath = path.join(tempRoot, "rn-bare-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "metro.config.js"),
+    "module.exports = { resolver: { resolveRequest: () => null } };\n",
+  );
+
+  const result = await executeCli(["doctor", targetPath, "--json"]);
+
+  expect(result.exitCode).toBe(0);
+  const payload = JSON.parse(result.stdout) as {
+    metroConfigMigration: {
+      found: boolean;
+      extraction: string;
+      unsupported: Array<{ code: string }>;
+    };
+  };
+
+  expect(payload.metroConfigMigration.found).toBe(true);
+  expect(payload.metroConfigMigration.unsupported[0]?.code).toBe(
+    "VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST",
+  );
+});
+
+test("setup includes Metro config migration notes for projects with a metro config", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-metro-setup-"));
+  const targetPath = path.join(tempRoot, "expo-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-basic"), targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "metro.config.js"),
+    [
+      "module.exports = {",
+      '  transformer: { babelTransformerPath: "react-native-svg-transformer" },',
+      "};",
+      "",
+    ].join("\n"),
+  );
+
+  const result = await executeCli(["setup", targetPath, "--dry-run"]);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toContain("Metro config migration:");
+  expect(result.stdout).toContain("react-native-svg-transformer");
+});
