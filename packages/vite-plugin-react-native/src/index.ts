@@ -20,10 +20,17 @@ import { validateSourceMap } from "@vifx/source-map-tools";
 import type {
   VifxBuildAssetArtifact,
   VifxBundleArtifacts,
+  VifxBundleMode,
+  VifxModuleFormat,
   VifxPlatform,
   VifxReactNativePluginOptions,
   VifxWebRuntimeArtifact,
 } from "@vifx/types";
+import {
+  applyReactRefreshTransform,
+  shouldApplyReactRefresh,
+  wrapWithRefreshRegistration,
+} from "./react-refresh.ts";
 
 const DEFAULT_EXTENSIONS = ["tsx", "ts", "jsx", "js", "json"] as const;
 const DEFAULT_NATIVE_MAIN_FIELDS = ["react-native", "main", "module"] as const;
@@ -80,6 +87,8 @@ interface ReactNativePluginState {
   extensions: string[];
   jsxInPackages: string[];
   mainFields: string[];
+  mode?: VifxBundleMode;
+  moduleFormat?: VifxModuleFormat;
   platform: VifxReactNativePluginOptions["platform"];
   projectRoot: string;
   reactNativeCompat: NonNullable<VifxReactNativePluginOptions["reactNativeCompat"]>;
@@ -2118,6 +2127,15 @@ function shouldTransformWithProjectBabel(
   return matchesNodeModulePackagePattern(id, state.babelInPackages);
 }
 
+function reactRefreshModuleId(
+  id: string,
+  state: Pick<ReactNativePluginState, "projectRoot">,
+): string {
+  const normalizedId = stripQuery(id);
+  const relativePath = path.relative(state.projectRoot, normalizedId);
+  return toPosixPath(relativePath === "" ? path.basename(normalizedId) : relativePath);
+}
+
 function shouldTransformProjectSourceWithBabel(
   id: string,
   state: Pick<ReactNativePluginState, "projectRoot" | "resolvePlatform">,
@@ -2280,6 +2298,29 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         const transformed = await transformWithProjectBabel(code, id, true);
         if (transformed) {
           return transformed;
+        }
+      }
+
+      if (
+        shouldApplyReactRefresh({
+          options: { mode: state.mode, moduleFormat: state.moduleFormat },
+          id,
+          projectRoot: state.projectRoot,
+        })
+      ) {
+        const runtime = await loadProjectBabelRuntime(state.projectRoot);
+        if (runtime) {
+          const refreshed = await applyReactRefreshTransform({
+            code,
+            id,
+            babel: runtime,
+            platform: state.resolvePlatform,
+            projectRoot: state.projectRoot,
+          });
+          return {
+            code: wrapWithRefreshRegistration(refreshed.code, reactRefreshModuleId(id, state)),
+            map: null,
+          };
         }
       }
 
@@ -2460,6 +2501,8 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
       options.resolvePlatform ?? options.platform,
       options.mainFields,
     ),
+    mode: options.mode,
+    moduleFormat: options.moduleFormat,
     platform: options.platform,
     projectRoot,
     reactNativeCompat: options.reactNativeCompat ?? "none",
@@ -2931,6 +2974,8 @@ export async function buildReactNativeBundle(
       options.resolvePlatform ?? options.platform,
       options.mainFields,
     ),
+    mode: options.mode,
+    moduleFormat: options.moduleFormat,
     platform: options.platform,
     projectRoot,
     reactNativeCompat: options.reactNativeCompat ?? "none",

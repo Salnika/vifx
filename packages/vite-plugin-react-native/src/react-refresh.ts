@@ -73,9 +73,7 @@ function isProjectSource(id: string, projectRoot: string) {
   }
 
   const relativePath = path.relative(projectRoot, normalizedId);
-  return (
-    relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)
-  );
+  return relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
 }
 
 /**
@@ -129,8 +127,8 @@ export interface ApplyReactRefreshTransformInput {
    */
   babel: ProjectBabelLike;
   /**
-   * Root to resolve `react-refresh/babel` from. Defaults to the directory of this
-   * module's package, which declares `react-refresh` as a direct dependency.
+   * Module URL or filesystem path to resolve `react-refresh/babel` from. Defaults
+   * to this module, whose package declares `react-refresh` as a direct dependency.
    */
   resolveFrom?: string;
   /** Platform passed to the babel caller (defaults to a native platform). */
@@ -151,7 +149,7 @@ function resolveReactRefreshBabelPlugin(resolveFrom: string): string {
   }
 
   try {
-    const requireFrom = createRequire(path.join(resolveFrom, "package.json"));
+    const requireFrom = createRequire(resolveFrom);
     const resolved = requireFrom.resolve("react-refresh/babel");
     reactRefreshBabelPluginCache.set(resolveFrom, resolved);
     return resolved;
@@ -193,7 +191,10 @@ export async function applyReactRefreshTransform(
         name: "vifx",
         platform: input.platform ?? "ios",
         projectRoot: input.projectRoot,
-        supportsStaticESM: true,
+        // CommonJS output: the registration wrapper places the module body inside
+        // a function, so top-level ESM `import`/`export` must be lowered first.
+        // The metro module format consumes CommonJS factories, so this matches.
+        supportsStaticESM: false,
       },
       configFile: false,
       filename: id,
@@ -225,7 +226,7 @@ export async function applyReactRefreshTransform(
 }
 
 function defaultResolveFrom(): string {
-  return path.dirname(new URL("../", import.meta.url).pathname);
+  return import.meta.url;
 }
 
 function toJsStringLiteral(value: string): string {
