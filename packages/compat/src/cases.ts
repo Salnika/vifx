@@ -397,4 +397,94 @@ export const compatCases: CompatCase[] = [
     notes: ["Synthetic replica registering native host components from a TSX entry."],
     docsPath: "/compat/libraries#react-native-svg",
   },
+  {
+    id: "lib-expo-image",
+    title: "expo-image bundles its precompiled Expo-module build entry",
+    category: "libraries",
+    fixtureId: "lib-expo-image",
+    operation: {
+      kind: "library-build",
+      packageName: "expo-image",
+      platform: "ios",
+      bundleProbes: ["Image", "prefetch"],
+      partialAspects: [
+        "the ExpoImage native view manager is only registered on a device, so images do not decode or render from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "expo-image",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the Expo module's precompiled build entry and its vendored expo-modules-core, then bundles them. The native ExpoImage view is unavailable at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic Expo module rendering a native view via a vendored expo-modules-core."],
+    docsPath: "/compat/libraries#expo-image",
+  },
+  {
+    id: "lib-flash-list",
+    title: "@shopify/flash-list bundles its scoped react-native TS entry and transitive deps",
+    category: "libraries",
+    fixtureId: "lib-flash-list",
+    operation: {
+      kind: "library-build",
+      packageName: "@shopify/flash-list",
+      platform: "ios",
+      bundleProbes: ["FlashList", "DataProvider"],
+      partialAspects: [
+        "the AutoLayoutView native host component is only available on a device, so the high-performance list layout does not run from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "@shopify/flash-list",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the scoped react-native/source field to TypeScript sources and bundles them together with the vendored recyclerlistview. The AutoLayoutView native component is unavailable at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic scoped package building on a vendored recyclerlistview."],
+    docsPath: "/compat/libraries#shopify-flash-list",
+  },
+  {
+    id: "lib-expo-sqlite",
+    title: "expo-sqlite bundles its precompiled Expo-module build entry",
+    category: "libraries",
+    fixtureId: "lib-expo-sqlite",
+    operation: {
+      kind: "library-build",
+      packageName: "expo-sqlite",
+      platform: "ios",
+      bundleProbes: ["openDatabaseSync", "requireNativeModule"],
+      partialAspects: [
+        "the ExpoSQLite native module is only registered on a device, so opening a database throws from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "expo-sqlite",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the Expo module's precompiled build entry and its vendored expo-modules-core, then bundles them. The native ExpoSQLite module is unavailable at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic Expo module opening a database via the ExpoSQLite native module."],
+    docsPath: "/compat/libraries#expo-sqlite",
+  },
 ];

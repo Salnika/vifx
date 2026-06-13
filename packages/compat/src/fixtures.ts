@@ -123,6 +123,39 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
       "Synthetic replica registering native host components (RNSVGSvgView, RNSVGPath) from a TSX react-native entry.",
     ],
   },
+  {
+    id: "lib-expo-image",
+    title: "Library: expo-image",
+    relativePath: "fixtures/libs/expo-image",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "expo-module", "exports-map", "native-component"],
+    notes: [
+      "Synthetic Expo module shipping precompiled build/ output that renders a native view via a vendored expo-modules-core.",
+    ],
+  },
+  {
+    id: "lib-flash-list",
+    title: "Library: @shopify/flash-list",
+    relativePath: "fixtures/libs/flash-list",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "scoped-package", "native-component", "transitive-dep"],
+    notes: [
+      "Synthetic scoped package building on a vendored recyclerlistview and rendering a native AutoLayoutView.",
+    ],
+  },
+  {
+    id: "lib-expo-sqlite",
+    title: "Library: expo-sqlite",
+    relativePath: "fixtures/libs/expo-sqlite",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: ["library-fixture", "synthetic-package", "expo-module", "native-module", "exports-map"],
+    notes: [
+      "Synthetic Expo module opening a database through the ExpoSQLite native module via a vendored expo-modules-core.",
+    ],
+  },
 ];
 
 const FIXTURE_MANIFEST_MAP = new Map(FIXTURE_MANIFESTS.map((fixture) => [fixture.id, fixture]));
