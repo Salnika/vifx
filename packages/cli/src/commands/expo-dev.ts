@@ -32,9 +32,56 @@ Options:
   --help      Show this message.
 `;
 
-export const EXPO_GO_DEV_KEY_HINT = "Keys: r reload  m dev menu";
+export const EXPO_GO_DEV_KEY_HINT = "Keys: r reload  m dev menu  j devtools";
 const CTRL_C_BYTE = 0x03;
 const CTRL_D_BYTE = 0x04;
+const DEVTOOLS_OPEN_PATHNAME = "/open-debugger";
+
+/**
+ * Opens React Native DevTools (Fusebox) for the most recently connected debug
+ * target by POSTing to the dev server's own `/open-debugger` endpoint, served by
+ * `@react-native/dev-middleware`. The middleware selects the target and launches
+ * the DevTools browser window itself, so this works cross-platform without the
+ * CLI spawning a browser.
+ *
+ * The request is sent over loopback (`127.0.0.1`) so binding to `0.0.0.0` or a
+ * `--public-host` never affects the self-call. A `404` means no Hermes debug
+ * target is connected yet (the app must be running on a device/simulator first).
+ *
+ * Exported for unit testing; not part of the public CLI surface.
+ */
+export function openReactNativeDevTools(server: VifxExpoGoDevServer): void {
+  if (typeof server.port !== "number" || !server.inspectorProxyUrl) {
+    process.stdout.write(
+      "RN DevTools indisponible : ce serveur n'expose pas de proxy inspector.\n",
+    );
+    return;
+  }
+
+  void fetch(`http://127.0.0.1:${server.port}${DEVTOOLS_OPEN_PATHNAME}`, { method: "POST" })
+    .then((response) => {
+      if (response.status === 404) {
+        process.stdout.write(
+          "Aucune cible de debug connectée. Ouvre/recharge l'app sur ton device (moteur Hermes requis), puis appuie de nouveau sur j.\n",
+        );
+      } else if (!response.ok) {
+        process.stdout.write(`Impossible d'ouvrir RN DevTools (HTTP ${response.status}).\n`);
+      }
+      // 200 → dev-middleware is launching the DevTools window.
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stdout.write(`Impossible d'ouvrir RN DevTools : ${message}\n`);
+    });
+}
+
+export interface AttachExpoGoDevKeysOptions {
+  /**
+   * Injectable RN DevTools opener. Defaults to {@link openReactNativeDevTools};
+   * tests pass a spy so the `j` binding can be asserted without a live server.
+   */
+  openDevTools?: (server: VifxExpoGoDevServer) => void;
+}
 
 /**
  * Wires TTY keybindings for the Expo Go dev server. Returns a cleanup function
@@ -43,12 +90,17 @@ const CTRL_D_BYTE = 0x04;
  *
  * Exported for unit testing; not part of the public CLI surface.
  */
-export function attachExpoGoDevKeys(server: VifxExpoGoDevServer): (() => void) | undefined {
+export function attachExpoGoDevKeys(
+  server: VifxExpoGoDevServer,
+  options: AttachExpoGoDevKeysOptions = {},
+): (() => void) | undefined {
   const stdin = process.stdin;
   const broadcast = server.broadcast;
   if (broadcast === undefined || !stdin.isTTY || typeof stdin.setRawMode !== "function") {
     return undefined;
   }
+
+  const openDevTools = options.openDevTools ?? openReactNativeDevTools;
 
   const onKey = (chunk: Buffer) => {
     // Ctrl+C and Ctrl+D forward to the standard SIGINT path so raw mode never
@@ -67,6 +119,11 @@ export function attachExpoGoDevKeys(server: VifxExpoGoDevServer): (() => void) |
 
     if (key === "m") {
       broadcast("devMenu");
+      return;
+    }
+
+    if (key === "j") {
+      openDevTools(server);
     }
   };
 

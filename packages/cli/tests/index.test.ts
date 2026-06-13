@@ -1178,6 +1178,24 @@ test("expo dev keybindings broadcast reload on r and dev menu on m", () => {
   expect(calls).toHaveLength(2);
 });
 
+test("expo dev keybindings open RN DevTools on j", () => {
+  const stdin = createFakeStdin({ isTTY: true });
+  const { server } = createBroadcastSpyServer();
+  const opened: VifxExpoGoDevServer[] = [];
+
+  const detach = withFakeStdin(stdin, () =>
+    attachExpoGoDevKeys(server, { openDevTools: (target) => opened.push(target) }),
+  );
+
+  stdin.emitData(Buffer.from("j"));
+  expect(opened).toEqual([server]);
+
+  detach?.();
+  // Detached: further keys are ignored.
+  stdin.emitData(Buffer.from("j"));
+  expect(opened).toHaveLength(1);
+});
+
 test("expo dev keybindings are skipped without an interactive TTY", () => {
   const stdin = createFakeStdin({ isTTY: false });
   const { calls, server } = createBroadcastSpyServer();
@@ -1204,4 +1222,5 @@ test("expo dev keybindings are skipped when the server has no broadcast", () => 
 test("expo dev exposes its keybinding hint string", () => {
   expect(EXPO_GO_DEV_KEY_HINT).toContain("r reload");
   expect(EXPO_GO_DEV_KEY_HINT).toContain("m dev menu");
+  expect(EXPO_GO_DEV_KEY_HINT).toContain("j devtools");
 });
