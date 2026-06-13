@@ -2085,21 +2085,29 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
 
     const projectConfig =
       decision.configMode === "project-config" ? await pipeline.getProjectBabelConfig() : null;
-    const transformOptions: Record<string, unknown> = projectConfig?.configFilePath
-      ? {
-          // Run the project's OWN configuration so its real plugins
-          // (worklets, nativewind, react-compiler, ...) execute.
-          ...baseOptions,
-          configFile: projectConfig.configFilePath,
-          cwd: state.projectRoot,
-          root: state.projectRoot,
-        }
-      : {
-          // Legacy fallback: only the resolved React Native preset runs.
-          ...baseOptions,
-          configFile: false,
-          presets: [runtime.presetPath],
-        };
+
+    let transformOptions: Record<string, unknown>;
+    if (projectConfig?.configFilePath) {
+      // Run the project's OWN configuration so its real plugins (worklets,
+      // nativewind, react-compiler, ...) execute.
+      transformOptions = {
+        ...baseOptions,
+        configFile: projectConfig.configFilePath,
+        cwd: state.projectRoot,
+        root: state.projectRoot,
+      };
+    } else if (runtime.presetPath) {
+      // Legacy fallback: only the resolved React Native preset runs.
+      transformOptions = {
+        ...baseOptions,
+        configFile: false,
+        presets: [runtime.presetPath],
+      };
+    } else {
+      // No project config matched and no preset is installed: project Babel
+      // has nothing to contribute, so defer to the OXC fast path.
+      return null;
+    }
 
     const transformed = await runtime.transformAsync(code, transformOptions);
 

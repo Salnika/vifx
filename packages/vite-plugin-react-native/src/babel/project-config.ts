@@ -31,8 +31,13 @@ interface BabelPartialConfigLike {
  * declares instead of anything bundled with Vifx.
  */
 export interface ProjectBabelRuntime {
-  /** `babel-preset-expo` or `@react-native/babel-preset`, resolved from the project. */
-  presetPath: string;
+  /**
+   * `babel-preset-expo` or `@react-native/babel-preset`, resolved from the
+   * project. `null` when neither preset is installed — the project may still
+   * drive transforms entirely through its own `babel.config.js`, so a missing
+   * preset must not disable the Babel runtime.
+   */
+  presetPath: string | null;
   /** `null` when the project's `@babel/core` predates partial-config support. */
   loadPartialConfigAsync:
     | ((options: Record<string, unknown>) => Promise<BabelPartialConfigLike | null>)
@@ -108,11 +113,14 @@ export async function loadProjectBabelRuntime(
         return null;
       }
 
-      let presetPath: string;
-      try {
-        presetPath = requireFromProject.resolve("babel-preset-expo");
-      } catch {
-        presetPath = requireFromProject.resolve("@react-native/babel-preset");
+      let presetPath: string | null = null;
+      for (const presetRequest of ["babel-preset-expo", "@react-native/babel-preset"]) {
+        try {
+          presetPath = requireFromProject.resolve(presetRequest);
+          break;
+        } catch {
+          // Try the next preset; a project may rely solely on babel.config.js.
+        }
       }
 
       return {
