@@ -1,7 +1,7 @@
 # Current Milestones
 
 > This file is now a pointer. The active roadmap and milestones live in
-> **`PLAN.md`** (full Metro replacement, phases 0–6) and the architecture
+> **`PLAN.md`** (full Metro replacement, phases 0–7) and the architecture
 > decision records in **`docs/adr/`**. The shipped 20-unit batch and the
 > next-up work are summarized in **`NEXT.md`**; live progress is in
 > **`STATUS.md`**; the V2 Expo Go product corridor and its acceptance gate are
