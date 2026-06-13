@@ -23,6 +23,7 @@
     "@vifx/hermes-tools": "workspace:*",
     "@vifx/platform-resolver": "workspace:*",
     "@vifx/source-map-tools": "workspace:*",
+    "@vifx/transform-cache": "workspace:*",
     "@vifx/types": "workspace:*",
     "react-refresh": "catalog:",
     "vite": "catalog:"

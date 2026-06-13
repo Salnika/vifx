@@ -460,6 +460,7 @@ async function buildExpoTarget(
     shimJsxRuntime: target.shimJsxRuntime,
     shimReact: target.shimReact,
     shimReactNative: target.shimReactNative,
+    transformCache: target.transformCache,
   });
 
   return {

@@ -141,6 +141,7 @@ export async function runBuildCommand(argv: string[], cwd: string): Promise<CliR
       shimJsxRuntime: target.shimJsxRuntime,
       shimReact: target.shimReact,
       shimReactNative: target.shimReactNative,
+      transformCache: target.transformCache,
     });
     results.push({
       durationMs: Date.now() - startedAt,

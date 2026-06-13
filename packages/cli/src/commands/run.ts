@@ -336,6 +336,7 @@ export async function runRunCommand(argv: string[], cwd: string): Promise<CliRes
       shimJsxRuntime: target.shimJsxRuntime,
       shimReact: target.shimReact,
       shimReactNative: target.shimReactNative,
+      transformCache: target.transformCache,
     });
 
     if (!buildResult.runtime) {

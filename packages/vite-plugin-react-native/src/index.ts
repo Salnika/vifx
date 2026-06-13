@@ -1,6 +1,7 @@
 import { access, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   build,
   transformWithOxc,
@@ -17,11 +18,17 @@ import { VifxError } from "@vifx/errors";
 import { compileHermesBytecode } from "@vifx/hermes-tools";
 import { resolveReactNativeModule } from "@vifx/platform-resolver";
 import { validateSourceMap } from "@vifx/source-map-tools";
+import {
+  createTransformCache,
+  defaultTransformCacheDir,
+  type TransformCache,
+} from "@vifx/transform-cache";
 import type {
   VifxBuildAssetArtifact,
   VifxBundleArtifacts,
   VifxPlatform,
   VifxReactNativePluginOptions,
+  VifxTransformCacheStats,
   VifxWebRuntimeArtifact,
 } from "@vifx/types";
 
@@ -68,6 +75,13 @@ const EXPO_ROUTER_FILE_EXTENSION_PATTERN = /\.[jt]sx?$/u;
 const EXPO_ROUTER_PLATFORM_EXTENSIONS = new Set(["android", "ios", "native", "web"]);
 const projectBabelRuntimeCache = new Map<string, Promise<ProjectBabelRuntime | null>>();
 
+/**
+ * Bump when the transform pipeline output changes in a way that is not already
+ * captured by a tool version (e.g. a change to the OXC option defaults). Mixed
+ * into every transform cache key so stale entries are ignored automatically.
+ */
+const TRANSFORM_CACHE_FORMAT = "1";
+
 type OxcTransformLang = "js" | "jsx" | "ts" | "tsx";
 
 interface ReactNativePluginState {
@@ -87,6 +101,7 @@ interface ReactNativePluginState {
   shimJsxRuntime: boolean;
   shimReact: boolean;
   shimReactNative: boolean;
+  transformCache: TransformCache | null;
 }
 
 interface ProjectBabelRuntime {
@@ -2172,7 +2187,118 @@ async function loadProjectBabelRuntime(projectRoot: string): Promise<ProjectBabe
   return runtimePromise;
 }
 
+let pluginVersionCache: string | undefined;
+
+function resolvePluginVersion(): string {
+  if (pluginVersionCache !== undefined) {
+    return pluginVersionCache;
+  }
+
+  try {
+    const requireFromHere = createRequire(import.meta.url);
+    const manifest = requireFromHere("../package.json") as { version?: unknown };
+    pluginVersionCache = typeof manifest.version === "string" ? manifest.version : "unknown";
+  } catch {
+    pluginVersionCache = "unknown";
+  }
+
+  return pluginVersionCache;
+}
+
+const dependencyVersionCache = new Map<string, string>();
+
+function resolveDependencyVersion(name: string, fromUrl = import.meta.url): string {
+  const cacheKey = `${fromUrl} ${name}`;
+  const cached = dependencyVersionCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  let version = "unknown";
+  try {
+    const requireFrom = createRequire(fromUrl);
+    const manifest = requireFrom(`${name}/package.json`) as { version?: unknown };
+    if (typeof manifest.version === "string") {
+      version = manifest.version;
+    }
+  } catch {
+    version = "unknown";
+  }
+
+  dependencyVersionCache.set(cacheKey, version);
+  return version;
+}
+
+function resolveProjectBabelVersion(projectRoot: string): string {
+  const projectManifestUrl = pathToFileURL(
+    path.join(path.resolve(projectRoot), "package.json"),
+  ).href;
+  return resolveDependencyVersion("@babel/core", projectManifestUrl);
+}
+
+function createTransformCacheForState(options: {
+  projectRoot: string;
+  transformCache?: boolean;
+}): TransformCache | null {
+  if (options.transformCache === false) {
+    return null;
+  }
+
+  const version = [
+    TRANSFORM_CACHE_FORMAT,
+    `plugin@${resolvePluginVersion()}`,
+    `vite@${resolveDependencyVersion("vite")}`,
+    `babel@${resolveProjectBabelVersion(options.projectRoot)}`,
+  ].join("|");
+
+  return createTransformCache({
+    cacheDir: defaultTransformCacheDir(options.projectRoot),
+    version,
+  });
+}
+
 function createReactNativePlugin(state: ReactNativePluginState): Plugin {
+  const cache = state.transformCache;
+
+  const cachedTransform = async (
+    keyParts: readonly unknown[],
+    compute: () => Promise<TransformResult>,
+  ): Promise<TransformResult> => {
+    if (!cache) {
+      return compute();
+    }
+
+    const result = await cache.getOrCompute(keyParts, async () => {
+      const transformed = await compute();
+      return { code: transformed.code, map: transformed.map ?? null };
+    });
+
+    if (typeof result === "string") {
+      return { code: result, map: null };
+    }
+
+    return { code: result.code, map: (result.map as TransformResult["map"]) ?? null };
+  };
+
+  const cacheRelativeId = (id: string): string => {
+    const normalizedId = toPosixPath(stripQuery(id));
+    const relativePath = path.relative(state.projectRoot, normalizedId);
+    return relativePath === "" || relativePath.startsWith("..")
+      ? normalizedId
+      : toPosixPath(relativePath);
+  };
+
+  const runOxcTransform = (code: string, id: string): Promise<TransformResult> => {
+    const options = createOxcTransformOptions(id);
+    return cachedTransform([code, "oxc", options, cacheRelativeId(id)], async () => {
+      const transformed = await transformWithOxc(code, id, options);
+      return {
+        code: transformed.code,
+        map: (transformed.map as TransformResult["map"]) ?? null,
+      };
+    });
+  };
+
   const transformWithProjectBabel = async (code: string, id: string, isNodeModule: boolean) => {
     const runtime = await loadProjectBabelRuntime(state.projectRoot);
 
@@ -2180,32 +2306,48 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       return null;
     }
 
-    const transformed = await runtime.transformAsync(code, {
-      babelrc: false,
-      caller: {
-        bundler: "metro",
-        isDev: true,
-        isHMREnabled: false,
+    const babelKeyParts = [
+      code,
+      "babel",
+      {
         isNodeModule,
-        name: "vifx",
         platform: state.resolvePlatform,
-        projectRoot: state.projectRoot,
+        presetPath: runtime.presetPath,
         supportsStaticESM: !isNodeModule,
       },
-      configFile: false,
-      filename: id,
-      presets: [runtime.presetPath],
-      sourceMaps: true,
+      cacheRelativeId(id),
+    ] as const;
+
+    const transformed = await cachedTransform(babelKeyParts, async () => {
+      const output = await runtime.transformAsync(code, {
+        babelrc: false,
+        caller: {
+          bundler: "metro",
+          isDev: true,
+          isHMREnabled: false,
+          isNodeModule,
+          name: "vifx",
+          platform: state.resolvePlatform,
+          projectRoot: state.projectRoot,
+          supportsStaticESM: !isNodeModule,
+        },
+        configFile: false,
+        filename: id,
+        presets: [runtime.presetPath],
+        sourceMaps: true,
+      });
+
+      return {
+        code: output?.code ?? "",
+        map: (output?.map as TransformResult["map"]) ?? null,
+      };
     });
 
-    if (!transformed?.code) {
+    if (!transformed.code) {
       return null;
     }
 
-    return {
-      code: transformed.code,
-      map: (transformed.map as TransformResult["map"]) ?? null,
-    } satisfies TransformResult;
+    return transformed satisfies TransformResult;
   };
 
   return {
@@ -2242,11 +2384,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
           }
         }
 
-        const transformed = await transformWithOxc(
-          source,
-          originalId,
-          createOxcTransformOptions(originalId),
-        );
+        const transformed = await runOxcTransform(source, originalId);
 
         return transformed.code;
       }
@@ -2297,7 +2435,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         return null;
       }
 
-      const transformed = await transformWithOxc(code, id, createOxcTransformOptions(id));
+      const transformed = await runOxcTransform(code, id);
 
       return {
         code: transformed.code,
@@ -2467,6 +2605,10 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
     shimJsxRuntime: options.shimJsxRuntime ?? true,
     shimReact: options.shimReact ?? true,
     shimReactNative: options.shimReactNative ?? true,
+    transformCache: createTransformCacheForState({
+      projectRoot,
+      transformCache: options.transformCache,
+    }),
   };
 
   return createReactNativePlugin(state);
@@ -2612,6 +2754,7 @@ async function writeWebRuntimeArtifacts(options: {
   shimJsxRuntime: boolean;
   shimReact: boolean;
   shimReactNative: boolean;
+  transformCache: TransformCache | null;
 }): Promise<VifxWebRuntimeArtifact> {
   const previewOutDir = path.join(options.outDir, "runtime");
   const runtimeHtmlPath = path.join(options.outDir, WEB_RUNTIME_HTML_FILE);
@@ -2644,6 +2787,7 @@ async function writeWebRuntimeArtifacts(options: {
     shimJsxRuntime: options.shimJsxRuntime,
     shimReact: options.shimReact,
     shimReactNative: options.shimReactNative,
+    transformCache: options.transformCache,
   };
   const previewInputEntry = await createBuildInputEntry(
     options.projectRoot,
@@ -2915,6 +3059,10 @@ export async function buildReactNativeBundle(
   const entry = options.entry ?? "./index.js";
   const outDir = options.outDir ?? `.vifx/vite/${options.platform}`;
   const absoluteOutDir = path.resolve(projectRoot, outDir);
+  const transformCache = createTransformCacheForState({
+    projectRoot,
+    transformCache: options.transformCache,
+  });
   const state: ReactNativePluginState = {
     aliases: normalizeAliases(options.aliases),
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
@@ -2938,6 +3086,7 @@ export async function buildReactNativeBundle(
     shimJsxRuntime: options.shimJsxRuntime ?? true,
     shimReact: options.shimReact ?? true,
     shimReactNative: options.shimReactNative ?? true,
+    transformCache,
   };
   const inputEntry = await createBuildInputEntry(projectRoot, absoluteOutDir, entry);
   const buildConfig: InlineConfig = {
@@ -3011,8 +3160,11 @@ export async function buildReactNativeBundle(
           shimJsxRuntime: state.shimJsxRuntime,
           shimReact: state.shimReact,
           shimReactNative: state.shimReactNative,
+          transformCache,
         })
       : null;
+
+  const cacheStats: VifxTransformCacheStats | undefined = transformCache?.stats();
 
   return {
     assets,
@@ -3020,6 +3172,7 @@ export async function buildReactNativeBundle(
       path: relativeFrom(projectRoot, bundlePath),
       sizeBytes: bundleStats.size,
     },
+    cacheStats,
     entry,
     hermesBytecodePath,
     mode: "react-native",
