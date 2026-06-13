@@ -307,7 +307,7 @@ test("buildReactNativeBundle can use the built-in react-native-web compat layer"
   ).toContain('<div id="root"></div>');
 });
 
-test("buildReactNativeBundle uses native Reanimated compat for JS-driven Expo Go bundles", async () => {
+test("buildReactNativeBundle uses native Reanimated compat for Expo Go bundles when compatPreview is enabled", async () => {
   const projectRoot = await copyFixture("rn-bare-basic");
 
   await writeFile(
@@ -338,6 +338,7 @@ test("buildReactNativeBundle uses native Reanimated compat for JS-driven Expo Go
   );
 
   const bundle = await buildReactNativeBundle({
+    compatPreview: true,
     entry: "./index.js",
     outDir: ".vifx/helper-ios-reanimated-compat",
     platform: "ios",

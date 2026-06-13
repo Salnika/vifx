@@ -97,6 +97,27 @@ test("planExpoSetup detects Expo Router browser preview targets and opt-in Vite 
   expect(viteConfigChange?.after).toContain('entry: "expo-router/entry"');
 });
 
+test("planExpoSetup --expo-go opts native targets into the gated compat preview", async () => {
+  const plan = await planExpoSetup(path.join(FIXTURE_ROOT, "expo-basic"), {
+    expoGo: true,
+  });
+  const vifxConfigChange = plan.changes.find((change) => change.path === "vifx.config.ts");
+
+  expect(plan.expoGo).toBe(true);
+  expect(vifxConfigChange?.after).toContain("compatPreview: true");
+  expect(vifxConfigChange?.after).toContain("real worklets land");
+  // Expo Go targets native (not the web preview), so reactNativeCompat must stay off.
+  expect(vifxConfigChange?.after).not.toContain('reactNativeCompat: "web"');
+});
+
+test("planExpoSetup leaves compatPreview out of the default (non Expo Go) config", async () => {
+  const plan = await planExpoSetup(path.join(FIXTURE_ROOT, "expo-basic"));
+  const vifxConfigChange = plan.changes.find((change) => change.path === "vifx.config.ts");
+
+  expect(plan.expoGo).toBe(false);
+  expect(vifxConfigChange?.after).not.toContain("compatPreview");
+});
+
 test("planExpoSetup preserves package.json and existing vite.config.ts by default", async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-codemods-setup-"));
   const targetPath = path.join(tempRoot, "expo-basic");
