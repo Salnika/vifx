@@ -1,7 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { collectAssetGroup, writeProdAssets } from "@vifx/asset-registry";
-import type { WriteProdAssetsResult } from "@vifx/asset-registry";
+import { writeProdAssets } from "@vifx/asset-registry";
+import type { ProdLayoutAssetInput, WriteProdAssetsResult } from "@vifx/asset-registry";
 import { loadVifxConfig } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
 import type { VifxBundleArtifacts, VifxBundlePlatform, VifxBundleTargetConfig } from "@vifx/types";
@@ -409,18 +409,24 @@ async function writeAssetsDest(options: {
   projectRoot: string;
   result: VifxBundleArtifacts;
 }) {
-  const descriptors = [];
+  // The build already computed each asset's Metro http server location, name,
+  // type, and scales, and emitted the canonical file at emittedPath. Reuse
+  // that metadata directly (like @vifx/expo-export does) instead of
+  // re-deriving the location from the copied file, which would otherwise leak
+  // the intermediate out dir into the production layout.
+  const inputs: ProdLayoutAssetInput[] = options.result.assets.map((asset) => {
+    const sourceFilePath = path.resolve(options.projectRoot, asset.emittedPath);
+    const scales = asset.scales.length > 0 ? asset.scales : [1];
 
-  for (const asset of options.result.assets) {
-    descriptors.push(
-      await collectAssetGroup({
-        filePath: path.resolve(options.projectRoot, asset.sourceFilePath),
-        projectRoot: options.projectRoot,
-      }),
-    );
-  }
+    return {
+      httpServerLocation: asset.httpServerLocation,
+      name: asset.name,
+      type: asset.type,
+      variants: scales.map((scale) => ({ filePath: sourceFilePath, scale })),
+    };
+  });
 
-  return writeProdAssets(descriptors, {
+  return writeProdAssets(inputs, {
     assetsDest: options.assetsDest,
     platform: options.platform,
   });
