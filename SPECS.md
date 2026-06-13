@@ -1,5 +1,13 @@
 # Vifx SPECS
 
+> **Active roadmap pointer.** This document defines the **V2 Expo Go corridor**
+> and its HNewsPro acceptance gate, and that corridor content remains current.
+> The **active, wider roadmap** for the full Metro replacement is `PLAN.md` plus
+> the architecture decision records in `docs/adr/`. Where a section below marked
+> a capability "out of scope" that the full plan now targets, it is annotated as
+> **superseded** — `PLAN.md` is authoritative for scope, and `STATUS.md` tracks
+> live progress.
+
 ## Intent
 
 Vifx replaces Metro for an Expo project by producing native Expo bundles with Vite and serving them through an Expo-compatible development server. "Complete and functional" means an Expo app can use Vifx instead of Metro for day-to-day development, including Expo Go loading.
@@ -46,6 +54,24 @@ Do not add a new package for the V2 corridor.
 - Generating signed production Updates responses in V2.
 - Running Metro live from Vifx for comparison or acceptance tests.
 - A generic Metro clone for non-Expo React Native apps beyond the existing bundle corridor.
+
+> **Superseded by `PLAN.md`.** The V2 corridor scoped some capabilities out that
+> the full Metro replacement plan now explicitly targets. These are **no longer
+> out of scope** under the active roadmap:
+>
+> - **Full RN Fast Refresh / HMR parity** — now a credibility-core goal
+>   (`PLAN.md` §4 Phase 2; ADR-001 unlocks it via the Metro module-registry dev
+>   format).
+> - **expo-dev-client** — now the primary client target from SDK 55
+>   (`PLAN.md` §4 Phase 4; ADR-003).
+> - **Production / release builds** (`--dev false`, minify, Hermes bytecode,
+>   `export:embed`) — now `PLAN.md` §4 Phase 5 (ADR-001 prod IIFE format).
+> - **Bare React Native** beyond the bundle corridor — now `PLAN.md` §4 Phase 6.
+> - **SDK 55 / 56** — now tracked as experimental tiers (`PLAN.md` §4 Phase 6;
+>   ADR-004).
+>
+> Still genuine non-goals (unchanged in `PLAN.md` §3): replacing the Expo native
+> runtime, EAS Build / Submit, and hosted Updates **signing**.
 
 ## Current State
 
