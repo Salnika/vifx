@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { loadVifxConfig } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
@@ -32,7 +33,15 @@ Options:
   --help      Show this message.
 `;
 
-export const EXPO_GO_DEV_KEY_HINT = "Keys: r reload  m dev menu  j devtools";
+export const EXPO_GO_DEV_KEY_HINT = "Keys: r reload  m dev menu  j devtools  o editor  ? all";
+export const EXPO_GO_DEV_KEYS_HELP = [
+  "Commandes Expo Go :",
+  "  r  recharger l'app",
+  "  m  ouvrir le menu de développement",
+  "  j  ouvrir React Native DevTools",
+  "  o  ouvrir le projet dans l'éditeur ($EXPO_EDITOR / $EDITOR)",
+  "  ?  afficher cette aide",
+].join("\n");
 const CTRL_C_BYTE = 0x03;
 const CTRL_D_BYTE = 0x04;
 const DEVTOOLS_OPEN_PATHNAME = "/open-debugger";
@@ -75,12 +84,46 @@ export function openReactNativeDevTools(server: VifxExpoGoDevServer): void {
     });
 }
 
+/**
+ * Opens the project in the user's editor (`$EXPO_EDITOR` or `$EDITOR`),
+ * mirroring the `o` binding of `expo start`. No-op with a hint when no editor
+ * is configured.
+ *
+ * Exported for unit testing; not part of the public CLI surface.
+ */
+export function openProjectInEditor(server: VifxExpoGoDevServer): void {
+  const editor = process.env.EXPO_EDITOR ?? process.env.EDITOR;
+  if (!editor) {
+    process.stdout.write(
+      "Aucun éditeur configuré : définis $EDITOR (ou $EXPO_EDITOR) pour ouvrir le projet avec o.\n",
+    );
+    return;
+  }
+
+  const target = server.projectRoot ?? process.cwd();
+  try {
+    const child = spawn(editor, [target], { detached: true, stdio: "ignore" });
+    child.once("error", (error) => {
+      process.stdout.write(`Impossible d'ouvrir l'éditeur "${editor}" : ${error.message}\n`);
+    });
+    child.unref();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stdout.write(`Impossible d'ouvrir l'éditeur "${editor}" : ${message}\n`);
+  }
+}
+
 export interface AttachExpoGoDevKeysOptions {
   /**
    * Injectable RN DevTools opener. Defaults to {@link openReactNativeDevTools};
    * tests pass a spy so the `j` binding can be asserted without a live server.
    */
   openDevTools?: (server: VifxExpoGoDevServer) => void;
+  /**
+   * Injectable editor opener. Defaults to {@link openProjectInEditor}; tests pass
+   * a spy so the `o` binding can be asserted without spawning a process.
+   */
+  openEditor?: (server: VifxExpoGoDevServer) => void;
 }
 
 /**
@@ -101,6 +144,7 @@ export function attachExpoGoDevKeys(
   }
 
   const openDevTools = options.openDevTools ?? openReactNativeDevTools;
+  const openEditor = options.openEditor ?? openProjectInEditor;
 
   const onKey = (chunk: Buffer) => {
     // Ctrl+C and Ctrl+D forward to the standard SIGINT path so raw mode never
@@ -124,6 +168,16 @@ export function attachExpoGoDevKeys(
 
     if (key === "j") {
       openDevTools(server);
+      return;
+    }
+
+    if (key === "o") {
+      openEditor(server);
+      return;
+    }
+
+    if (key === "?") {
+      process.stdout.write(`${EXPO_GO_DEV_KEYS_HELP}\n`);
     }
   };
 

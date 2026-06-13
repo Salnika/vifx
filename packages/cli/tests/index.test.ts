@@ -10,7 +10,11 @@ import {
 import { EXPO_SDK_SUPPORT, SUPPORTED_EXPO_SDK_VERSIONS } from "@vifx/expo-export";
 import { expect, test } from "vite-plus/test";
 import { executeCli } from "../src/index.ts";
-import { EXPO_GO_DEV_KEY_HINT, attachExpoGoDevKeys } from "../src/commands/expo-dev.ts";
+import {
+  EXPO_GO_DEV_KEY_HINT,
+  EXPO_GO_DEV_KEYS_HELP,
+  attachExpoGoDevKeys,
+} from "../src/commands/expo-dev.ts";
 import type { VifxExpoGoDevServer } from "@vifx/vite-plugin-expo";
 
 interface FakeStdin {
@@ -1196,6 +1200,44 @@ test("expo dev keybindings open RN DevTools on j", () => {
   expect(opened).toHaveLength(1);
 });
 
+test("expo dev keybindings open the editor on o", () => {
+  const stdin = createFakeStdin({ isTTY: true });
+  const { server } = createBroadcastSpyServer();
+  const opened: VifxExpoGoDevServer[] = [];
+
+  const detach = withFakeStdin(stdin, () =>
+    attachExpoGoDevKeys(server, { openEditor: (target) => opened.push(target) }),
+  );
+
+  stdin.emitData(Buffer.from("o"));
+  expect(opened).toEqual([server]);
+
+  detach?.();
+  stdin.emitData(Buffer.from("o"));
+  expect(opened).toHaveLength(1);
+});
+
+test("expo dev keybindings print the help block on ?", () => {
+  const stdin = createFakeStdin({ isTTY: true });
+  const { server } = createBroadcastSpyServer();
+  const writes: string[] = [];
+  const originalWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+    return true;
+  }) as typeof process.stdout.write;
+
+  const detach = withFakeStdin(stdin, () => attachExpoGoDevKeys(server));
+  try {
+    stdin.emitData(Buffer.from("?"));
+  } finally {
+    process.stdout.write = originalWrite;
+    detach?.();
+  }
+
+  expect(writes.join("")).toContain("afficher cette aide");
+});
+
 test("expo dev keybindings are skipped without an interactive TTY", () => {
   const stdin = createFakeStdin({ isTTY: false });
   const { calls, server } = createBroadcastSpyServer();
@@ -1223,4 +1265,8 @@ test("expo dev exposes its keybinding hint string", () => {
   expect(EXPO_GO_DEV_KEY_HINT).toContain("r reload");
   expect(EXPO_GO_DEV_KEY_HINT).toContain("m dev menu");
   expect(EXPO_GO_DEV_KEY_HINT).toContain("j devtools");
+  expect(EXPO_GO_DEV_KEY_HINT).toContain("o editor");
+  expect(EXPO_GO_DEV_KEY_HINT).toContain("? all");
+  expect(EXPO_GO_DEV_KEYS_HELP).toContain("recharger l'app");
+  expect(EXPO_GO_DEV_KEYS_HELP).toContain("React Native DevTools");
 });
