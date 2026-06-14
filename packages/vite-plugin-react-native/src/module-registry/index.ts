@@ -200,6 +200,14 @@ export async function buildModuleRegistryBundle(
     outputFileName: BUNDLE_FILE_NAME,
     stagingDir,
   });
+  if (serialized.unresolvedModules.length > 0) {
+    const warn = options.onWarn ?? ((message: string) => console.warn(message));
+    warn(
+      `[vifx] ${serialized.unresolvedModules.length} module(s) could not be resolved and were stubbed (they throw if required at runtime): ${serialized.unresolvedModules.join(
+        ", ",
+      )}. Install them if a feature needs them.`,
+    );
+  }
 
   const bundlePath = path.join(options.absoluteOutDir, BUNDLE_FILE_NAME);
   const sourceMapPath = `${bundlePath}.map`;

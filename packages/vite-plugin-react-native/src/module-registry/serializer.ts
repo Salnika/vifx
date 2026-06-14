@@ -101,6 +101,11 @@ export interface SerializedModuleRegistryBundle {
   moduleIds: Map<string, number>;
   /** Per-module factory blocks in bundle (dependency) order. */
   modules: SerializedModule[];
+  /**
+   * Bare specifiers that could not be bundled and were replaced with throwing
+   * stub modules (sorted, unique). Empty when everything resolved.
+   */
+  unresolvedModules: string[];
 }
 
 export interface ComposedSourceMap {
@@ -130,6 +135,44 @@ function toPosix(filePath: string) {
   return filePath.split(path.sep).join("/");
 }
 
+const UNRESOLVED_STUB_DIR = "__vifx-unresolved__";
+
+/** Synthetic staged file name for the throwing stub of an unresolved specifier. */
+function stubFileNameFor(specifier: string): string {
+  return `${UNRESOLVED_STUB_DIR}/${encodeURIComponent(specifier)}.js`;
+}
+
+/**
+ * Bare specifiers the staging build left as literal `require("<pkg>")` calls
+ * (typically uninstalled optional peer deps, e.g. a library that does
+ * `try { require('optional-pkg') } catch {}`). Each gets a stub chunk that
+ * throws when required, so the build succeeds instead of failing on a specifier
+ * the registry cannot bundle, matching Metro's runtime behavior.
+ */
+function collectUnresolvedSpecifiers(chunks: StagedChunk[]): string[] {
+  const specifiers = new Set<string>();
+  for (const chunk of chunks) {
+    for (const match of chunk.code.matchAll(REQUIRE_CALL_PATTERN)) {
+      const specifier = match[2] ?? "";
+      if (specifier.length > 0 && !specifier.startsWith("./") && !specifier.startsWith("../")) {
+        specifiers.add(specifier);
+      }
+    }
+  }
+  return [...specifiers].sort();
+}
+
+function createUnresolvedStubChunk(specifier: string): StagedChunk {
+  return {
+    code: `throw new Error(${JSON.stringify(
+      `Unable to resolve module '${specifier}': it is not installed. Vifx emitted a throwing stub so an optional require can catch it at runtime.`,
+    )});\n`,
+    fileName: stubFileNameFor(specifier),
+    isEntry: false,
+    map: null,
+  };
+}
+
 /**
  * Resolves a require specifier found in a staged chunk against the emitted
  * file set. Staged inter-module requires are always relative paths with
@@ -141,6 +184,14 @@ function resolveStagedRequire(
   knownFileNames: ReadonlySet<string>,
 ): string {
   if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
+    // Bare specifier: an unresolved (typically optional, uninstalled) module the
+    // staging build left as a literal require. It maps to a throwing stub chunk
+    // (added in serializeModuleRegistryBundle), so the build succeeds and an
+    // optional `try { require(x) } catch {}` catches it at runtime, like Metro.
+    const stubFileName = stubFileNameFor(specifier);
+    if (knownFileNames.has(stubFileName)) {
+      return stubFileName;
+    }
     throw new VifxError({
       code: "VIFX_MODULE_REGISTRY_REQUIRE_UNRESOLVED",
       message: `Staged module "${fromFileName}" requires the bare specifier "${specifier}", which cannot be bundled into a module-registry bundle.`,
@@ -502,7 +553,15 @@ const MODULE_FACTORY_HEADER =
 export function serializeModuleRegistryBundle(
   options: SerializeModuleRegistryOptions,
 ): SerializedModuleRegistryBundle {
-  const chunks = options.chunks.map((chunk) => ({ ...chunk, fileName: toPosix(chunk.fileName) }));
+  const baseChunks = options.chunks.map((chunk) => ({
+    ...chunk,
+    fileName: toPosix(chunk.fileName),
+  }));
+  // Bare specifiers the staging build could not bundle become throwing stub
+  // chunks, so they flow through ordering/id-assignment/rewriting like any other
+  // module and the build succeeds (the require throws at runtime).
+  const unresolvedModules = collectUnresolvedSpecifiers(baseChunks);
+  const chunks = [...baseChunks, ...unresolvedModules.map(createUnresolvedStubChunk)];
   const entryChunks = chunks.filter((chunk) => chunk.isEntry);
   if (entryChunks.length !== 1) {
     throw new VifxError({
@@ -615,5 +674,6 @@ export function serializeModuleRegistryBundle(
     },
     moduleIds,
     modules: serializedModules,
+    unresolvedModules,
   };
 }

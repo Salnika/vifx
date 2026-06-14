@@ -433,6 +433,83 @@ test(
   BUILD_TIMEOUT,
 );
 
+const HMR_CLIENT_FIXTURE_FILES: Record<string, string> = {
+  "index.js": [
+    'import "react-native/Libraries/Utilities/HMRClient";',
+    'globalThis.__order.push("entry");',
+    "",
+  ].join("\n"),
+  "node_modules/react-native/package.json":
+    '{ "name": "react-native", "version": "1.0.0", "main": "index.js" }\n',
+  "node_modules/react-native/index.js": "module.exports = {};\n",
+  // A stand-in for RN's real HMRClient.js (which imports metro-runtime). If the
+  // native compat substitution fails, this body lands in the bundle.
+  "node_modules/react-native/Libraries/Utilities/HMRClient.js":
+    'require("metro-runtime/src/modules/HMRClient"); module.exports = { __REAL_METRO_HMRCLIENT: true };\n',
+};
+
+test(
+  "metro bundle substitutes the Vifx HMR client for react-native HMRClient (no metro-runtime)",
+  async () => {
+    const projectRoot = await createSyntheticProject("metro-hmrclient", HMR_CLIENT_FIXTURE_FILES);
+
+    const registry = await buildModuleRegistryBundle({
+      absoluteOutDir: path.join(projectRoot, ".vifx/metro-hmrclient"),
+      entry: "./index.js",
+      plugins: [reactNative({ entry: "./index.js", platform: "ios", projectRoot })],
+      projectRoot,
+    });
+    const bundle = await readFile(registry.bundlePath, "utf8");
+
+    // The Vifx HMR client replaced the real HMRClient: its source is present and
+    // the real client (and its metro-runtime import) are gone.
+    expect(bundle).toContain("vifxHmrSocketUrl");
+    expect(bundle).not.toContain("__REAL_METRO_HMRCLIENT");
+    expect(bundle).not.toContain("metro-runtime");
+  },
+  BUILD_TIMEOUT,
+);
+
+const OPTIONAL_REQUIRE_FIXTURE_FILES: Record<string, string> = {
+  "index.js": [
+    "var loaded;",
+    "try {",
+    "  loaded = require('not-installed-optional-pkg');",
+    "} catch (error) {",
+    "  loaded = 'fallback';",
+    "}",
+    'globalThis.__order.push("entry:" + loaded);',
+    "",
+  ].join("\n"),
+};
+
+test(
+  "metro bundle stubs an unresolvable optional require instead of failing the build",
+  async () => {
+    const projectRoot = await createSyntheticProject(
+      "metro-optional-require",
+      OPTIONAL_REQUIRE_FIXTURE_FILES,
+    );
+    const warnings: string[] = [];
+
+    const registry = await buildModuleRegistryBundle({
+      absoluteOutDir: path.join(projectRoot, ".vifx/metro-optional"),
+      entry: "./index.js",
+      onWarn: (message) => warnings.push(message),
+      plugins: [reactNative({ entry: "./index.js", platform: "ios", projectRoot })],
+      projectRoot,
+    });
+    const bundle = await readFile(registry.bundlePath, "utf8");
+
+    // The build succeeded; the missing module is a throwing stub and a warning fired.
+    expect(bundle).toContain("Unable to resolve module 'not-installed-optional-pkg'");
+    expect(warnings.some((warning) => warning.includes("not-installed-optional-pkg"))).toBe(true);
+    // The optional require's try/catch swallows the throw and falls back.
+    expect(evaluateBundle(bundle).order).toEqual(["entry:fallback"]);
+  },
+  BUILD_TIMEOUT,
+);
+
 test("module-registry prelude implements importDefault/importAll interop and cycle partials", () => {
   const context = vm.createContext({});
   vm.runInContext(MODULE_REGISTRY_PRELUDE, context, { filename: "prelude.js" });

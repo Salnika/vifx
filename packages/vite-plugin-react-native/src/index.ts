@@ -559,6 +559,15 @@ function resolveCompatPath(filePath: string, resolvePlatform: VifxPlatform) {
     return createCompatId("react-native/Libraries/Core/Devtools/getDevServer");
   }
 
+  // Replace React Native's HMRClient on native too, not just web. The real
+  // HMRClient.js imports metro-runtime; substituting the Vifx HMR client
+  // (renderCompat -> VIFX_HMR_CLIENT_SOURCE) removes the last metro-runtime
+  // dependency, so Vifx's own client drives Fast Refresh over /hot. It is inert
+  // unless globalThis.__VIFX_HMR_URL is injected (dev metro bundles only).
+  if (normalizedPath.endsWith("/node_modules/react-native/Libraries/Utilities/HMRClient.js")) {
+    return createCompatId("react-native/Libraries/Utilities/HMRClient");
+  }
+
   if (
     normalizedPath.endsWith(
       "/node_modules/react-native/Libraries/NativeModules/specs/NativeSourceCode.js",
