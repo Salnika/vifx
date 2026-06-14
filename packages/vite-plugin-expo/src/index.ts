@@ -1316,6 +1316,9 @@ export async function startExpoGoDevServer(
         existingModuleIds: prevModuleIds,
       });
       servedBundle = await loadExpoGoServedBundle(projectRoot, artifacts);
+      // In Fast Refresh mode the metro build always populates moduleGraph; the
+      // else is the hoisted/non-FR path. Advance prev state together with the
+      // diff so it can never desync from servedBundle.
       if (fastRefreshMode && artifacts.moduleGraph) {
         const nextModules = artifacts.moduleGraph.modules;
         hmrRevision += 1;
@@ -1323,15 +1326,18 @@ export async function startExpoGoDevServer(
           next: nextModules,
           previous: prevModules,
           revisionId: String(hmrRevision),
+          // The file name becomes the eval source URL, so hot-patched modules
+          // get readable stack frames instead of anonymous eval frames.
+          sourceUrlFor: (module) => ({ sourceMappingURL: null, sourceURL: module.fileName }),
         });
+        prevModules = nextModules;
+        prevModuleIds = artifacts.moduleGraph.moduleIds;
         // A deleted module can't be hot-applied; fall back to a full reload.
         if (update.deleted.length > 0) {
           messageChannel.broadcast("reload");
         } else {
           hotChannel.broadcastUpdate(update);
         }
-        prevModules = nextModules;
-        prevModuleIds = artifacts.moduleGraph.moduleIds;
       } else {
         messageChannel.broadcast("reload");
       }
