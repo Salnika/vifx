@@ -20,6 +20,7 @@ import { symbolicateStackFrame } from "@vifx/source-map-tools";
 import {
   buildModuleRegistryBundle,
   computeHmrUpdate,
+  createIndirectEvalPlugin,
   reactNative,
   resolveBuildMinify,
   resolveBundleMode,
@@ -1166,6 +1167,9 @@ export async function buildExpoBundle(
         entry,
         projectRoot,
       }),
+      // Production only: rewrite direct eval to indirect so the minifier can
+      // mangle the whole bundle (a single direct eval otherwise blocks it).
+      ...(mode === "production" ? [createIndirectEvalPlugin()] : []),
     ],
     publicDir: false,
     root: projectRoot,

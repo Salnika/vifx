@@ -63,7 +63,9 @@ import {
 import { buildModuleRegistryBundle } from "./module-registry/index.ts";
 import { applyReactRefreshTransform, shouldApplyReactRefresh } from "./react-refresh.ts";
 import { VIFX_HMR_CLIENT_SOURCE } from "./hmr-client.ts";
+import { createIndirectEvalPlugin } from "./indirect-eval.ts";
 export { VIFX_HMR_URL_GLOBAL } from "./hmr-client.ts";
+export { createIndirectEvalPlugin } from "./indirect-eval.ts";
 
 export {
   resolveBuildMinify,
@@ -3384,7 +3386,12 @@ export async function buildReactNativeBundle(
     configFile: false,
     envFile: false,
     logLevel: "silent",
-    plugins: [createReactNativePlugin(state)],
+    plugins: [
+      createReactNativePlugin(state),
+      // Rewrite the lone direct `eval` so oxc-minify can mangle the whole
+      // release bundle (see createIndirectEvalPlugin). Production only.
+      ...(mode === "production" ? [createIndirectEvalPlugin()] : []),
+    ],
     publicDir: false,
     root: projectRoot,
   };
