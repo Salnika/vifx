@@ -24,12 +24,12 @@ Caveat : runs uniques (les écarts sont assez larges pour que la variance ne ren
 | **Rebuild warm** (2ᵉ run, cache chaud) | 12,3 s | **3,8 s** | **Vifx ~3,2× plus rapide** |
 | Speedup du cache (cold→warm) | 1,7× | **3,4×** | cache de transform Vifx (#06) |
 | Compile Hermes (.bundle→.hbc) | 2,0 s | 1,8 s | ~égalité |
-| Bundle JS (release) | **3,54 Mo** | 3,82 Mo¹ | parité (Vifx +7,8 %) |
-| **Bytecode Hermes** (ce qui ship) | **4,96 Mo** | 5,24 Mo¹ | Metro −5,7 % |
+| Bundle JS (release) | 3,54 Mo | **3,46 Mo**³ | **Vifx −2,2 %** |
+| **Bytecode Hermes** (ce qui ship) | **4,96 Mo** | 5,24 Mo¹ | Metro −5,8 % |
 | Modules / sources | 2007 | **1711** | Vifx −15 % (moins de modules) |
 | Assets émis | 39 | 32² | — |
 
-¹ **Après le fix du path production Expo** (commit `80a50d7`) : `export:embed --dev false` minifie (Oxc) + émet un IIFE. **Avant le fix**, `buildExpoBundle` ignorait le mode et émettait un bundle dev-flavored : 6,82 Mo JS / 5,82 Mo hbc — le benchmark a révélé ce bug. ² Écart d'assets à investiguer (grouping différent).
+¹ **Après le fix du path production Expo** (commit `80a50d7`) : `export:embed --dev false` minifie (Oxc) + émet un IIFE. **Avant le fix**, `buildExpoBundle` ignorait le mode et émettait un bundle dev-flavored : 6,82 Mo JS / 5,82 Mo hbc — le benchmark a révélé ce bug. ² Écart d'assets à investiguer (grouping différent). ³ **Après le fix indirect-eval** (commit `9ce03c1`) : 3,82 → 3,46 Mo. Voir §« Taille » ci-dessous.
 
 ## Lecture honnête
 
@@ -37,9 +37,22 @@ Caveat : runs uniques (les écarts sont assez larges pour que la variance ne ren
 - **Cold −36 %**, et surtout **warm ~3,2× plus rapide** (3,8 s vs 12,3 s). Le cache de transform content-addressed (#06) sur Rolldown écrase le cache de Metro (×3,4 vs ×1,7). Pour la DX quotidienne (rebuilds répétés), c'est l'argument le plus solide — et il est **mesuré, pas supposé**.
 - L'avantage cold tient même en ajoutant la minification manquante (oxc-minify = 154 ms, négligeable).
 
-### ➖ Avantage supposé non confirmé : la taille de bundle
-- Le pari « tree-shaking → bundles plus petits » **ne se matérialise pas sur cette app**, même après le fix prod. Vifx a **moins de modules** (1711 vs 2007), mais son JS release (3,82 Mo) reste **~7,8 % plus gros** que Metro (3,54 Mo), et son **bytecode Hermes ~5,7 % plus gros** (5,24 vs 4,96 Mo).
-- L'écart résiduel vient de ce que Metro produit (inline-requires, optimisations de graphe) que le path Vifx ne fait pas encore. La taille n'est donc pas (encore) un argument ; c'est la parité, pas l'avantage.
+### Taille : JS désormais < Metro, mais bytecode encore +5,8 % (cause isolée)
+
+**JS release : Vifx passe sous Metro (−2,2 %, commit `9ce03c1`).** Cause de l'écart précédent (+7,8 %) : RN ne ship **qu'un seul `eval` direct** (le fallback de `loadBundleFromServer.js`). oxc-minify **désactive le mangling des identifiants *globalement*** dès qu'il voit un `eval` direct (il ne peut pas prouver que l'eval ne référence pas un local par nom) — Metro/terser limite ça à la fonction contenante. Ce seul `eval` laissait **tout** le bundle release non-manglé (`__commonJSMin` ×1858, tous les `require_*` intacts). Le plugin `createIndirectEvalPlugin` réécrit `eval(` → `(0,eval)(` en `renderChunk` avant le minify (sémantique préservée : indirect eval = scope global, ce que ces call-sites veulent déjà) → le minifier mangle tout le bundle. `__commonJSMin` 1858→0.
+
+**Bytecode Hermes : encore +5,8 % (5,24 vs 4,96 Mo) — et le mangling n'y change RIEN** (Hermes ignore les noms d'identifiants ; le mangling réduit le texte JS, pas le bytecode). Diagnostic au désassembleur (`hermesc -dump-bytecode`) :
+
+| | Functions | String table | hbc |
+|---|---|---|---|
+| Metro | 18 179 | 31 043 | 4,96 Mo |
+| Vifx **hoisted** | 23 078 | 30 617 | **+5,8 %** |
+| Vifx **metro** (`__d`/`__r`, minifié) | 27 062 | 30 656 | +17,3 % |
+
+- L'écart est **entièrement des fonctions en trop** (+4 899), pas des strings (la string table de Vifx est même *plus petite*).
+- Les +4 899 fonctions = **+8 145 arrows getter-thunk `:()=>`** (Metro : 317). Ce sont les wrappers d'interop esbuild-style de Rolldown : `__esm(() => {...})` (init différée) + `__export(ns, { nom: () => binding })` (un getter par export). Rolldown ne peut pas hoister *eagerly* un graphe RN saturé de CJS↔ESM (cœur RN + nombreuses libs en CJS, entry CJS, `require()` partout) → il enveloppe chaque module ESM atteint en lazy-init. ~8 000 arrows triviaux × ~40 o de bytecode ≈ l'écart de +287 Ko.
+- **Le format `metro` (`__d`/`__r`) n'est PAS la solution** : il supprime bien les 8 145 getters (→ 0) mais **perd le scope-hoisting cross-module de Rolldown** (DCE/inlining inter-modules) → finit avec *plus* de fonctions (27 062) et un hbc **pire** (+17,3 %). Mesuré, pas supposé.
+- **Le levier réel** : Vifx hoisted = 8 145 getters + ~14 933 « vraies » fonctions ; ces 14 933 sont **déjà sous** les 18 179 de Metro. Éliminer les getters (sans perdre le hoisting) ferait passer le bytecode **sous Metro**. Mais ça n'est pas un flag Rolldown — il faudrait soit un transform custom de dé-lazification (risqué, sémantique, à valider device), soit un travail upstream Rolldown sur l'eager-hoisting des graphes CJS-lourds.
 
 ### ✅ Bug trouvé par le benchmark — CORRIGÉ
 Le benchmark a révélé que `vifx export:embed` sur un projet **Expo** émettait un bundle **dev-flavored même avec `--dev false`** :
@@ -54,9 +67,10 @@ Cause : l'unité 14 (mode production + oxc-minify) était implémentée dans `bu
 ## Actions restantes
 
 1. ~~Câbler le mode production dans `buildExpoBundle`~~ — **fait** (`80a50d7`).
-2. **Travailler la taille** : porter les optimisations type inline-requires / DCE plus agressif, sinon repositionner — la valeur de Vifx est la **vitesse**, pas (encore) la taille.
-3. **Phase 7 device** : mesurer TTI/mémoire/FPS sur simulateur+device, le seul axe où « plus petit bytecode » et « parse Hermes » comptent vraiment.
-4. Investiguer l'écart d'assets (39 vs 32).
+2. ~~Réduire le JS release sous Metro~~ — **fait** (`9ce03c1`, indirect-eval → −2,2 %).
+3. **Bytecode sous Metro** (encore +5,8 %) — bloqué sur l'élimination des ~8 000 getters lazy `__esm`/`__export` de Rolldown (cf. §Taille). Le format `metro` est exclu (mesuré pire, +17,3 %). Pistes ouvertes, toutes à valider device : (a) transform `renderChunk` de dé-lazification des namespaces triviaux ; (b) flag/patch Rolldown pour l'eager-hoisting ; (c) accepter +5,8 % et capitaliser sur vitesse + JS plus petit.
+4. **Phase 7 device** : mesurer TTI/mémoire/FPS sur simulateur+device, le seul axe où « plus petit bytecode » et « parse Hermes » comptent vraiment.
+5. Investiguer l'écart d'assets (39 vs 32).
 
 ## Reproduire
 
