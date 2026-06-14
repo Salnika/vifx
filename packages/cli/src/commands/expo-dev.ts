@@ -18,13 +18,14 @@ import {
   validateRequestedDevPlatform,
 } from "./expo-shared.ts";
 
-const EXPO_DEV_HELP = `Usage: vifx expo dev [path] [--platform ios|android] [--expo-go] [--config <file>] [--host <host>] [--public-host <host>] [--port <number>] [--json]
+const EXPO_DEV_HELP = `Usage: vifx expo dev [path] [--platform ios|android] [--expo-go] [--fast-refresh] [--config <file>] [--host <host>] [--public-host <host>] [--port <number>] [--json]
 
 Starts a Vite-powered Expo dev server. By default this serves the bounded browser preview path; --expo-go starts the native Expo Go manifest and bundle server.
 
 Options:
   --platform  Restrict the dev server to one platform target.
   --expo-go   Serve an Expo Go compatible native manifest and Vifx bundle URL.
+  --fast-refresh  Serve a Metro-format bundle with state-preserving Fast Refresh over /hot (experimental). Requires --expo-go.
   --config    Use a specific Vifx config file.
   --host      Hostname to bind the local dev server to. Default: 127.0.0.1, or 0.0.0.0 with --expo-go.
   --public-host  Hostname or LAN IP emitted in Expo Go URLs when it differs from --host.
@@ -197,7 +198,7 @@ export function attachExpoGoDevKeys(
 
 export async function runExpoDevCommand(argv: string[], cwd: string): Promise<CliResult> {
   const parsed = parseFlags(argv, {
-    booleanFlags: ["expo-go", "help", "json"],
+    booleanFlags: ["expo-go", "fast-refresh", "help", "json"],
     stringFlags: ["config", "host", "platform", "port", "public-host"],
     aliases: {
       "-h": "--help",
@@ -267,6 +268,10 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
   const publicHost =
     typeof parsed.flags["public-host"] === "string" ? parsed.flags["public-host"] : undefined;
   const port = parseExpoDevServerPort(parsed.flags.port);
+  // --fast-refresh forces the metro module format, which the Expo Go dev server
+  // requires to serve a state-preserving Fast Refresh bundle; otherwise honor
+  // the target's configured moduleFormat (default hoisted = full reload).
+  const moduleFormat = parsed.flags["fast-refresh"] ? "metro" : target.moduleFormat;
   if (parsed.flags["expo-go"]) {
     const server = await startExpoGoDevServer({
       aliases: target.aliases,
@@ -279,6 +284,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
       jsxInPackages: target.jsxInPackages,
       mainFields: loaded.config.resolver.mainFields,
       mode: "development",
+      moduleFormat,
       platform: target.platform,
       port,
       projectRoot: loaded.config.projectRoot,

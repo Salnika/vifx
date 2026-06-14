@@ -205,6 +205,7 @@ test("expo dev --help prints Vite bundle dev server usage", async () => {
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Usage: vifx expo dev");
   expect(result.stdout).toContain("--expo-go");
+  expect(result.stdout).toContain("--fast-refresh");
   expect(result.stdout).toContain("--public-host");
   expect(result.stdout).toContain("native Expo Go manifest and bundle server");
 });
