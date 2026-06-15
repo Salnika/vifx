@@ -3,49 +3,83 @@ layout: home
 
 hero:
   name: Vifx
-  text: Vite bundling for React Native and Expo
-  tagline: A no-Metro corridor focused on producing, inspecting, and comparing bundle artifacts without replacing Expo CLI, EAS, or native app workflows.
+  text: One Vite engine for React Native and Expo
+  tagline: A unified, Vite/Rolldown-based toolchain that replaces Metro for React Native and Expo — native and web from a single engine, an open plugin graph, and a Metro-compatible dev server.
   actions:
     - theme: brand
-      text: Getting Started
+      text: Get Started
       link: /guide/getting-started
+    - theme: alt
+      text: Vifx vs Metro
+      link: /reference/comparisons
     - theme: alt
       text: CLI Reference
       link: /reference/cli
-    - theme: alt
-      text: Roadmap
-      link: /roadmap
 
 features:
-  - title: No-Metro bundling
-    details: The public corridor is `setup -> build -> audit -> dev/export`.
-  - title: Metro as evidence
-    details: Captured Metro artifacts remain the comparison baseline for Vifx/Vite output.
-  - title: Narrow by design
-    details: Expo CLI, Expo Go, EAS, native build/run, and Updates runtime stay outside the product scope.
+  - title: One engine, native and web
+    details: A single Vite/Rolldown plugin pair builds your iOS and Android bundles and a react-native-web companion preview, with one config, one define table, and one platform resolver for .ios / .android / .native / .web.
+  - title: Open Vite/Rollup plugin graph
+    details: Drop a vite.config.vifx.ts next to your app and run any Vite or Rollup plugin — svgr, unplugin-icons, mdx, virtual modules — against a React Native bundle. Vifx loads and merges it through Vite's own config loader.
+  - title: Metro-compatible dev server
+    details: vifx expo dev --expo-go serves the Expo Go manifest, bundle, source maps, /symbolicate, and React Native DevTools, with QR code and interactive keybindings. Opt into state-preserving Fast Refresh over /hot with --fast-refresh.
+  - title: Per-save build instrumentation
+    details: Every rebuild prints one line ventilated by phase — transform, serialize, write, apply — plus a per-cycle transform-cache hit-rate. Add --json to stream pure NDJSON you can aggregate into median and p95.
+  - title: Content-addressed transform cache
+    details: Entries are keyed by a SHA-256 of their inputs and a tool-version stamp, so an unchanged file is a guaranteed warm hit. Warm rebuilds land around 3.2x faster than Metro on the same app.
+  - title: Scope-hoisted release bundles
+    details: Production native bundles are a single scope-hoisted IIFE minified by Oxc, keeping Rolldown's cross-module tree-shaking. Compile to Hermes bytecode with hermes&#58; true on the target.
+  - title: Drop-in production export
+    details: vifx export:embed speaks the npx expo export:embed and npx react-native bundle flag surface, so the Xcode bundle phase and the Gradle bundle task call Vifx instead of Metro. vifx expo export writes the full Expo artifact directory.
+  - title: Unified define and env
+    details: One table feeds native and web. __DEV__, NODE_ENV, global, and EXPO_OS are resolved for you, and every EXPO_PUBLIC_* variable is inlined as both import.meta.env.* and process.env.*.
+  - title: Onboard without rewrites
+    details: vifx setup writes a Vifx-owned config beside your Expo app without touching app.json, Expo scripts, or source. It reads your metro.config.js and prints exactly which settings to mirror.
 ---
 
-## Snapshot
+## Why Vifx
 
-- Date: `2026-05-18`
-- Current phase: `No-Metro Vite bundling corridor`
-- Current note: Vifx keeps the React Native and Expo Vite plugin work, `vifx build`, `vifx expo audit`, `vifx expo dev`, `vifx expo export`, Metro inspection, and compatibility tooling. Native lifecycle commands and Expo Updates serving/signing have been removed from the public scope.
+Vifx swaps Metro for a single Vite/Rolldown engine across your whole React Native or Expo app. You keep Expo CLI, EAS, and your native projects; you replace the bundler underneath them. The result is the standard Vite plugin ecosystem on a native app, a Metro-compatible dev server with opt-in Fast Refresh, a content-addressed cache for fast warm rebuilds, and scope-hoisted, Oxc-minified release bundles that compile to Hermes bytecode.
 
-## Start Here
+Native is the primary target and web is a companion preview built from the same engine. See [Vifx vs Metro](/reference/comparisons) for the structural differences and the measured numbers.
 
-1. Read the [Getting Started guide](/guide/getting-started) for the supported Vite bundling flow.
-2. Review the [Architecture page](/guide/architecture) to understand package boundaries.
-3. Use the [CLI reference](/reference/cli) and [Support Matrix](/reference/support-matrix) before widening support claims.
+## Start in three commands
 
-## Current Focus
+```sh
+# Onboard an existing Expo app — writes vifx.config.ts, edits nothing Expo owns
+pnpm vifx setup . --yes
 
-::: info Repository posture
-Vifx currently targets Metro-free bundle production and comparison. It does not replace Expo CLI, Expo Go, EAS, app build/run workflows, Expo Updates runtime, or full React Native Fast Refresh.
-:::
+# Serve the Expo Go dev server with state-preserving Fast Refresh
+pnpm vifx expo dev . --expo-go --fast-refresh
 
-## Key Surfaces
+# Build the release bundle + assets for the Xcode / Gradle bundle phase
+pnpm vifx export:embed . --platform ios --dev false \
+  --bundle-output ios.bundle --sourcemap-output ios.map --assets-dest ./assets
+```
 
-- [Packages](/reference/packages): package-by-package status, scope, and limitations.
-- [Config](/reference/config): the current config contract draft and sample `vifx.config.ts`.
-- [Workflows](/guide/workflows): guided flows for RN/Expo analysis, Metro references, Vifx builds, and Expo dev/export.
-- [Roadmap](/roadmap): milestone-by-milestone deliverables and priorities.
+Bare React Native projects start with `vifx init` and serve through [`vifx dev`](/reference/cli). See the [Getting Started guide](/guide/getting-started) for the full walkthrough.
+
+## Extend the build with any Vite plugin
+
+Add a `vite.config.vifx.ts` and Vifx merges it after its own plugins, so platform resolution stays correct while your plugins run against the React Native bundle.
+
+```ts
+// vite.config.vifx.ts
+import { defineConfig } from "vite";
+import svgr from "vite-plugin-svgr";
+
+export default defineConfig({
+  plugins: [svgr()],
+});
+```
+
+Vifx owns the keys it must — platform resolution, the define table, and the native output format — and warns when a user override is neutralized. Everything else is yours. See [Config](/reference/config) for the merge contract.
+
+## Explore
+
+- [Getting Started](/guide/getting-started) — install, onboard, run, and ship a build.
+- [Features](/reference/features) — the full capability inventory.
+- [CLI Reference](/reference/cli) — every command, flag, and default.
+- [Config](/reference/config) — the `vifx.config.ts` and `vite.config.vifx.ts` contracts.
+- [Vifx vs Metro](/reference/comparisons) — structural differences and benchmarks.
+- [Migration](/guide/migration) — move an Expo or React Native app off Metro.

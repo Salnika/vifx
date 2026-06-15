@@ -1,161 +1,333 @@
 # CLI
 
-The CLI is the main user-facing surface for setup, inspection, Vite bundle builds, Metro comparison, Expo dev-server proof, and Expo export artifacts.
-
-Run commands from this repository with:
+`vifx` is the single command for building, serving, exporting, and migrating React Native and Expo projects on the Vite/Rolldown engine. Run every command from your project with:
 
 ```sh
-pnpm vifx <command> ...
+pnpm vifx <command> [path] [flags]
 ```
 
-## `vifx setup`
+Run `vifx help` for the command list and `vifx <command> --help` for a command's flags.
 
-Onboard an existing Expo project with a Vifx-owned config.
+## Global flags
+
+| Flag              | Effect                                                                           |
+| ----------------- | -------------------------------------------------------------------------------- |
+| `--verbose`, `-v` | Print verbose diagnostics (sets `VIFX_VERBOSE`).                                 |
+| `--debug`         | Print debug-level internals (sets `VIFX_DEBUG`).                                 |
+| `--json`          | Emit machine-readable output. Errors serialize to JSON when `--json` is present. |
+| `--help`, `-h`    | Print help and exit.                                                             |
+| `--version`       | Print the CLI version.                                                           |
+
+`--verbose`/`-v` and `--debug` are read on every command. `--version` and a bare `--help`/`-h` apply to the root command; pass `--help` after a subcommand for that command's help.
+
+Every command accepts an optional `[path]` positional. When omitted, `vifx` resolves the project from the current directory, walking up to the nearest ancestor that contains a `package.json` (or a `vifx.config.*`).
+
+Platform values are validated per command. `build` and `expo export` accept `ios`, `android`, or `all`. `dev`, `run`, `expo dev`, `expo smoke`, and `export:embed` accept `ios` or `android`. `metro inspect` also accepts `native` and `web`. An out-of-range value is rejected with a per-command error.
+
+## Project setup
+
+### `vifx setup`
+
+Onboard an existing Expo project with a Vifx-owned `vifx.config.ts`. It writes config alongside your existing files without editing Expo-owned app files, `app.json`, EAS scripts, or app source. It also reads any `metro.config.js` and prints a Metro-config migration section with interop hints. This is the entry point for migrating an Expo app — see the [migration guide](../guide/migration).
 
 ```sh
-pnpm vifx setup <expo-project-path> --yes
-pnpm vifx setup <expo-project-path> --yes --expo-go
-pnpm vifx setup <expo-project-path> --yes --with-vite-config
-pnpm vifx setup <expo-project-path> --json
+pnpm vifx setup ./my-expo-app --yes
 ```
 
-- Expo-only in v1.
-- Creates `vifx.config.ts` by default.
-- `--expo-go` generates native Expo targets for `vifx expo dev --expo-go`.
-- Does not edit Expo-owned app files, EAS scripts, or app source files.
-- Prints next commands for `build`, `expo audit`, optional `expo dev`, and `expo export`.
+| Flag                   | Effect                                                                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `--yes`                | Apply changes without confirmation.                                                                                    |
+| `--dry-run`            | Preview the plan without writing. Cannot be combined with `--yes`.                                                     |
+| `--json`               | Machine-readable output. Previews unless combined with `--yes`.                                                        |
+| `--force`              | Replace existing Vifx-owned files.                                                                                     |
+| `--expo-go`            | Generate native Expo Go targets instead of browser-preview targets.                                                    |
+| `--with-vite-config`   | Also create `vite.config.vifx.ts`.                                                                                     |
+| `--experimental-embed` | Register `@vifx/expo-config-plugin` in `app.json` so `expo prebuild` routes native builds through `vifx export:embed`. |
 
-## `vifx build`
+Without `--yes` and without `--dry-run`/`--json`, `vifx setup` asks for interactive confirmation. `vifx setup` targets Expo projects. For bare React Native, use [`vifx init`](#vifx-init).
 
-Build configured Vifx bundle targets from `vifx.config.*`.
+### `vifx init`
+
+Create a `vifx.config.ts`. Previews by default; `--write` applies.
 
 ```sh
-vifx build <project-path>
-vifx build <project-path> --platform ios
-vifx build <project-path> --platform all --json
+vifx init ./my-rn-app --write
 ```
 
-This is the central production bundle command. It does not run app build workflows.
+| Flag            | Effect                                |
+| --------------- | ------------------------------------- |
+| `--write`, `-w` | Write the planned files.              |
+| `--force`       | Replace an existing `vifx.config.ts`. |
 
-## `vifx expo audit`
+### `vifx vite init`
 
-Report the Expo no-Metro Vite bundling contract for a project.
+Create a Vifx-owned `vite.config.vifx.ts` for advanced direct Vite usage, so any Vite/Rollup plugin (svgr, unplugin-icons, mdx, virtual modules) runs against your React Native bundle. It also writes `vifx.config.ts` when one is missing. Previews by default; `--write` applies. See [Configuration](./config) for how the config is merged.
 
 ```sh
-pnpm vifx expo audit <expo-project-path>
-pnpm vifx expo audit <expo-project-path> --export-root dist/expo
-pnpm vifx expo audit <expo-project-path> --json
+vifx vite init ./my-app --write
 ```
 
-Reported workflows:
+| Flag            | Effect                                     |
+| --------------- | ------------------------------------------ |
+| `--write`, `-w` | Write the planned files.                   |
+| `--force`       | Replace an existing `vite.config.vifx.ts`. |
 
-- `config`
-- `vite-build`
-- `metro-parity`
-- `dev-server`
-- `export-artifacts`
+## Development
 
-Use this before updating support claims.
+### `vifx dev`
 
-## `vifx expo dev`
-
-Start a Vite bundle/dev server for one configured Expo target.
+Metro-compatible dev server for bare React Native projects. It serves the dev-server conventions the React Native community CLI expects: `GET /status`, `GET /<entry>.bundle?platform=...&dev=...`, the matching source-map route, `POST /symbolicate`, and a `/message` WebSocket channel.
 
 ```sh
-pnpm vifx expo dev <expo-project-path> --platform ios
-pnpm vifx expo dev <expo-project-path> --platform android --port 5174
-pnpm vifx expo dev <expo-project-path> --platform ios --expo-go
-pnpm vifx expo dev <expo-project-path> --platform ios --expo-go --host 0.0.0.0 --public-host 192.168.1.25
-pnpm vifx expo dev <expo-project-path> --platform ios --json
+vifx dev ./my-rn-app --platform ios --port 8081
 ```
 
-- Requires `vite.mode = "expo"`.
-- Browser preview mode requires one selected target with `reactNativeCompat = "web"`.
-- `--expo-go` serves native manifest, bundle, source-map, status, symbolication, `/message`, `/events`, and an `exp://` Expo Go URL from Vifx/Vite artifacts.
-- Use `--host 0.0.0.0 --public-host <lan-ip>` when testing from a physical device and the bind host is not the host Expo Go should fetch.
-- Does not yet provide full Expo CLI parity, native binary replacement, or full Fast Refresh.
+| Flag                      | Default     | Effect                                                                      |
+| ------------------------- | ----------- | --------------------------------------------------------------------------- |
+| `--platform ios\|android` | —           | Select the platform target (required when multiple targets are configured). |
+| `--config <file>`         | —           | Use a specific config file.                                                 |
+| `--host <host>`           | `127.0.0.1` | Bind host.                                                                  |
+| `--port <number>`         | `8081`      | Bind port. Falls back to a free port unless `--port` is passed explicitly.  |
+| `--no-build`              | —           | Reuse existing bundle artifacts instead of rebuilding first.                |
 
-## `vifx expo smoke`
+`vifx dev` serves bare React Native projects and directs Expo projects to [`vifx expo dev`](#vifx-expo-dev). It requires `vite.mode = "react-native"` and at least one target.
 
-Start a temporary Expo Go server, fetch its Vifx-backed endpoints, and shut it down.
+### `vifx run`
+
+Serve a built web runtime over a static HTTP server. The selected target must set `reactNativeCompat: "web"`, and the runtime directory must already exist. For a live browser preview backed by real react-native-web, use [`vifx expo dev`](#vifx-expo-dev) without `--expo-go` — that is the browser path that compiles and serves your app.
 
 ```sh
-pnpm vifx expo smoke <expo-project-path> --platform ios
-pnpm vifx expo smoke <expo-project-path> --platform android --asset-limit 10
-pnpm vifx expo smoke <expo-project-path> --platform ios --host 0.0.0.0 --public-host 192.168.1.25
-pnpm vifx expo smoke <expo-project-path> --platform ios --json
+vifx run ./my-app --platform ios --no-build --port 4173
 ```
 
-The smoke report checks the manifest, bundle, source map, `/status`, sampled manifest assets, `/symbolicate`, and `/message` plus `/events` WebSocket reload loop. It exits non-zero when any check fails.
+| Flag                      | Default     | Effect                                                       |
+| ------------------------- | ----------- | ------------------------------------------------------------ |
+| `--platform ios\|android` | —           | Select the platform target.                                  |
+| `--config <file>`         | —           | Use a specific config file.                                  |
+| `--host <host>`           | `127.0.0.1` | Bind host.                                                   |
+| `--port <number>`         | `4173`      | Bind port.                                                   |
+| `--no-build`              | —           | Serve an existing runtime build instead of rebuilding first. |
 
-## `vifx expo export`
+## Expo
 
-Build configured Expo targets and write export artifacts from Vifx bundles.
+### `vifx expo dev`
+
+Vite-powered Expo dev server. The default mode serves a browser preview through react-native-web and requires the target's `reactNativeCompat: "web"`. `--expo-go` switches to the native Expo Go manifest and bundle server with a QR code, manifest, bundle, source map, `/symbolicate`, `/status`, assets, React Native DevTools/Fusebox, and message/event sockets. Requires `vite.mode = "expo"`.
 
 ```sh
-vifx expo export ./path/to/expo-app
-vifx expo export ./path/to/expo-app --platform ios --out-dir dist/expo
-vifx expo export ./path/to/expo-app --json
+# Browser preview (target must set reactNativeCompat: "web")
+pnpm vifx expo dev ./my-expo-app
+
+# Native Expo Go server on the LAN
+pnpm vifx expo dev ./my-expo-app --platform ios --expo-go --host 0.0.0.0 --public-host 192.168.1.25
+
+# State-preserving Fast Refresh
+pnpm vifx expo dev ./my-expo-app --platform ios --expo-go --fast-refresh
 ```
 
-The output contains bundles, source maps, assets, `manifest.json`, and `metadata.json`. It does not generate Expo Updates runtime manifests, serve Updates responses, sign responses, or produce EAS metadata parity.
+| Flag                      | Default                                  | Effect                                                                                                                               |
+| ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `--platform ios\|android` | —                                        | Select the platform target.                                                                                                          |
+| `--expo-go`               | —                                        | Serve the native Expo Go manifest and bundle instead of the browser preview.                                                         |
+| `--fast-refresh`          | —                                        | Serve a Metro-format bundle with state-preserving Fast Refresh over `/hot`. Requires `--expo-go` and forces `moduleFormat: "metro"`. |
+| `--config <file>`         | —                                        | Use a specific config file.                                                                                                          |
+| `--host <host>`           | `127.0.0.1` (`0.0.0.0` with `--expo-go`) | Bind host.                                                                                                                           |
+| `--public-host <host>`    | —                                        | LAN IP emitted in Expo Go URLs.                                                                                                      |
+| `--port <number>`         | `5173`                                   | Bind port.                                                                                                                           |
 
-## `vifx doctor`
+With `--expo-go` in a TTY, interactive keybindings are available: `r` reload, `m` dev menu, `j` open React Native DevTools/Fusebox, `o` open the project in `$EXPO_EDITOR` or `$EDITOR`, `?` show all keys. `Ctrl+C`/`Ctrl+D` forward to `SIGINT`.
 
-Inspect readiness, versions, config presence, detected Vite plugin mode, and support boundaries.
+Without `--fast-refresh`, the dev server uses the target's configured `moduleFormat` — the default `hoisted` format does a full reload on each save. `--fast-refresh` engages the Metro module-registry runtime that preserves state across saves. Each `--expo-go` rebuild prints one per-save instrumentation line, ventilated by phase, with a per-cycle transform-cache hit-rate:
 
-```sh
-vifx doctor <project-path>
-vifx doctor <project-path> --json
+```text
+~210ms  transform 120  serialize 35  write 40  apply 15  cache 92% (11/12)
 ```
 
-## `vifx inspect`
-
-Inspect project primitives before choosing Metro-specific or compatibility-specific workflows.
+With `--json --expo-go`, stdout is pure NDJSON: line 1 is a compact dev-server snapshot, then one report line per save. Pipe it for median/p95 aggregation:
 
 ```sh
-vifx inspect <project-path>
-vifx inspect <project-path> --help
+pnpm vifx expo dev ./my-expo-app --platform ios --expo-go --fast-refresh --json > rebuilds.ndjson
 ```
 
-## `vifx metro inspect`
+### `vifx expo export`
 
-Inspect captured Metro reference artifacts.
+Build configured Expo targets and write an Expo artifact directory with bundles, source maps, assets, `manifest.json`, and `metadata.json`. Requires `vite.mode = "expo"`.
 
 ```sh
-vifx metro inspect ./fixtures/rn-bare-basic --platform ios
-vifx metro inspect ./fixtures/expo-basic --platform android --json
+pnpm vifx expo export ./my-expo-app --platform all --out-dir dist/expo
 ```
 
-## `vifx compat run`
+| Flag                           | Default     | Effect                         |
+| ------------------------------ | ----------- | ------------------------------ |
+| `--platform ios\|android\|all` | `all`       | Select the platform target(s). |
+| `--config <file>`              | —           | Use a specific config file.    |
+| `--out-dir <dir>`              | `dist/expo` | Output directory.              |
 
-Run shared compatibility cases and produce reviewable reports.
+`vifx expo export` produces bundle artifacts. It serves the Expo bundling path and covers bundles, source maps, assets, and manifests; Expo Updates runtime manifests, signed Updates responses, and EAS metadata are a separate concern.
+
+### `vifx expo audit`
+
+Audit the Expo no-Metro Vite bundling contract. Reports a decision, the supported Expo SDK and support tier, Expo/RN versions, Expo Router and `app/` detection, warnings, and per-workflow status, evidence, blockers, and notes.
 
 ```sh
-vifx compat run --adapter metro
-vifx compat run --adapter vifx
+pnpm vifx expo audit ./my-expo-app --json
+```
+
+| Flag                    | Default | Effect                                               |
+| ----------------------- | ------- | ---------------------------------------------------- |
+| `--export-root <dir>`   | —       | Inspect an existing Expo export instead of building. |
+| `--supported-sdk <sdk>` | `54`    | Expo SDK major to evaluate against.                  |
+
+### `vifx expo smoke`
+
+Start a temporary Expo Go server, fetch the manifest, bundle, source map, status, sampled assets, and `/symbolicate`, run a message-plus-event WebSocket loop, then shut down. An end-to-end Expo Go endpoint test that exits non-zero on any failure.
+
+```sh
+pnpm vifx expo smoke ./my-expo-app --platform ios --asset-limit 10
+```
+
+| Flag                      | Default     | Effect                                 |
+| ------------------------- | ----------- | -------------------------------------- |
+| `--platform ios\|android` | —           | Select the platform target.            |
+| `--config <file>`         | —           | Use a specific config file.            |
+| `--host <host>`           | `127.0.0.1` | Bind host.                             |
+| `--public-host <host>`    | —           | LAN IP emitted in Expo Go URLs.        |
+| `--port <number>`         | ephemeral   | Bind port. Omit for an ephemeral port. |
+| `--asset-limit <number>`  | `5`         | Number of manifest assets to sample.   |
+
+## Build and release
+
+### `vifx build`
+
+Build all configured `vite.targets` from `vifx.config.*`. Reports per target: mode, entry, bundle path and size, asset count, source-map validity, and duration.
+
+```sh
+vifx build ./my-app --platform all --json
+```
+
+| Flag                             | Default    | Effect                                     |
+| -------------------------------- | ---------- | ------------------------------------------ |
+| `--platform ios\|android\|all`   | `all`      | Select the platform target(s).             |
+| `--mode development\|production` | per-target | Override the bundle mode for every target. |
+| `--config <file>`                | —          | Use a specific config file.                |
+
+`vifx build` requires `vite.mode != "none"` and at least one target.
+
+### `vifx export:embed`
+
+Build the release bundle and production asset layout for Xcode's "Bundle React Native code and images" phase and the Gradle bundle task. The flag surface is compatible with `npx expo export:embed` and `npx react-native bundle`: unknown flags warn and are ignored rather than failing, so it is a drop-in replacement in native build scripts. `--bundle-output` is the only required flag.
+
+```sh
+vifx export:embed ./my-app \
+  --platform ios --dev false --minify true \
+  --bundle-output ios.bundle --sourcemap-output ios.map --assets-dest ./assets
+```
+
+| Flag                        | Default                      | Effect                                                                             |
+| --------------------------- | ---------------------------- | ---------------------------------------------------------------------------------- |
+| `--bundle-output <path>`    | —                            | **Required.** Output bundle path.                                                  |
+| `--entry-file <path>`       | target entry or `./index.js` | Entry module.                                                                      |
+| `--platform ios\|android`   | `ios`                        | Select the platform target.                                                        |
+| `--dev <true\|false>`       | `true`                       | `--dev false` requests production semantics (`mode: production`).                  |
+| `--minify <true\|false>`    | matches `!dev`               | Minify with the OXC minifier.                                                      |
+| `--sourcemap-output <path>` | —                            | Output source map path.                                                            |
+| `--assets-dest <dir>`       | —                            | Writes Android `drawable-<density>/` + `raw/`, iOS `assets/`, and `assetmap.json`. |
+| `--config <path>`           | —                            | Use a specific config file.                                                        |
+
+Boolean flags accept a following `0/1/true/false` token or an inline `=value`. The command auto-detects Expo vs bare React Native projects and routes to the matching bundler.
+
+Wire it into the Gradle bundle task with:
+
+```groovy
+react { bundleCommand = "export:embed" }
+```
+
+On iOS, `@vifx/expo-config-plugin` repoints the Xcode bundle phase at `vifx export:embed` during `expo prebuild`. For Metro/Expo compatibility, these flags are accepted and ignored: `--reset-cache`, `--max-workers`, `--transformer`, `--bundle-encoding`, `--asset-catalog-dest`, `--config-cmd`, `--sourcemap-sources-root`, `--unstable-transform-profile`, `--clear`, `--read-global-cache`, and `--sourcemap-use-absolute-path`.
+
+### `vifx hermes compile`
+
+Compile a JS bundle to Hermes bytecode when a Hermes compiler is available.
+
+```sh
+vifx hermes compile --input ios.bundle --output ios.hbc --source-map ios.map
+```
+
+| Flag                  | Effect                                 |
+| --------------------- | -------------------------------------- |
+| `--input <bundle>`    | **Required.** Input JavaScript bundle. |
+| `--output <file>`     | **Required.** Output bytecode file.    |
+| `--source-map <file>` | Optional output source map.            |
+| `--compiler <path>`   | Explicit Hermes compiler path.         |
+
+## Diagnostics
+
+### `vifx doctor`
+
+Check project readiness. Reports project type, Node version, package manager, React Native/Expo versions, detected `metro`/`vite`/`vifx` config paths, Vite plugin mode, workspace root, Hermes compiler path, Expo SDK support tier, diagnostics, and (when a Metro config is found) a Metro-to-Vifx migration section.
+
+```sh
+vifx doctor ./my-app --json
+```
+
+`--json` emits pure JSON with no extra logs. Use `vifx doctor` to verify a project after migration.
+
+### `vifx inspect`
+
+Inspect project primitives: project type, package manager, configs, Vite mode, workspace root, platform files, asset groups with scales, and diagnostics.
+
+```sh
+vifx inspect ./my-app --json
+```
+
+### `vifx metro inspect`
+
+Inspect captured Metro reference artifacts for a fixture or project — an interop and parity tool.
+
+```sh
+vifx metro inspect ./my-app --platform ios --entry index.js --json
+```
+
+| Flag                                   | Default    | Effect                          |
+| -------------------------------------- | ---------- | ------------------------------- |
+| `--platform ios\|android\|native\|web` | `ios`      | Select the platform to inspect. |
+| `--entry <file>`                       | `index.js` | Entry module.                   |
+
+### `vifx compat run`
+
+Run the compatibility matrix against adapters and produce a report. See the [compatibility report format](./compatibility-report-format) for the schema.
+
+```sh
 vifx compat run --adapter all --report markdown
 ```
 
-## Legacy And Advanced Commands
+| Flag                                | Default    | Effect                                                            |
+| ----------------------------------- | ---------- | ----------------------------------------------------------------- |
+| `--adapter metro\|vifx\|all`        | `vifx`     | Adapter to run. `all` runs metro + vifx and concatenates reports. |
+| `--report terminal\|json\|markdown` | `terminal` | Report format.                                                    |
+| `--fixture <id>`                    | —          | Restrict to a single known fixture.                               |
 
-These remain useful for maintainers but are not the public no-Metro corridor:
+## Legacy migration
 
-```sh
-vifx init
-vifx vite init
-vifx migrate expo <path>
-vifx migrate react-native <path>
-vifx run <path>
-vifx hermes compile --help
-```
+### `vifx migrate`
 
-## Repository Playground Commands
+`vifx migrate expo` and `vifx migrate react-native` are a legacy manual-migration surface. Use [`vifx setup`](#vifx-setup) for Expo and [`vifx init`](#vifx-init) / [`vifx vite init`](#vifx-vite-init) for bare React Native. The `<path>` argument is required.
 
 ```sh
-pnpm playground:rn-bare
-pnpm playground:expo
-pnpm playground:validate
+vifx migrate expo ./my-expo-app --dry-run --with-vite
+vifx migrate react-native ./my-rn-app --write
 ```
 
-Each playground runs doctor, inspect, iOS and Android `vifx build`, and a direct Vite build through `vite.config.vifx.ts`.
+| Flag            | Effect                                         |
+| --------------- | ---------------------------------------------- |
+| `--dry-run`     | Preview the plan without writing.              |
+| `--write`, `-w` | Write the planned files.                       |
+| `--with-vite`   | Also generate a minimal `vite.config.vifx.ts`. |
+
+`--write` and `--dry-run` cannot be combined.
+
+## See also
+
+- [Getting started](../guide/getting-started) — install Vifx and run your first build.
+- [Configuration](./config) — the `vifx.config.*` and `vite.config.vifx.*` reference.
+- [Features](./features) — the engine, transform cache, Fast Refresh, and define/env table.
+- [Comparisons](./comparisons) — how Vifx relates to Metro and Expo CLI.
