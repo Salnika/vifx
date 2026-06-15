@@ -24,10 +24,17 @@ import {
   defaultTransformCacheDir,
   type TransformCache,
 } from "@vifx/transform-cache";
+import {
+  extractMetroStagingUserSlices,
+  type LoadedUserViteConfig,
+  mergeWithVifx,
+  prepareUserViteConfig,
+} from "@vifx/vite-config-bridge";
 import type {
   VifxBuildAssetArtifact,
   VifxBundleArtifacts,
   VifxBundleMode,
+  VifxDiagnosticData,
   VifxModuleFormat,
   VifxPlatform,
   VifxReactNativePluginOptions,
@@ -2997,6 +3004,7 @@ async function writeWebRuntimeArtifacts(options: {
   shimReact: boolean;
   shimReactNative: boolean;
   transformCache: TransformCache | null;
+  userResult: LoadedUserViteConfig | null;
 }): Promise<VifxWebRuntimeArtifact> {
   const previewOutDir = path.join(options.outDir, "runtime");
   const runtimeHtmlPath = path.join(options.outDir, WEB_RUNTIME_HTML_FILE);
@@ -3040,7 +3048,7 @@ async function writeWebRuntimeArtifacts(options: {
     previewEntry,
   );
 
-  await build({
+  const previewConfig: InlineConfig = {
     appType: "custom",
     build: {
       assetsInlineLimit: 0,
@@ -3075,7 +3083,16 @@ async function writeWebRuntimeArtifacts(options: {
     }),
     publicDir: false,
     root: options.projectRoot,
-  });
+  };
+
+  // The web preview resolves as `web`, so user `optimizeDeps`/`server` are
+  // allowed here. `mergeWithVifx` is a no-op when there is no user config.
+  await build(
+    mergeWithVifx(options.userResult, previewConfig, {
+      resolvePlatform: "web",
+      warn: warnUserViteConfigDiagnostic,
+    }),
+  );
   await writeFile(
     runtimeScriptPath,
     [
@@ -3305,6 +3322,17 @@ async function writeWebRuntimeArtifacts(options: {
   };
 }
 
+/**
+ * Surfaces a user-Vite-config diagnostic on stderr with the shared `[vifx]`
+ * prefix. Conflict warnings only fire when a user `vite.config.vifx.*` actually
+ * collides with a vifx-owned key, so the no-user-config path stays silent and
+ * the bundle byte-identical.
+ */
+function warnUserViteConfigDiagnostic(diagnostic: VifxDiagnosticData): void {
+  const hint = diagnostic.hint ? ` ${diagnostic.hint}` : "";
+  console.warn(`[vifx] ${diagnostic.message}${hint}`);
+}
+
 export async function buildReactNativeBundle(
   options: VifxReactNativePluginOptions,
 ): Promise<VifxBundleArtifacts> {
@@ -3349,7 +3377,25 @@ export async function buildReactNativeBundle(
     transformCache,
   };
 
+  // Load the user `vite.config.vifx.*` once (null when absent → historic path).
+  // On the metro path only the safe slices (plugins + filtered resolve/define)
+  // are injected; the staging `build.rollupOptions.output` is reserved.
+  const { userResult, diagnostics } = await prepareUserViteConfig({
+    projectRoot,
+    configFile: options.userViteConfig,
+    command: "build",
+    mode,
+    resolvePlatform: state.resolvePlatform,
+  });
+  for (const diagnostic of diagnostics) {
+    warnUserViteConfigDiagnostic(diagnostic);
+  }
+
   if ((options.moduleFormat ?? "hoisted") === "metro") {
+    const stagingSlices = extractMetroStagingUserSlices(userResult, {
+      resolvePlatform: state.resolvePlatform,
+      warn: warnUserViteConfigDiagnostic,
+    });
     const registry = await buildModuleRegistryBundle({
       absoluteOutDir,
       entry,
@@ -3357,8 +3403,17 @@ export async function buildReactNativeBundle(
         basePlugins: [createReactNativePlugin(state)],
         mode,
         includeIndirectEval: false,
+        userPlugins: stagingSlices?.userPlugins,
       }),
       projectRoot,
+      ...(stagingSlices?.resolve === undefined && stagingSlices?.define === undefined
+        ? {}
+        : {
+            userInlineConfig: {
+              ...(stagingSlices?.resolve === undefined ? {} : { resolve: stagingSlices.resolve }),
+              ...(stagingSlices?.define === undefined ? {} : { define: stagingSlices.define }),
+            },
+          }),
     });
     const bundleStats = await stat(registry.bundlePath);
     const assets = await collectBuildAssets({
@@ -3459,7 +3514,15 @@ export async function buildReactNativeBundle(
     root: projectRoot,
   };
 
-  await build(buildConfig);
+  // Merge the user config (allowed keys + user plugins appended after vifx's;
+  // reserved keys re-imposed). `mergeWithVifx` returns `buildConfig` unchanged
+  // when there is no user config, keeping the bundle byte-identical.
+  await build(
+    mergeWithVifx(userResult, buildConfig, {
+      resolvePlatform: state.resolvePlatform,
+      warn: warnUserViteConfigDiagnostic,
+    }),
+  );
 
   const bundlePath = path.join(absoluteOutDir, "index.bundle");
   await ensureBundleExists(bundlePath);
@@ -3510,6 +3573,7 @@ export async function buildReactNativeBundle(
           shimReact: state.shimReact,
           shimReactNative: state.shimReactNative,
           transformCache,
+          userResult,
         })
       : null;
 

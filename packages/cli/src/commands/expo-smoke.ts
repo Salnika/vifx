@@ -492,6 +492,7 @@ async function runExpoGoSmoke(options: {
       shimJsxRuntime: target.shimJsxRuntime,
       shimReact: target.shimReact,
       shimReactNative: target.shimReactNative,
+      userViteConfig: loaded.config.vite.userConfigFile,
     });
   } catch (error) {
     if (isListenPermissionError(error)) {

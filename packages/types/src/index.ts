@@ -366,10 +366,13 @@ export interface VifxReactNativePluginOptions {
   shimReactNative?: boolean;
   transformCache?: boolean;
   /**
-   * Path to a user Vite config to merge into the build. Reserved for the plugin
-   * workstream; the build does not load it yet.
+   * Path to a user Vite config (e.g. `vite.config.vifx.ts`) to load and merge
+   * into the build, or `false` to opt out. When omitted, the build auto-detects
+   * the known `vite.config.vifx.*` file names under the project root. The CLI
+   * threads the resolved path (or `false`) here so the build loads it in-process
+   * via Vite's own `loadConfigFromFile`.
    */
-  userViteConfig?: string;
+  userViteConfig?: string | false;
   /**
    * Injection seam for a shared transform-cache instance (the concrete type is
    * `@vifx/transform-cache`'s `TransformCache`). Typed opaque to keep
