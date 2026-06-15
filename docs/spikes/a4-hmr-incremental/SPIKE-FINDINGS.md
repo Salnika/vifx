@@ -41,21 +41,31 @@ invalidate(file: string, firstInvalidatedBy?: string): Promise<BindingClientHmrU
 and the update payload (`dist/shared/binding-zH1vcmbM.d.mts:1424,1591`):
 
 ```ts
-interface BindingClientHmrUpdate { clientId: string; update: BindingHmrUpdate; }
+interface BindingClientHmrUpdate {
+  clientId: string;
+  update: BindingHmrUpdate;
+}
 
 type BindingHmrUpdate =
-  | { type: 'Patch'; code: string; filename: string; sourcemap?: string;
-      sourcemapFilename?: string; hmrBoundaries: Array<BindingHmrBoundaryOutput> }
-  | { type: 'FullReload'; reason?: string }
-  | { type: 'Noop' };
+  | {
+      type: "Patch";
+      code: string;
+      filename: string;
+      sourcemap?: string;
+      sourcemapFilename?: string;
+      hmrBoundaries: Array<BindingHmrBoundaryOutput>;
+    }
+  | { type: "FullReload"; reason?: string }
+  | { type: "Noop" };
 ```
 
 This is the **Vite module-runner / `import.meta.hot`** patch format (`type:'Patch'`
-+ `hmrBoundaries`/`acceptedVia`). It is **never** the Metro `__d(...)` / `__r(...)`
-/ `module.hot.accept` envelope that vifx's device runtime (FR-A..D) consumes via
-`computeHmrUpdate` + the injected HMR client. Bridging would mean re-deriving a
-Metro delta from a Vite patch — i.e. re-implementing the serializer anyway, on
-top of an experimental API. **Not coded**, exactly as the plan instructed.
+
+- `hmrBoundaries`/`acceptedVia`). It is **never** the Metro `__d(...)` / `__r(...)`
+  / `module.hot.accept` envelope that vifx's device runtime (FR-A..D) consumes via
+  `computeHmrUpdate` + the injected HMR client. Bridging would mean re-deriving a
+  Metro delta from a Vite patch — i.e. re-implementing the serializer anyway, on
+  top of an experimental API. **Not coded**, exactly as the plan instructed.
 
 ## Variant A (warm `RolldownBuild` + re-call `generate()`): measured NO-GO
 
@@ -76,7 +86,7 @@ handle methods matching invalidate/rebuild/hot/update/patch: []
 ```
 
 There **is** an `experimental.incrementalBuild?: boolean` input option — but its
-own docs say *"Required to be used with `watch` mode."* It does not add any
+own docs say _"Required to be used with `watch` mode."_ It does not add any
 re-callable incremental method to the warm `RolldownBuild` handle; the only way to
 drive it is Rolldown's own `watch()` (a **second watcher** — forbidden by the
 plan's "no second watcher: fs vs Rolldown" interdict) or `DevEngine` (Variant B,
@@ -103,7 +113,7 @@ work to a changed subgraph. The "warm graph" buys nothing on the dominant phase.
 (The small wall-clock drop 25→17ms across calls is pure V8 JIT / allocator warmup,
 not caching — the transform count proves it: it stays pinned at 401.)
 
-`spike-reread.mjs` confirms edits *are* reflected (`generate()` re-reads from
+`spike-reread.mjs` confirms edits _are_ reflected (`generate()` re-reads from
 disk every call), so this isn't a stale-output artifact — it is genuinely a full
 re-transform each time:
 
@@ -119,8 +129,8 @@ saves **nothing** on transform — the single most expensive phase. On a real ap
 (HNewsPro-scale) the per-save cost stays **O(full graph)**, identical to the
 current from-scratch `vite build()` path. There is no ≥2× win and no sub-subgraph
 path to even attempt byte-identical partial re-serialization against. This matches
-the plan's NO-GO clause: *"latency dominated by a non-compressible phase
-(re-transform full because `generate()` has no cache)."*
+the plan's NO-GO clause: _"latency dominated by a non-compressible phase
+(re-transform full because `generate()` has no cache)."_
 
 ---
 
@@ -130,7 +140,7 @@ The dev metro Fast Refresh rebuild closure (`runExpoGoRebuild`, `vite-plugin-exp
 runs `buildExpoBundle → computeHmrUpdate` over **plain JS module factories**.
 There is **no `compileHermesBytecode` / hbc step** on the dev save path (hbc/
 `transform.bytecode` only appears as a manifest URL query param, the export path,
-not the served dev bundle). So hbc would *not* have been in the latency budget —
+not the served dev bundle). So hbc would _not_ have been in the latency budget —
 the one favorable data point — but it does not rescue Variant A, since the
 transform phase alone is already non-incremental.
 
@@ -145,8 +155,8 @@ transform phase alone is already non-incremental.
 - **Net:** the warm-graph + partial-reserialize premise is not reachable on
   Rolldown 1.0.1 without an experimental, unstable, wrong-format path. **STOP.**
 
-**GO-CONDITIONAL re-entry trigger (when to revisit, per plan §5):** a *public,
-stable* Rolldown incremental API on `RolldownBuild` (an `invalidate(file) →
+**GO-CONDITIONAL re-entry trigger (when to revisit, per plan §5):** a _public,
+stable_ Rolldown incremental API on `RolldownBuild` (an `invalidate(file) →
 re-transform only the changed subgraph` that does **not** require `watch()`), OR a
 `DevEngine` update variant that can emit a Metro-format (`__d`/`__r`) delta. Until
 then, A1 (instrumentation) already surfaces `serializeMs` so the moment the
@@ -183,19 +193,19 @@ installed `.d.mts`:
   single-leaf edits at `generate#3/#4` also stay pinned at `401`. No transform
   cache. (Wall-clock 47→13 ms is JIT warmup; the transform count is the evidence.)
 - **Method probe — reproduced.** `all handle methods: ["closed","generate",
-  "write","close","watchFiles"]`; matches for `invalidate|rebuild|hot|update|patch`
+"write","close","watchFiles"]`; matches for `invalidate|rebuild|hot|update|patch`
   = `[]`, identical with `experimental.incrementalBuild:true` (still re-transforms
   every module after a single-file edit).
 - **Re-read — reproduced.** Each of V0..V4 is reflected, so `generate()` genuinely
   re-reads disk and re-transforms each call (not stale output).
 - **Types — re-read from installed `rolldown@1.0.1`.**
   `RolldownBuild` (`dist/shared/define-config-*.d.mts`) = `{ closed, generate(),
-  write(), close(), [Symbol.asyncDispose] }` + `get watchFiles()` marked
+write(), close(), [Symbol.asyncDispose] }` + `get watchFiles()` marked
   `@hidden not ready for public usage yet` — no public `invalidate`/`rebuild`/
   `hotUpdate`. `DevEngine.invalidate(file, firstInvalidatedBy?)`
   (`dist/experimental-index.d.mts:75`) → `Promise<BindingClientHmrUpdate[]>`, with
   `BindingHmrUpdate = {type:'Patch', code, filename, sourcemap?, hmrBoundaries} |
-  {type:'FullReload'} | {type:'Noop'}` — Vite module-runner format, never
+{type:'FullReload'} | {type:'Noop'}` — Vite module-runner format, never
   `__d`/`__r`.
 - **Secondary (hbc) — reconfirmed in source.** `runExpoGoRebuild`
   (`vite-plugin-expo/src/index.ts:1347`) runs `buildExpoBundle → computeHmrUpdate`

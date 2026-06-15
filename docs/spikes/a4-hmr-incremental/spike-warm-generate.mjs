@@ -25,7 +25,10 @@ const B = FIX + "b.js";
 const C = FIX + "c.js";
 
 function resetFixture() {
-  writeFileSync(A, `import { b } from "./b.js";\nimport { c } from "./c.js";\nexport const a = () => b() + c() + "v0";\n`);
+  writeFileSync(
+    A,
+    `import { b } from "./b.js";\nimport { c } from "./c.js";\nexport const a = () => b() + c() + "v0";\n`,
+  );
   writeFileSync(B, `export const b = () => "b";\n`);
   writeFileSync(C, `export const c = () => "c";\n`);
 }
@@ -74,7 +77,9 @@ async function run(label, { incrementalBuild }) {
   const t1 = performance.now();
   const code1 = out1.output.find((o) => o.type === "chunk")?.code ?? "";
   console.log(`  generate#1: ${(t1 - t0).toFixed(2)}ms  transformCounts=${JSON.stringify(counts)}`);
-  console.log(`  generate#1 contains "v0": ${code1.includes('"v0"')}, contains '"b"': ${code1.includes('() => "b"')}`);
+  console.log(
+    `  generate#1 contains "v0": ${code1.includes('"v0"')}, contains '"b"': ${code1.includes('() => "b"')}`,
+  );
 
   // EDIT b.js on disk
   writeFileSync(B, `export const b = () => "b-EDITED";\n`);
@@ -92,7 +97,9 @@ async function run(label, { incrementalBuild }) {
   }
   const t3 = performance.now();
   const code2 = out2.output.find((o) => o.type === "chunk")?.code ?? "";
-  console.log(`  generate#2 (warm, after edit): ${(t3 - t2).toFixed(2)}ms  transformCounts=${JSON.stringify(counts)}`);
+  console.log(
+    `  generate#2 (warm, after edit): ${(t3 - t2).toFixed(2)}ms  transformCounts=${JSON.stringify(counts)}`,
+  );
   console.log(`  generate#2 picked up edit ("b-EDITED" present): ${code2.includes("b-EDITED")}`);
   console.log(`  generate#2 re-ran ANY transform: ${Object.values(counts).some((v) => v > 0)}`);
 
@@ -104,8 +111,12 @@ async function run(label, { incrementalBuild }) {
     p = Object.getPrototypeOf(p);
   }
   const hot = protoMethods.filter((m) => /invalidate|rebuild|hot|update|patch/i.test(m));
-  console.log(`  handle methods matching invalidate/rebuild/hot/update/patch: ${JSON.stringify(hot)}`);
-  console.log(`  all handle methods: ${JSON.stringify([...new Set(protoMethods)].filter((m) => m !== "constructor"))}`);
+  console.log(
+    `  handle methods matching invalidate/rebuild/hot/update/patch: ${JSON.stringify(hot)}`,
+  );
+  console.log(
+    `  all handle methods: ${JSON.stringify([...new Set(protoMethods)].filter((m) => m !== "constructor"))}`,
+  );
 
   await bundle.close();
 }
