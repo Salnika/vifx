@@ -142,19 +142,6 @@ export interface VifxExpoGoDevServer {
   watching: boolean;
 }
 
-function resolvePublicEnv(
-  explicitEnv: Record<string, string> | undefined,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  prefix: string,
-) {
-  const source = explicitEnv ?? processEnv ?? {};
-  return Object.fromEntries(
-    Object.entries(source)
-      .filter(([name, value]) => name.startsWith(prefix) && typeof value === "string")
-      .sort(([left], [right]) => left.localeCompare(right)),
-  );
-}
-
 async function pathExists(filePath: string) {
   try {
     await access(filePath);
@@ -914,14 +901,8 @@ export async function findExpoAppConfig(projectRoot: string, explicitPath?: stri
 
 export function expo(options: VifxExpoPluginOptions): Plugin[] {
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
-  const publicEnvPrefix = options.publicEnvPrefix ?? "EXPO_PUBLIC_";
   const resolvePlatform = options.resolvePlatform ?? options.platform;
   const shimExpoPackage = options.reactNativeCompat === "web" || resolvePlatform === "web";
-  const publicEnv = resolvePublicEnv(
-    options.publicEnv,
-    options.env ?? process.env,
-    publicEnvPrefix,
-  );
 
   return [
     {
@@ -929,17 +910,15 @@ export function expo(options: VifxExpoPluginOptions): Plugin[] {
       enforce: "pre",
       async config() {
         const appConfigPath = await findExpoAppConfig(projectRoot, options.appConfigPath);
-        const defineEntries = Object.fromEntries(
-          Object.entries(publicEnv).flatMap(([name, value]) => [
-            [`import.meta.env.${name}`, JSON.stringify(value)],
-            [`process.env.${name}`, JSON.stringify(value)],
-          ]),
-        );
 
+        // Only the Expo-specific define lives here. Public env (`EXPO_PUBLIC_*`)
+        // and the mode/platform defines come from the single source of truth:
+        // the reactNative plugin's config hook (`resolveDefines`), reached via
+        // the `reactNative({ ...options })` spread below. This keeps one define
+        // table for native and web (ADR-005 / native+web unification).
         return {
           define: {
             __EXPO_APP_CONFIG_PATH__: JSON.stringify(path.relative(projectRoot, appConfigPath)),
-            ...defineEntries,
           },
         };
       },
