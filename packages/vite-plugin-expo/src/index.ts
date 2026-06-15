@@ -9,7 +9,13 @@ import {
 import { createRequire } from "node:module";
 import { networkInterfaces } from "node:os";
 import path from "node:path";
-import { build, createServer as createViteServer, type Plugin, type ViteDevServer } from "vite";
+import {
+  build,
+  createServer as createViteServer,
+  type InlineConfig,
+  type Plugin,
+  type ViteDevServer,
+} from "vite";
 import {
   collectAssetGroup,
   createAssetServerUrl,
@@ -17,6 +23,11 @@ import {
 } from "@vifx/asset-registry";
 import { VifxError } from "@vifx/errors";
 import { symbolicateStackFrame } from "@vifx/source-map-tools";
+import {
+  extractMetroStagingUserSlices,
+  mergeWithVifx,
+  prepareUserViteConfig,
+} from "@vifx/vite-config-bridge";
 import {
   buildModuleRegistryBundle,
   buildVifxPluginPipeline,
@@ -31,6 +42,7 @@ import type {
   VifxBuildAssetArtifact,
   VifxBundleArtifacts,
   VifxBundlePlatform,
+  VifxDiagnosticData,
   VifxExpoPluginOptions,
   VifxJsonObject,
   VifxJsonValue,
@@ -1086,6 +1098,16 @@ async function createExpoBuildInputEntry(projectRoot: string, outDir: string, en
   return inputPath;
 }
 
+/**
+ * Surfaces a user-Vite-config diagnostic on stderr with the shared `[vifx]`
+ * prefix. Only fires when a user `vite.config.vifx.*` collides with a vifx-owned
+ * key, so the no-user-config path stays silent (and the bundle byte-identical).
+ */
+function warnUserViteConfigDiagnostic(diagnostic: VifxDiagnosticData): void {
+  const hint = diagnostic.hint ? ` ${diagnostic.hint}` : "";
+  console.warn(`[vifx] ${diagnostic.message}${hint}`);
+}
+
 export async function buildExpoBundle(
   options: VifxExpoPluginOptions & { existingModuleIds?: ReadonlyMap<string, number> },
 ): Promise<VifxBundleArtifacts> {
@@ -1093,6 +1115,21 @@ export async function buildExpoBundle(
   const entry = options.entry ?? "./index.js";
   const outDir = options.outDir ?? `.vifx/expo/${options.platform}`;
   const absoluteOutDir = path.resolve(projectRoot, outDir);
+  const resolvePlatform = options.resolvePlatform ?? options.platform;
+
+  // Load the user `vite.config.vifx.*` once. On the metro path only the safe
+  // slices (plugins + filtered resolve/define) are injected; the staging
+  // `build.rollupOptions.output` stays vifx-owned.
+  const { userResult, diagnostics } = await prepareUserViteConfig({
+    projectRoot,
+    configFile: options.userViteConfig,
+    command: "build",
+    mode: resolveBundleMode(options),
+    resolvePlatform,
+  });
+  for (const diagnostic of diagnostics) {
+    warnUserViteConfigDiagnostic(diagnostic);
+  }
 
   if ((options.moduleFormat ?? "hoisted") === "metro") {
     // Development metro bundles ship the Fast Refresh prelude + the explicit
@@ -1100,6 +1137,10 @@ export async function buildExpoBundle(
     // ids stay stable across rebuilds (required for /hot deltas to patch the
     // right module). Production metro bundles get neither.
     const metroMode = resolveBundleMode(options);
+    const stagingSlices = extractMetroStagingUserSlices(userResult, {
+      resolvePlatform,
+      warn: warnUserViteConfigDiagnostic,
+    });
     const registry = await buildModuleRegistryBundle({
       absoluteOutDir,
       entry,
@@ -1115,8 +1156,17 @@ export async function buildExpoBundle(
         ],
         mode: metroMode,
         includeIndirectEval: false,
+        userPlugins: stagingSlices?.userPlugins,
       }),
       projectRoot,
+      ...(stagingSlices?.resolve === undefined && stagingSlices?.define === undefined
+        ? {}
+        : {
+            userInlineConfig: {
+              ...(stagingSlices?.resolve === undefined ? {} : { resolve: stagingSlices.resolve }),
+              ...(stagingSlices?.define === undefined ? {} : { define: stagingSlices.define }),
+            },
+          }),
     });
     const appConfigPath = await findExpoAppConfig(projectRoot, options.appConfigPath).catch(
       () => undefined,
@@ -1164,7 +1214,7 @@ export async function buildExpoBundle(
         })
       : { entryFileNames: "index.bundle", format: "es" as const };
 
-  await build({
+  const hoistedConfig: InlineConfig = {
     appType: "custom",
     build: {
       assetsInlineLimit: 0,
@@ -1188,7 +1238,9 @@ export async function buildExpoBundle(
     envFile: false,
     logLevel: "silent",
     // The hoisted release path keeps the indirect-eval rewrite in production;
-    // see buildVifxPluginPipeline. userPlugins is the single user-injection seam.
+    // see buildVifxPluginPipeline. The user config (plugins + allowed keys) is
+    // merged via mergeWithVifx, which keeps vifx physically first and re-imposes
+    // the reserved keys.
     plugins: buildVifxPluginPipeline({
       basePlugins: [
         ...expo({
@@ -1202,7 +1254,14 @@ export async function buildExpoBundle(
     }),
     publicDir: false,
     root: projectRoot,
-  });
+  };
+
+  await build(
+    mergeWithVifx(userResult, hoistedConfig, {
+      resolvePlatform,
+      warn: warnUserViteConfigDiagnostic,
+    }),
+  );
 
   const bundlePath = path.join(absoluteOutDir, "index.bundle");
   const sourceMapPath = `${bundlePath}.map`;
@@ -1589,7 +1648,24 @@ export async function startExpoDevServer(
   // otherwise Vite throws instead of falling back to the next available port.
   const port = options.port ?? 0;
   const strictPort = options.port !== undefined;
-  const server = await createViteServer({
+
+  // The web dev server resolves as `web`, so the bridge allows user
+  // `optimizeDeps`/`server` keys; `mergeWithVifx` is a no-op without a user
+  // config. The `server` binding is re-applied AFTER the merge because vifx owns
+  // the host/port/strictPort the CLI resolved (a user `server` block must not
+  // change where we listen).
+  const { userResult, diagnostics } = await prepareUserViteConfig({
+    projectRoot,
+    configFile: options.userViteConfig,
+    command: "serve",
+    mode: resolveBundleMode(options),
+    resolvePlatform: "web",
+  });
+  for (const diagnostic of diagnostics) {
+    warnUserViteConfigDiagnostic(diagnostic);
+  }
+
+  const serverConfig: InlineConfig = {
     appType: "custom",
     configFile: false,
     envFile: false,
@@ -1611,12 +1687,19 @@ export async function startExpoDevServer(
     }),
     publicDir: false,
     root: projectRoot,
-    server: {
-      host,
-      port,
-      strictPort,
-    },
+  };
+
+  const mergedServerConfig = mergeWithVifx(userResult, serverConfig, {
+    resolvePlatform: "web",
+    warn: warnUserViteConfigDiagnostic,
   });
+  mergedServerConfig.server = {
+    ...mergedServerConfig.server,
+    host,
+    port,
+    strictPort,
+  };
+  const server = await createViteServer(mergedServerConfig);
 
   await server.listen();
 
