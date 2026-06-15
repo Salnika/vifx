@@ -803,11 +803,20 @@ function renderExpoDevClient(entrySpecifier: string) {
     "  };",
     "}",
     "",
+    // Real react-native-web AppRegistry, not a __VIFX_WEB_RUNTIME__ shim. The
+    // native-module globals above must be installed before react-native-web is
+    // evaluated, so AppRegistry is pulled in with a dynamic import (after the
+    // entry) rather than a hoisted static import. The entry registers its root
+    // via expo's registerRootComponent (appKey "main") and already calls
+    // runApplication when a document is present; we re-run it defensively against
+    // the dev root element. The RNW compat AppRegistry memoizes the last mounted
+    // appKey/rootTag, so this is a no-op when the entry already mounted.
     `await import(${JSON.stringify(entrySpecifier)});`,
     "",
-    "const runtime = globalThis.__VIFX_WEB_RUNTIME__;",
-    "if (runtime && typeof runtime.mount === 'function') {",
-    `  runtime.mount(${JSON.stringify(EXPO_DEV_ROOT_ELEMENT_ID)});`,
+    `const rootTag = typeof document !== 'undefined' ? document.getElementById(${JSON.stringify(EXPO_DEV_ROOT_ELEMENT_ID)}) : null;`,
+    "if (rootTag) {",
+    '  const { AppRegistry } = await import("react-native");',
+    '  AppRegistry.runApplication("main", { rootTag });',
     "}",
     "",
     "if (import.meta.hot) {",

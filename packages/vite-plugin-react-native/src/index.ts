@@ -31,7 +31,6 @@ import type {
   VifxPlatform,
   VifxReactNativePluginOptions,
   VifxTransformCacheStats,
-  VifxWebRuntimeArtifact,
 } from "@vifx/types";
 import {
   createBabelPipeline,
@@ -55,10 +54,12 @@ import {
   transformRequireContext,
 } from "./dynamic/require-context.ts";
 import {
+  DEFAULT_PUBLIC_ENV_PREFIX,
   resolveBuildMinify,
   resolveBundleMode,
   resolveDefines,
   resolveOutputOptions,
+  resolvePublicEnv,
 } from "./modes.ts";
 import { buildModuleRegistryBundle } from "./module-registry/index.ts";
 import { applyReactRefreshTransform, shouldApplyReactRefresh } from "./react-refresh.ts";
@@ -73,6 +74,7 @@ export {
   resolveBundleMode,
   resolveDefines,
   resolveOutputOptions,
+  resolvePublicEnv,
 } from "./modes.ts";
 export type {
   VifxResolveBundleModeOptions,
@@ -121,11 +123,10 @@ const NATIVE_SINGLETON_PACKAGE_SET = new Set<string>(NATIVE_SINGLETON_PACKAGES);
 const SHIM_PREFIX = "\0vifx:shim:";
 const TRANSFORM_PREFIX = "\0vifx:transformed:";
 const ASSET_PREFIX = "\0vifx:asset:";
-const WEB_RUNTIME_BUNDLE_FILE = "bundle.js";
+// Captured browser globals key used by the web-compat shims (e.g. FormData
+// re-export). Still consumed by renderCompat; the build-time preview runtime
+// that also referenced it was removed with __VIFX_WEB_RUNTIME__ (ADR-005).
 const WEB_RUNTIME_BROWSER_GLOBALS_KEY = "__VIFX_BROWSER_GLOBALS__";
-const WEB_RUNTIME_HTML_FILE = "index.html";
-const WEB_RUNTIME_ROOT_ELEMENT_ID = "root";
-const WEB_RUNTIME_SCRIPT_FILE = "runtime.js";
 const WEB_COMPAT_SPECIFIERS = new Set([
   "react-native",
   "react-native/Libraries/BatchedBridge/NativeModules",
@@ -166,6 +167,13 @@ interface ReactNativePluginState {
   moduleFormat?: VifxModuleFormat;
   platform: VifxReactNativePluginOptions["platform"];
   projectRoot: string;
+  /**
+   * Public env (e.g. `EXPO_PUBLIC_*`) already filtered + sorted via
+   * {@link resolvePublicEnv}. Fed to {@link resolveDefines} so the same define
+   * table inlines it for native and web. Empty when no public env var is set,
+   * keeping the define table byte-identical for the Expo Go corridor.
+   */
+  publicEnv: Record<string, string>;
   reactNativeCompat: NonNullable<VifxReactNativePluginOptions["reactNativeCompat"]>;
   resolvePlatform: VifxPlatform;
   shimJsxRuntime: boolean;
@@ -1437,55 +1445,21 @@ async function renderCompat(
         'export * from "react-native-web";',
         "const baseAppRegistry = ReactNativeWeb.AppRegistry;",
         "",
-        "function getRuntimeState() {",
-        "  const existingState = globalThis.__VIFX_WEB_RUNTIME__;",
-        "  if (existingState) {",
-        "    return existingState;",
-        "  }",
-        "",
-        "  const state = {",
-        "    lastMountedAppKey: null,",
-        "    lastRegisteredAppKey: null,",
-        "    mountedRootElementId: null,",
-        "    registeredAppKeys: [],",
-        "    mount(rootElementId = 'root') {",
-        "      const appKey =",
-        "        state.lastRegisteredAppKey ?? state.registeredAppKeys[state.registeredAppKeys.length - 1] ?? null;",
-        "",
-        "      if (!appKey) {",
-        '        throw new Error("No React Native app was registered during the Vifx runtime bootstrap.");',
-        "      }",
-        "",
-        "      if (typeof document === 'undefined') {",
-        '        throw new Error("The Vifx web runtime requires a browser document.");',
-        "      }",
-        "",
-        "      const rootTag = document.getElementById(rootElementId);",
-        "      if (!rootTag) {",
-        '        throw new Error(`Required HTML element with id "${rootElementId}" was not found.`);',
-        "      }",
-        "",
-        "      if (state.lastMountedAppKey === appKey && state.mountedRootElementId === rootElementId) {",
-        "        return appKey;",
-        "      }",
-        "",
-        "      AppRegistry.runApplication(appKey, { rootTag });",
-        "      return appKey;",
-        "    },",
-        "  };",
-        "",
-        "  globalThis.__VIFX_WEB_RUNTIME__ = state;",
-        "  return state;",
-        "}",
-        "",
-        "const runtimeState = getRuntimeState();",
+        "// Module-local memoization of the registered/mounted app keys (no global",
+        "// runtime shim). registerRootComponent (from the Expo shim) drives the real",
+        "// react-native-web AppRegistry.runApplication; this wrapper only remembers",
+        "// which appKey/rootTag last mounted so a re-render doesn't double-mount.",
+        "let lastRegisteredAppKey = null;",
+        "let lastMountedAppKey = null;",
+        "let lastMountedRootElementId = null;",
+        "const registeredAppKeys = [];",
         "",
         "function rememberAppKey(appKey) {",
-        "  if (!runtimeState.registeredAppKeys.includes(appKey)) {",
-        "    runtimeState.registeredAppKeys.push(appKey);",
+        "  if (!registeredAppKeys.includes(appKey)) {",
+        "    registeredAppKeys.push(appKey);",
         "  }",
         "",
-        "  runtimeState.lastRegisteredAppKey = appKey;",
+        "  lastRegisteredAppKey = appKey;",
         "  return appKey;",
         "}",
         "",
@@ -1515,8 +1489,13 @@ async function renderCompat(
         "  },",
         "  runApplication(appKey, appParameters) {",
         "    rememberAppKey(appKey);",
-        "    runtimeState.lastMountedAppKey = appKey;",
-        "    runtimeState.mountedRootElementId = appParameters?.rootTag?.id ?? null;",
+        "    const rootElementId = appParameters?.rootTag?.id ?? null;",
+        "    if (lastMountedAppKey === appKey && lastMountedRootElementId === rootElementId) {",
+        "      return baseAppRegistry.getApplication?.(appKey, appParameters);",
+        "    }",
+        "",
+        "    lastMountedAppKey = appKey;",
+        "    lastMountedRootElementId = rootElementId;",
         "    return baseAppRegistry.runApplication(appKey, appParameters);",
         "  },",
         "  setComponentProviderInstrumentationHook(hook) {",
@@ -2284,6 +2263,21 @@ function resolveProjectBabelVersion(projectRoot: string): string {
   return resolveDependencyVersion("@babel/core", projectManifestUrl);
 }
 
+/**
+ * Resolves the public env (e.g. `EXPO_PUBLIC_*`) to inline as build-time
+ * defines. An explicit `publicEnv` map wins; otherwise the prefixed keys are
+ * read from `options.env` (falling back to `process.env`). Filtered + sorted by
+ * {@link resolvePublicEnv} so the emitted define order is byte-stable. Empty
+ * when nothing matches the prefix, which keeps the Expo Go corridor's define
+ * table byte-identical to a build with no public env var.
+ */
+function resolvePublicEnvFromOptions(
+  options: Pick<VifxReactNativePluginOptions, "publicEnv" | "publicEnvPrefix" | "env">,
+): Record<string, string> {
+  const prefix = options.publicEnvPrefix ?? DEFAULT_PUBLIC_ENV_PREFIX;
+  return resolvePublicEnv(options.publicEnv ?? options.env ?? process.env, prefix);
+}
+
 function createTransformCacheForState(options: {
   projectRoot: string;
   transformCache?: boolean;
@@ -2457,6 +2451,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         define: resolveDefines({
           mode: state.mode,
           platform: state.platform,
+          publicEnv: state.publicEnv,
           resolvePlatform: state.resolvePlatform,
         }),
         resolve: {
@@ -2821,6 +2816,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
     moduleFormat: options.moduleFormat,
     platform: options.platform,
     projectRoot,
+    publicEnv: resolvePublicEnvFromOptions(options),
     reactNativeCompat: options.reactNativeCompat ?? "none",
     resolvePlatform: options.resolvePlatform ?? options.platform,
     shimJsxRuntime: options.shimJsxRuntime ?? true,
@@ -2850,441 +2846,6 @@ async function createBuildInputEntry(projectRoot: string, absoluteOutDir: string
   await mkdir(path.dirname(generatedEntryPath), { recursive: true });
   await writeFile(generatedEntryPath, `import ${JSON.stringify(entry)};\n`, "utf8");
   return generatedEntryPath;
-}
-
-async function resolveWebPreviewDependency(options: {
-  conditions?: string[];
-  extensions?: string[];
-  fromFile: string;
-  mainFields?: string[];
-  projectRoot: string;
-  specifier: string;
-}) {
-  const resolved = await resolveReactNativeModule({
-    conditions: normalizeConditions("web", options.conditions),
-    extensions: normalizeExtensions(options.extensions),
-    fromFile: options.fromFile,
-    mainFields: normalizeMainFields("web", options.mainFields),
-    platform: "web",
-    projectRoot: options.projectRoot,
-    specifier: options.specifier,
-  });
-
-  return stripQuery(resolved.filePath);
-}
-
-async function createExpoRouterWebPreviewEntry(options: {
-  conditions?: string[];
-  extensions?: string[];
-  mainFields?: string[];
-  outDir: string;
-  platform: VifxReactNativePluginOptions["platform"];
-  projectRoot: string;
-}) {
-  const generatedEntryDir = path.join(path.dirname(options.outDir), "__vifx-entry__");
-  const generatedEntryPath = path.join(
-    generatedEntryDir,
-    `${path.basename(options.outDir)}-expo-router-preview.mjs`,
-  );
-  const generatedContextPath = path.join(
-    generatedEntryDir,
-    `${path.basename(options.outDir)}-expo-router-context.mjs`,
-  );
-
-  await mkdir(generatedEntryDir, { recursive: true });
-  await writeFile(
-    generatedContextPath,
-    await renderExpoRouterContext({
-      platform: options.platform,
-      projectRoot: options.projectRoot,
-    }),
-    "utf8",
-  );
-
-  const reactPath = await resolveWebPreviewDependency({
-    conditions: options.conditions,
-    extensions: options.extensions,
-    fromFile: generatedEntryPath,
-    mainFields: options.mainFields,
-    projectRoot: options.projectRoot,
-    specifier: "react",
-  });
-  const expoRootPath = await resolveWebPreviewDependency({
-    conditions: options.conditions,
-    extensions: options.extensions,
-    fromFile: generatedEntryPath,
-    mainFields: options.mainFields,
-    projectRoot: options.projectRoot,
-    specifier: "expo-router/build/ExpoRoot",
-  });
-  const headPath = await resolveWebPreviewDependency({
-    conditions: options.conditions,
-    extensions: options.extensions,
-    fromFile: generatedEntryPath,
-    mainFields: options.mainFields,
-    projectRoot: options.projectRoot,
-    specifier: "expo-router/build/head",
-  });
-  const renderRootComponentPath = await resolveWebPreviewDependency({
-    conditions: options.conditions,
-    extensions: options.extensions,
-    fromFile: generatedEntryPath,
-    mainFields: options.mainFields,
-    projectRoot: options.projectRoot,
-    specifier: "expo-router/build/renderRootComponent",
-  });
-
-  await writeFile(
-    generatedEntryPath,
-    [
-      `import React from ${JSON.stringify(reactPath)};`,
-      `import { ExpoRoot } from ${JSON.stringify(expoRootPath)};`,
-      `import { Head } from ${JSON.stringify(headPath)};`,
-      `import { renderRootComponent } from ${JSON.stringify(renderRootComponentPath)};`,
-      `import { ctx } from ${JSON.stringify(generatedContextPath)};`,
-      "",
-      "export function App() {",
-      "  return React.createElement(",
-      "    Head.Provider,",
-      "    null,",
-      "    React.createElement(ExpoRoot, { context: ctx }),",
-      "  );",
-      "}",
-      "",
-      "renderRootComponent(App);",
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-
-  return generatedEntryPath;
-}
-
-async function writeWebRuntimeArtifacts(options: {
-  aliases?: Record<string, string>;
-  assetExtensions?: string[];
-  babelInPackages?: string[];
-  compatPreview?: boolean;
-  conditions?: string[];
-  entry: string;
-  extensions?: string[];
-  jsxInPackages?: string[];
-  mainFields?: string[];
-  mode: VifxBundleMode;
-  outDir: string;
-  platform: VifxReactNativePluginOptions["platform"];
-  projectRoot: string;
-  reactNativeCompat: NonNullable<VifxReactNativePluginOptions["reactNativeCompat"]>;
-  shimJsxRuntime: boolean;
-  shimReact: boolean;
-  shimReactNative: boolean;
-  transformCache: TransformCache | null;
-}): Promise<VifxWebRuntimeArtifact> {
-  const previewOutDir = path.join(options.outDir, "runtime");
-  const runtimeHtmlPath = path.join(options.outDir, WEB_RUNTIME_HTML_FILE);
-  const runtimeScriptPath = path.join(previewOutDir, WEB_RUNTIME_SCRIPT_FILE);
-  const previewEntry =
-    options.entry === EXPO_ROUTER_ENTRY_ID
-      ? await createExpoRouterWebPreviewEntry({
-          conditions: options.conditions,
-          extensions: options.extensions,
-          mainFields: options.mainFields,
-          outDir: options.outDir,
-          platform: options.platform,
-          projectRoot: options.projectRoot,
-        })
-      : options.entry;
-  const previewState: ReactNativePluginState = {
-    aliases: normalizeAliases(options.aliases),
-    assetExtensions: normalizeAssetExtensions(options.assetExtensions),
-    assetFiles: new Set<string>(),
-    emittedAssetFileNames: new Set<string>(),
-    babelInPackages: normalizeBabelInPackages(options.babelInPackages),
-    compatPreview: options.compatPreview ?? false,
-    conditions: normalizeConditions("web", options.conditions),
-    entry: previewEntry,
-    extensions: normalizeExtensions(options.extensions),
-    jsxInPackages: normalizeJsxInPackages(options.jsxInPackages),
-    mainFields: normalizeMainFields("web", options.mainFields),
-    mode: options.mode,
-    platform: options.platform,
-    projectRoot: options.projectRoot,
-    reactNativeCompat: options.reactNativeCompat,
-    resolvePlatform: "web",
-    shimJsxRuntime: options.shimJsxRuntime,
-    shimReact: options.shimReact,
-    shimReactNative: options.shimReactNative,
-    transformCache: options.transformCache,
-  };
-  const previewInputEntry = await createBuildInputEntry(
-    options.projectRoot,
-    previewOutDir,
-    previewEntry,
-  );
-
-  await build({
-    appType: "custom",
-    build: {
-      assetsInlineLimit: 0,
-      cssCodeSplit: false,
-      emptyOutDir: true,
-      minify: false,
-      outDir: relativeFrom(options.projectRoot, previewOutDir),
-      rollupOptions: {
-        input: previewInputEntry,
-        output: {
-          assetFileNames: "assets/[name][extname]",
-          chunkFileNames: "chunks/[name].js",
-          entryFileNames: WEB_RUNTIME_BUNDLE_FILE,
-          ...resolveOutputOptions({
-            mode: options.mode,
-            moduleFormat: "hoisted",
-            platform: "web",
-          }),
-        },
-      },
-      sourcemap: true,
-      target: "es2020",
-      write: true,
-    },
-    configFile: false,
-    envFile: false,
-    logLevel: "silent",
-    plugins: buildVifxPluginPipeline({
-      basePlugins: [createReactNativePlugin(previewState)],
-      mode: options.mode,
-      includeIndirectEval: false,
-    }),
-    publicDir: false,
-    root: options.projectRoot,
-  });
-  await writeFile(
-    runtimeScriptPath,
-    [
-      "const nativeModuleCache = new Map();",
-      "",
-      "function createNativeModuleProxy(moduleName) {",
-      "  const cachedModule = nativeModuleCache.get(moduleName);",
-      "  if (cachedModule) {",
-      "    return cachedModule;",
-      "  }",
-      "",
-      "  const moduleProxy = new Proxy(",
-      "    {",
-      "      addListener() {",
-      "        return {",
-      "          remove() {},",
-      "        };",
-      "      },",
-      "      addProxiedListener() {",
-      "        return {",
-      "          remove() {},",
-      "        };",
-      "      },",
-      "      getConstants() {",
-      "        if (moduleName === 'SourceCode') {",
-      "          return {",
-      "            scriptURL: typeof window !== 'undefined' ? window.location.href : '',",
-      "          };",
-      "        }",
-      "",
-      "        if (moduleName === 'DeviceInfo') {",
-      "          const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 0;",
-      "          const windowHeight = typeof window !== 'undefined' ? window.innerHeight : 0;",
-      "          const screenWidth = typeof window !== 'undefined' ? window.screen?.width ?? windowWidth : windowWidth;",
-      "          const screenHeight = typeof window !== 'undefined' ? window.screen?.height ?? windowHeight : windowHeight;",
-      "          const scale = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;",
-      "",
-      "          return {",
-      "            Dimensions: {",
-      "              screen: {",
-      "                fontScale: 1,",
-      "                height: screenHeight,",
-      "                scale,",
-      "                width: screenWidth,",
-      "              },",
-      "              window: {",
-      "                fontScale: 1,",
-      "                height: windowHeight,",
-      "                scale,",
-      "                width: windowWidth,",
-      "              },",
-      "            },",
-      "          };",
-      "        }",
-      "",
-      "        if (moduleName === 'PlatformConstants') {",
-      "          return {};",
-      "        }",
-      "",
-      "        return {};",
-      "      },",
-      "      removeListeners() {},",
-      "      removeProxiedListeners() {},",
-      "    },",
-      "    {",
-      "      get(target, property) {",
-      "        if (property in target) {",
-      "          return target[property];",
-      "        }",
-      "",
-      "        if (property === 'name') {",
-      "          return moduleName;",
-      "        }",
-      "",
-      "        return () => undefined;",
-      "      },",
-      "    },",
-      "  );",
-      "",
-      "  nativeModuleCache.set(moduleName, moduleProxy);",
-      "  return moduleProxy;",
-      "}",
-      "",
-      "if (!globalThis.nativeModuleProxy) {",
-      "  globalThis.nativeModuleProxy = new Proxy(",
-      "    {},",
-      "    {",
-      "      get(_target, property) {",
-      "        return typeof property === 'string' ? createNativeModuleProxy(property) : undefined;",
-      "      },",
-      "    },",
-      "  );",
-      "}",
-      "",
-      "if (!globalThis.__fbBatchedBridgeConfig) {",
-      "  globalThis.__fbBatchedBridgeConfig = {",
-      "    remoteModuleConfig: [],",
-      "  };",
-      "}",
-      "",
-      "if (!globalThis.__turboModuleProxy) {",
-      "  globalThis.__turboModuleProxy = (moduleName) => createNativeModuleProxy(moduleName);",
-      "}",
-      "",
-      "if (!globalThis.ErrorUtils) {",
-      "  let globalErrorHandler = (error, isFatal) => {",
-      "    if (isFatal) {",
-      "      console.error(error);",
-      "      return;",
-      "    }",
-      "",
-      "    console.warn(error);",
-      "  };",
-      "",
-      "  globalThis.ErrorUtils = {",
-      "    getGlobalHandler() {",
-      "      return globalErrorHandler;",
-      "    },",
-      "    setGlobalHandler(handler) {",
-      "      if (typeof handler === 'function') {",
-      "        globalErrorHandler = handler;",
-      "      }",
-      "    },",
-      "    reportError(error) {",
-      "      globalErrorHandler(error, false);",
-      "    },",
-      "    reportFatalError(error) {",
-      "      globalErrorHandler(error, true);",
-      "    },",
-      "  };",
-      "}",
-      "",
-      "if (globalThis.RN$useAlwaysAvailableJSErrorHandling !== true) {",
-      "  globalThis.RN$useAlwaysAvailableJSErrorHandling = true;",
-      "}",
-      "",
-      "if (!globalThis.ExpoDomWebView) {",
-      "  globalThis.ExpoDomWebView = {",
-      "    expoModulesProxy: globalThis.nativeModuleProxy,",
-      "  };",
-      "}",
-      "",
-      `if (!globalThis.${WEB_RUNTIME_BROWSER_GLOBALS_KEY} && typeof window !== 'undefined') {`,
-      `  globalThis.${WEB_RUNTIME_BROWSER_GLOBALS_KEY} = {`,
-      "    Blob: window.Blob,",
-      "    FormData: window.FormData,",
-      "    Headers: window.Headers,",
-      "    ReadableStream: window.ReadableStream,",
-      "    Request: window.Request,",
-      "    Response: window.Response,",
-      "    TextDecoder: window.TextDecoder,",
-      "    TextDecoderStream: window.TextDecoderStream,",
-      "    TextEncoder: window.TextEncoder,",
-      "    TextEncoderStream: window.TextEncoderStream,",
-      "    TransformStream: window.TransformStream,",
-      "    URL: window.URL,",
-      "    URLSearchParams: window.URLSearchParams,",
-      "    structuredClone:",
-      "      typeof window.structuredClone === 'function' ? window.structuredClone.bind(window) : undefined,",
-      "  };",
-      "}",
-      "",
-      "if (typeof window !== 'undefined') {",
-      "  const browserFetch = typeof window.fetch === 'function' ? window.fetch.bind(window) : null;",
-      "  if (browserFetch) {",
-      "    globalThis.fetch = browserFetch;",
-      "    window.fetch = browserFetch;",
-      "  }",
-      "  if (window.Headers) {",
-      "    globalThis.Headers = window.Headers;",
-      "  }",
-      "  if (window.Request) {",
-      "    globalThis.Request = window.Request;",
-      "  }",
-      "  if (window.Response) {",
-      "    globalThis.Response = window.Response;",
-      "  }",
-      "  if (typeof globalThis.eval === 'function') {",
-      "    globalThis.eval(",
-      `      ${JSON.stringify("var fetch = globalThis.fetch; var Headers = globalThis.Headers; var Request = globalThis.Request; var Response = globalThis.Response;")},`,
-      "    );",
-      "  }",
-      "}",
-      "",
-      `await import("./${WEB_RUNTIME_BUNDLE_FILE}");`,
-      "",
-      "const runtime = globalThis.__VIFX_WEB_RUNTIME__;",
-      "",
-      'if (!runtime || typeof runtime.mount !== "function") {',
-      '  throw new Error("The Vifx web runtime was not initialized. Enable reactNativeCompat: \\"web\\" for this target.");',
-      "}",
-      "",
-      `runtime.mount(${JSON.stringify(WEB_RUNTIME_ROOT_ELEMENT_ID)});`,
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-  await writeFile(
-    runtimeHtmlPath,
-    [
-      "<!doctype html>",
-      '<html lang="en">',
-      "  <head>",
-      '    <meta charset="utf-8" />',
-      '    <link rel="icon" href="data:," />',
-      '    <meta name="viewport" content="width=device-width, initial-scale=1" />',
-      "    <title>Vifx Runtime</title>",
-      "    <style>",
-      "      html, body, #root { height: 100%; }",
-      "      body { margin: 0; }",
-      "    </style>",
-      "  </head>",
-      "  <body>",
-      `    <div id="${WEB_RUNTIME_ROOT_ELEMENT_ID}"></div>`,
-      `    <script type="module" src="./runtime/${WEB_RUNTIME_SCRIPT_FILE}"></script>`,
-      "  </body>",
-      "</html>",
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-
-  return {
-    htmlPath: relativeFrom(options.projectRoot, runtimeHtmlPath),
-    rootElementId: WEB_RUNTIME_ROOT_ELEMENT_ID,
-    scriptPath: relativeFrom(options.projectRoot, runtimeScriptPath),
-  };
 }
 
 export async function buildReactNativeBundle(
@@ -3323,6 +2884,7 @@ export async function buildReactNativeBundle(
     moduleFormat,
     platform: options.platform,
     projectRoot,
+    publicEnv: resolvePublicEnvFromOptions(options),
     reactNativeCompat: options.reactNativeCompat ?? "none",
     resolvePlatform: options.resolvePlatform ?? options.platform,
     shimJsxRuntime: options.shimJsxRuntime ?? true,
@@ -3447,30 +3009,13 @@ export async function buildReactNativeBundle(
     hermesBytecodePath = relativeFrom(projectRoot, hermesResult.outputBytecodePath);
   }
 
-  const runtime =
-    state.reactNativeCompat === "web"
-      ? await writeWebRuntimeArtifacts({
-          aliases: options.aliases,
-          assetExtensions: options.assetExtensions,
-          babelInPackages: options.babelInPackages,
-          compatPreview: state.compatPreview,
-          conditions: options.conditions,
-          entry,
-          extensions: options.extensions,
-          jsxInPackages: options.jsxInPackages,
-          mainFields: options.mainFields,
-          mode,
-          outDir: absoluteOutDir,
-          platform: options.platform,
-          projectRoot,
-          reactNativeCompat: state.reactNativeCompat,
-          shimJsxRuntime: state.shimJsxRuntime,
-          shimReact: state.shimReact,
-          shimReactNative: state.shimReactNative,
-          transformCache,
-        })
-      : null;
-
+  // The shim-based browser preview (writeWebRuntimeArtifacts +
+  // globalThis.__VIFX_WEB_RUNTIME__) was removed in favor of the real RNW +
+  // Vite dev server (`startExpoDevServer`); see ADR-005. The build no longer
+  // emits a preview artifact, so `runtime` is always null here. The
+  // `reactNativeCompat: "web"` resolution mode itself still works — it rewires
+  // the imports to react-native-web — but is consumed by the dev server, not a
+  // static build output.
   const cacheStats: VifxTransformCacheStats | undefined = transformCache?.stats();
 
   return {
@@ -3485,7 +3030,7 @@ export async function buildReactNativeBundle(
     mode: "react-native",
     platform: options.platform,
     projectRoot,
-    runtime,
+    runtime: null,
     sourceMap: await buildSourceMapArtifact(projectRoot, sourceMapPath),
   };
 }
