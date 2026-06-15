@@ -63,9 +63,10 @@ import {
 import { buildModuleRegistryBundle } from "./module-registry/index.ts";
 import { applyReactRefreshTransform, shouldApplyReactRefresh } from "./react-refresh.ts";
 import { VIFX_HMR_CLIENT_SOURCE } from "./hmr-client.ts";
-import { createIndirectEvalPlugin } from "./indirect-eval.ts";
+import { buildVifxPluginPipeline } from "./pipeline.ts";
 export { VIFX_HMR_URL_GLOBAL } from "./hmr-client.ts";
 export { createIndirectEvalPlugin } from "./indirect-eval.ts";
+export { buildVifxPluginPipeline } from "./pipeline.ts";
 
 export {
   resolveBuildMinify,
@@ -2286,9 +2287,18 @@ function resolveProjectBabelVersion(projectRoot: string): string {
 function createTransformCacheForState(options: {
   projectRoot: string;
   transformCache?: boolean;
+  transformCacheInstance?: unknown;
 }): TransformCache | null {
   if (options.transformCache === false) {
     return null;
+  }
+
+  // Injection seam (instrumentation workstream): when a caller supplies its own
+  // cache instance, use it instead of creating one so it can observe the build.
+  // Reserved and inert today — no caller passes an instance, so this is never
+  // taken and the created cache (and its version key) is byte-for-byte unchanged.
+  if (options.transformCacheInstance != null) {
+    return options.transformCacheInstance as TransformCache;
   }
 
   const version = [
@@ -2819,6 +2829,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
     transformCache: createTransformCacheForState({
       projectRoot,
       transformCache: options.transformCache,
+      transformCacheInstance: options.transformCacheInstance,
     }),
   };
 
@@ -3039,7 +3050,11 @@ async function writeWebRuntimeArtifacts(options: {
     configFile: false,
     envFile: false,
     logLevel: "silent",
-    plugins: [createReactNativePlugin(previewState)],
+    plugins: buildVifxPluginPipeline({
+      basePlugins: [createReactNativePlugin(previewState)],
+      mode: options.mode,
+      includeIndirectEval: false,
+    }),
     publicDir: false,
     root: options.projectRoot,
   });
@@ -3282,6 +3297,7 @@ export async function buildReactNativeBundle(
   const transformCache = createTransformCacheForState({
     projectRoot,
     transformCache: options.transformCache,
+    transformCacheInstance: options.transformCacheInstance,
   });
   const mode = resolveBundleMode(options);
   const moduleFormat = options.moduleFormat ?? "hoisted";
@@ -3319,7 +3335,11 @@ export async function buildReactNativeBundle(
     const registry = await buildModuleRegistryBundle({
       absoluteOutDir,
       entry,
-      plugins: [createReactNativePlugin(state)],
+      plugins: buildVifxPluginPipeline({
+        basePlugins: [createReactNativePlugin(state)],
+        mode,
+        includeIndirectEval: false,
+      }),
       projectRoot,
     });
     const bundleStats = await stat(registry.bundlePath);
@@ -3386,12 +3406,13 @@ export async function buildReactNativeBundle(
     configFile: false,
     envFile: false,
     logLevel: "silent",
-    plugins: [
-      createReactNativePlugin(state),
-      // Rewrite the lone direct `eval` so oxc-minify can mangle the whole
-      // release bundle (see createIndirectEvalPlugin). Production only.
-      ...(mode === "production" ? [createIndirectEvalPlugin()] : []),
-    ],
+    // The hoisted release path keeps the indirect-eval rewrite (it unblocks
+    // oxc-minify mangling on the whole bundle); see buildVifxPluginPipeline.
+    plugins: buildVifxPluginPipeline({
+      basePlugins: [createReactNativePlugin(state)],
+      mode,
+      includeIndirectEval: true,
+    }),
     publicDir: false,
     root: projectRoot,
   };

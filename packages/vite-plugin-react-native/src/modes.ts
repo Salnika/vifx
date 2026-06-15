@@ -14,7 +14,33 @@ export interface VifxResolveDefinesOptions {
   mode: VifxBundleMode;
   platform: VifxBundlePlatform;
   resolvePlatform: VifxPlatform;
+  /**
+   * Public env vars to inline (e.g. `EXPO_PUBLIC_*`). Reserved for the
+   * native+web workstream; {@link resolveDefines} ignores them today, so the
+   * define table is unchanged when they are absent.
+   */
+  publicEnv?: Record<string, string>;
+  publicEnvPrefix?: string;
 }
+
+/**
+ * Define keys vifx imposes on every build, mirroring {@link resolveDefines}.
+ * Exposed so the plugin workstream can detect (and warn about) a user Vite
+ * config that would override them. Read-only contract; not consumed here.
+ */
+export const VIFX_IMPOSED_DEFINE_KEYS = [
+  "__DEV__",
+  "global",
+  "process.env.NODE_ENV",
+  "process.env.EXPO_OS",
+] as const;
+
+/**
+ * `resolve.*` keys vifx imposes (platform `conditions` + `dedupe`). Exposed so
+ * the plugin workstream can guard against a user config that would break
+ * `.ios`/`.native` resolution. Read-only contract; not consumed here.
+ */
+export const VIFX_IMPOSED_RESOLVE_KEYS = ["conditions", "dedupe"] as const;
 
 export interface VifxResolveOutputOptionsOptions {
   mode: VifxBundleMode;

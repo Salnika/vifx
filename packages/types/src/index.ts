@@ -103,6 +103,49 @@ export interface VifxTransformCacheStats {
 }
 
 /**
+ * Per-phase wall-clock timings for one dev-server rebuild cycle. Reserved for
+ * the instrumentation workstream; populated by the dev rebuild path, undefined
+ * elsewhere. `hbcMs`/`applyMs` are optional (some paths have no Hermes compile
+ * or HMR-apply phase).
+ */
+export interface VifxRebuildPhaseTimings {
+  transformMs: number;
+  serializeMs: number;
+  writeMs: number;
+  hbcMs?: number;
+  applyMs?: number;
+  totalMs: number;
+}
+
+/**
+ * Transform-cache hit/miss counts for a SINGLE rebuild cycle (a delta, not the
+ * cumulative {@link VifxTransformCacheStats}). `hitRate` is `hits / (hits +
+ * misses)` for that cycle, or 0 when nothing was looked up.
+ */
+export interface VifxCycleCacheStats {
+  hits: number;
+  misses: number;
+  computed: number;
+  hitRate: number;
+}
+
+/**
+ * One dev-server rebuild report, surfaced for terminal / `--json` output.
+ * Reserved for the instrumentation workstream; nothing emits it yet.
+ * `changedPaths` is optional (the dev watcher does not propagate it into the
+ * rebuild closure today).
+ */
+export interface VifxRebuildReport {
+  cycle: number;
+  changedPaths?: string[];
+  phases: VifxRebuildPhaseTimings;
+  cache?: VifxCycleCacheStats;
+  moduleCount?: number;
+  hmr: "fast-refresh" | "reload" | "error";
+  error?: string;
+}
+
+/**
  * One serialized module from a `moduleFormat: "metro"` build, surfaced so a dev
  * server can diff rebuilds into Fast Refresh deltas. Structurally identical to
  * the `SerializedModule` in `@vifx/vite-plugin-react-native`; it is re-declared
@@ -120,6 +163,11 @@ export interface VifxBundleArtifacts {
   assets: VifxBuildAssetArtifact[];
   bundle: VifxBundleFileArtifact;
   cacheStats?: VifxTransformCacheStats;
+  /**
+   * Per-phase rebuild timings. Reserved for the instrumentation workstream;
+   * undefined on current build paths.
+   */
+  rebuildTimings?: VifxRebuildPhaseTimings;
   entry: string;
   hermesBytecodePath?: string;
   mode: Exclude<VifxVitePluginMode, "none">;
@@ -274,6 +322,12 @@ export interface VifxBundleTargetConfig {
 export interface VifxViteConfig {
   mode: VifxVitePluginMode;
   targets: VifxBundleTargetConfig[];
+  /**
+   * Path to a user Vite config (e.g. `vite.config.vifx.ts`) to merge into the
+   * vifx build, or `false` to opt out. Reserved for the plugin workstream; the
+   * config loader does not read or load it yet.
+   */
+  userConfigFile?: string | false;
 }
 
 export interface VifxExpoOptions {
@@ -311,6 +365,25 @@ export interface VifxReactNativePluginOptions {
   shimReact?: boolean;
   shimReactNative?: boolean;
   transformCache?: boolean;
+  /**
+   * Path to a user Vite config to merge into the build. Reserved for the plugin
+   * workstream; the build does not load it yet.
+   */
+  userViteConfig?: string;
+  /**
+   * Injection seam for a shared transform-cache instance (the concrete type is
+   * `@vifx/transform-cache`'s `TransformCache`). Typed opaque to keep
+   * `@vifx/types` free of a dependency on that package. Reserved for the
+   * instrumentation workstream; current builds ignore it and create their own.
+   */
+  transformCacheInstance?: unknown;
+  /**
+   * Public env vars (e.g. `EXPO_PUBLIC_*`) to inline as build-time defines.
+   * Reserved for the native+web workstream; the RN define table does not read
+   * them yet.
+   */
+  publicEnv?: Record<string, string>;
+  publicEnvPrefix?: string;
 }
 
 export interface VifxExpoPluginOptions extends Omit<
@@ -333,6 +406,11 @@ export interface VifxConfigInput {
   resolver?: Partial<VifxResolverConfig>;
   logger?: Partial<VifxLoggerConfig>;
   docsBaseUrl?: string;
+  /**
+   * Reserved for the native+web workstream: opt into a unified define/env table
+   * shared by native and web. Not consumed yet.
+   */
+  unifiedEnv?: boolean;
 }
 
 export interface VifxConfig {
@@ -346,6 +424,12 @@ export interface VifxConfig {
   resolver: VifxResolverConfig;
   logger: VifxLoggerConfig;
   docsBaseUrl: string;
+  /**
+   * Reserved for the native+web workstream. Present only when the input set it;
+   * normalization does not synthesize a default, so existing configs keep their
+   * exact shape.
+   */
+  unifiedEnv?: boolean;
 }
 
 export interface VifxDiagnosticData {

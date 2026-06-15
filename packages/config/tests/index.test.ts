@@ -200,3 +200,26 @@ test("validateVifxConfig rejects unknown keys with a readable error", () => {
     }),
   ).toThrowError(/Unknown config key "unknownKey"/);
 });
+
+// Reserved contract keys (batch/00): must be accepted by the strict key
+// validation so the sibling workstreams that consume them don't get rejected.
+test("validateVifxConfig accepts the reserved vite.userConfigFile key", () => {
+  const fromPath = validateVifxConfig({
+    vite: { mode: "expo", userConfigFile: "vite.config.vifx.ts" },
+  });
+  expect(fromPath.vite.userConfigFile).toBe("vite.config.vifx.ts");
+
+  const optedOut = validateVifxConfig({ vite: { mode: "expo", userConfigFile: false } });
+  expect(optedOut.vite.userConfigFile).toBe(false);
+});
+
+test("validateVifxConfig accepts the reserved top-level unifiedEnv key", () => {
+  const config = validateVifxConfig({ unifiedEnv: true });
+  expect(config.unifiedEnv).toBe(true);
+});
+
+test("normalizeVifxConfig keeps its exact shape when the reserved keys are absent", () => {
+  const config = normalizeVifxConfig({ platforms: ["ios"] });
+  expect(Object.hasOwn(config, "unifiedEnv")).toBe(false);
+  expect(Object.hasOwn(config.vite, "userConfigFile")).toBe(false);
+});

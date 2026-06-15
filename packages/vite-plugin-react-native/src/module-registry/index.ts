@@ -35,6 +35,18 @@ export type { ComputeHmrUpdateOptions, HmrUpdate, HmrUpdateModule } from "./hmr-
 const BUNDLE_FILE_NAME = "index.bundle";
 const STAGING_DIR_NAME = ".module-registry-staging";
 
+/** The three observable phases of a module-registry build. */
+export type VifxModuleRegistryPhase = "build" | "serialize" | "write";
+
+/**
+ * Opaque handle to a warm incremental build graph kept across rebuilds.
+ * Reserved for the incremental Fast Refresh PoC; it carries no usable fields
+ * yet and is never populated by the current (from-scratch) build path.
+ */
+export interface VifxIncrementalGraphHandle {
+  readonly kind: "vifx-incremental-graph-handle";
+}
+
 export interface BuildModuleRegistryBundleOptions {
   /** Absolute path of the final bundle output directory. */
   absoluteOutDir: string;
@@ -53,6 +65,22 @@ export interface BuildModuleRegistryBundleOptions {
   plugins: Plugin[];
   /** Absolute project root. */
   projectRoot: string;
+  /**
+   * User Vite config to merge into the staging build. Reserved for the plugin
+   * workstream; ignored today, so the staging build is unchanged.
+   */
+  userInlineConfig?: InlineConfig;
+  /**
+   * Warm incremental build-graph handle. Reserved for the incremental Fast
+   * Refresh PoC; ignored today (every build is from scratch).
+   */
+  graphHandle?: VifxIncrementalGraphHandle;
+  /**
+   * Per-phase timing hooks. Reserved for the instrumentation workstream; they
+   * are no-ops when unset, so the build flow and its output are unchanged.
+   */
+  onPhaseStart?: (phase: VifxModuleRegistryPhase) => void;
+  onPhaseEnd?: (phase: VifxModuleRegistryPhase) => void;
 }
 
 export interface ModuleRegistryBundleResult {
@@ -70,6 +98,12 @@ export interface ModuleRegistryBundleResult {
   plan: MetroEntryPlan;
   /** Absolute path of the emitted `index.bundle.map`. */
   sourceMapPath: string;
+  /**
+   * Per-phase timings for this build. Reserved for the instrumentation
+   * workstream; undefined today (no phase is measured), so callers that
+   * `toStrictEqual` the result keep their existing shape.
+   */
+  timings?: { transformMs: number; serializeMs: number; writeMs: number };
 }
 
 interface RawOutputItem {
@@ -181,7 +215,9 @@ export async function buildModuleRegistryBundle(
     root: options.projectRoot,
   };
 
+  options.onPhaseStart?.("build");
   const buildResult = await build(stagingConfig);
+  options.onPhaseEnd?.("build");
   const chunks = collectStagedChunks(buildResult);
   if (chunks.length === 0) {
     throw new VifxError({
@@ -192,6 +228,7 @@ export async function buildModuleRegistryBundle(
     });
   }
 
+  options.onPhaseStart?.("serialize");
   const serialized = serializeModuleRegistryBundle({
     absoluteOutDir: options.absoluteOutDir,
     chunks,
@@ -200,6 +237,7 @@ export async function buildModuleRegistryBundle(
     outputFileName: BUNDLE_FILE_NAME,
     stagingDir,
   });
+  options.onPhaseEnd?.("serialize");
   if (serialized.unresolvedModules.length > 0) {
     const warn = options.onWarn ?? ((message: string) => console.warn(message));
     warn(
@@ -211,9 +249,11 @@ export async function buildModuleRegistryBundle(
 
   const bundlePath = path.join(options.absoluteOutDir, BUNDLE_FILE_NAME);
   const sourceMapPath = `${bundlePath}.map`;
+  options.onPhaseStart?.("write");
   await mkdir(options.absoluteOutDir, { recursive: true });
   await writeFile(bundlePath, serialized.code, "utf8");
   await writeFile(sourceMapPath, JSON.stringify(serialized.map), "utf8");
+  options.onPhaseEnd?.("write");
 
   const stagedAssetsDir = path.join(stagingDir, "assets");
   if (await pathExists(stagedAssetsDir)) {

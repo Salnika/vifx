@@ -19,8 +19,8 @@ import { VifxError } from "@vifx/errors";
 import { symbolicateStackFrame } from "@vifx/source-map-tools";
 import {
   buildModuleRegistryBundle,
+  buildVifxPluginPipeline,
   computeHmrUpdate,
-  createIndirectEvalPlugin,
   reactNative,
   resolveBuildMinify,
   resolveBundleMode,
@@ -34,6 +34,7 @@ import type {
   VifxExpoPluginOptions,
   VifxJsonObject,
   VifxJsonValue,
+  VifxRebuildReport,
   VifxSerializedModule,
 } from "@vifx/types";
 import {
@@ -79,6 +80,27 @@ export interface StartExpoDevServerOptions extends Omit<VifxExpoPluginOptions, "
   platform: VifxBundlePlatform;
   port?: number;
   publicHost?: string;
+  /**
+   * Called after each dev-server rebuild with its report. Reserved for the
+   * instrumentation workstream; nothing invokes it yet.
+   * (`transformCacheInstance`/`userViteConfig`/`publicEnv` are already inherited
+   * from {@link VifxExpoPluginOptions}.)
+   */
+  onRebuild?: (report: VifxRebuildReport) => void;
+  /** User Vite/Rollup plugins to append. Reserved for the plugin workstream. */
+  userPlugins?: import("vite").Plugin[];
+  /** Use the incremental rebuild path. Reserved for the HMR PoC workstream. */
+  incremental?: boolean;
+}
+
+/**
+ * Reserved seam for the Expo Go rebuild closure. `onPhase` (instrumentation) and
+ * `incremental` (HMR PoC) are inert today; the closure ignores them so each
+ * rebuild behaves exactly as before.
+ */
+interface ExpoGoRebuildContext {
+  onPhase?: (phase: "rebuild" | "apply", ms: number) => void;
+  incremental?: boolean;
 }
 
 export interface VifxExpoDevServer {
@@ -1083,13 +1105,17 @@ export async function buildExpoBundle(
       entry,
       existingModuleIds: options.existingModuleIds,
       hmr: metroMode !== "production",
-      plugins: [
-        ...expo({
-          ...options,
-          entry,
-          projectRoot,
-        }),
-      ],
+      plugins: buildVifxPluginPipeline({
+        basePlugins: [
+          ...expo({
+            ...options,
+            entry,
+            projectRoot,
+          }),
+        ],
+        mode: metroMode,
+        includeIndirectEval: false,
+      }),
       projectRoot,
     });
     const appConfigPath = await findExpoAppConfig(projectRoot, options.appConfigPath).catch(
@@ -1161,16 +1187,19 @@ export async function buildExpoBundle(
     configFile: false,
     envFile: false,
     logLevel: "silent",
-    plugins: [
-      ...expo({
-        ...options,
-        entry,
-        projectRoot,
-      }),
-      // Production only: rewrite direct eval to indirect so the minifier can
-      // mangle the whole bundle (a single direct eval otherwise blocks it).
-      ...(mode === "production" ? [createIndirectEvalPlugin()] : []),
-    ],
+    // The hoisted release path keeps the indirect-eval rewrite in production;
+    // see buildVifxPluginPipeline. userPlugins is the single user-injection seam.
+    plugins: buildVifxPluginPipeline({
+      basePlugins: [
+        ...expo({
+          ...options,
+          entry,
+          projectRoot,
+        }),
+      ],
+      mode,
+      includeIndirectEval: true,
+    }),
     publicDir: false,
     root: projectRoot,
   });
@@ -1311,7 +1340,11 @@ export async function startExpoGoDevServer(
   let devtools: VifxExpoDevtools | null = null;
   const hotChannel = createHotChannel();
 
-  const rebuildServedBundle = async () => {
+  // Extracted/renamed in the contracts commit so the instrumentation (timing +
+  // report) and incremental-HMR workstreams plug into one stable entry point.
+  // `_ctx` is the reserved seam (onPhase + incremental); both fields are inert
+  // today, so each rebuild behaves exactly as before.
+  const runExpoGoRebuild = async (_ctx: ExpoGoRebuildContext = {}): Promise<void> => {
     hotChannel.broadcastUpdateStart();
 
     try {
@@ -1481,7 +1514,7 @@ export async function startExpoGoDevServer(
       }
     },
     projectRoot,
-    rebuild: rebuildServedBundle,
+    rebuild: runExpoGoRebuild,
   });
 
   await listen(server, host, strictPort ? port : 0);
@@ -1561,17 +1594,21 @@ export async function startExpoDevServer(
     configFile: false,
     envFile: false,
     logLevel: "silent",
-    plugins: [
-      expoDevRuntimePlugin(projectRoot, entry),
-      ...expo({
-        ...options,
-        entry,
-        platform: options.platform,
-        projectRoot,
-        reactNativeCompat: "web",
-        resolvePlatform: "web",
-      }),
-    ],
+    plugins: buildVifxPluginPipeline({
+      basePlugins: [
+        expoDevRuntimePlugin(projectRoot, entry),
+        ...expo({
+          ...options,
+          entry,
+          platform: options.platform,
+          projectRoot,
+          reactNativeCompat: "web",
+          resolvePlatform: "web",
+        }),
+      ],
+      mode: resolveBundleMode(options),
+      includeIndirectEval: false,
+    }),
     publicDir: false,
     root: projectRoot,
     server: {

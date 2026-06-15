@@ -72,12 +72,14 @@ const TOP_LEVEL_KEYS = new Set([
   "resolver",
   "logger",
   "docsBaseUrl",
+  // Reserved for the native+web workstream (inert until consumed).
+  "unifiedEnv",
 ]);
 
 const RESOLVER_KEYS = new Set(["extensions", "conditions", "mainFields"]);
 const LOGGER_KEYS = new Set(["level", "json"]);
 const EXPO_OPTIONS_KEYS = new Set(["appConfigPath", "inspectExportPath", "publicEnvPrefix"]);
-const VITE_KEYS = new Set(["mode", "targets"]);
+const VITE_KEYS = new Set(["mode", "targets", "userConfigFile"]);
 const VITE_TARGET_KEYS = new Set([
   "aliases",
   "babelInPackages",
@@ -130,6 +132,10 @@ export function normalizeVifxConfig(input: VifxConfigInput = {}): VifxConfig {
     reactNative,
   });
 
+  // Reserved (native+web workstream): only present when explicitly set, so
+  // existing normalized configs keep their exact shape.
+  const unifiedEnvEntry = input.unifiedEnv === undefined ? {} : { unifiedEnv: input.unifiedEnv };
+
   return {
     projectRoot,
     platforms,
@@ -141,6 +147,7 @@ export function normalizeVifxConfig(input: VifxConfigInput = {}): VifxConfig {
     resolver,
     logger,
     docsBaseUrl,
+    ...unifiedEnvEntry,
   };
 }
 
@@ -176,6 +183,10 @@ export function validateVifxConfig(value: unknown, source = "inline config") {
       config.docsBaseUrl === undefined
         ? undefined
         : expectString(config.docsBaseUrl, source, "docsBaseUrl"),
+    unifiedEnv:
+      config.unifiedEnv === undefined
+        ? undefined
+        : expectBoolean(config.unifiedEnv, source, "unifiedEnv"),
   });
 }
 
@@ -330,6 +341,13 @@ function parseViteConfig(value: unknown, source: string) {
       vite.targets === undefined
         ? undefined
         : normalizeBundleTargets(vite.targets, "vite.targets", source),
+    // Reserved for the plugin workstream: validated but never loaded here.
+    userConfigFile:
+      vite.userConfigFile === undefined
+        ? undefined
+        : vite.userConfigFile === false
+          ? false
+          : expectString(vite.userConfigFile, source, "vite.userConfigFile"),
   } satisfies Partial<VifxViteConfig>;
 }
 
@@ -389,10 +407,16 @@ function normalizeViteConfig(
       : "none");
   const mode = expectVitePluginMode(inferredMode, "config", "vite.mode");
 
+  // Reserved (plugin workstream): thread the opt-in path through untouched, but
+  // only when set so existing configs keep their exact normalized shape.
+  const userConfigFileEntry =
+    vite?.userConfigFile === undefined ? {} : { userConfigFile: vite.userConfigFile };
+
   if (mode === "none") {
     return {
       mode,
       targets: [],
+      ...userConfigFileEntry,
     };
   }
 
@@ -410,6 +434,7 @@ function normalizeViteConfig(
         outDir: `dist/vite/${platform}`,
         platform,
       })),
+    ...userConfigFileEntry,
   };
 }
 

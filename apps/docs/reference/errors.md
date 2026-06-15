@@ -93,6 +93,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_SETUP_EXPO_ONLY`                             | `vifx setup` was pointed at a non-Expo project even though the v1 flow supports Expo only.                        |
 | `VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST`           | Project inspection found a custom Metro `resolveRequest` hook outside Vifx scope.                                 |
 | `VIFX_UNSUPPORTED_METRO_SERIALIZER`                | Project inspection found a custom Metro serializer outside Vifx scope.                                            |
+| `VIFX_USER_VITE_CONFIG_CONFLICT`                   | A user Vite config tried to override a vifx-reserved option (resolve conditions/dedupe, defines, or output).      |
 | `VIFX_VITE_BUNDLE_MISSING`                         | A Vite bundle build finished without the expected JavaScript bundle artifact.                                     |
 
 ## Direction

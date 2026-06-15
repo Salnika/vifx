@@ -68,6 +68,18 @@ export interface SerializeModuleRegistryOptions {
    * `sources` entries are resolved relative to each chunk's location in it.
    */
   stagingDir: string;
+  /**
+   * Previous full serialization, for partial re-serialization. Reserved for the
+   * incremental Fast Refresh PoC and NOT read today: `serializeModuleRegistryBundle`
+   * still runs over the complete graph. Note `bundleLineOffset` is cumulative
+   * (see below), so a module that changes line height shifts every downstream
+   * offset — byte-exact partial re-serialization is the (uncertain) object of
+   * that PoC, not a property of the current serializer.
+   */
+  previousSerialization?: {
+    moduleIds: ReadonlyMap<string, number>;
+    modules: readonly SerializedModule[];
+  };
 }
 
 /**
