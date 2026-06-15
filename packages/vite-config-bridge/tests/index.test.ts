@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { InlineConfig, Plugin, UserConfig } from "vite";
-import { expect, test } from "vitest";
+import { expect, test } from "vite-plus/test";
 import {
   allowedViteKeys,
   detectNativeResolutionConflicts,
