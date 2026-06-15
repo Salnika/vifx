@@ -337,6 +337,15 @@ export function formatVifxWarning(message: string) {
   return `${logSymbols.warning} ${message}`;
 }
 
+/**
+ * Dims a fragment (gray) for low-emphasis inline labels — e.g. the phase labels
+ * in a one-line rebuild instrumentation report. Honors chalk's own NO_COLOR /
+ * TTY detection, so piped/`--json` output stays plain.
+ */
+export function formatVifxMuted(text: string) {
+  return chalk.gray(text);
+}
+
 export function createSpinner(options: VifxSpinnerOptions): Ora {
   return ora({
     color: "cyan",

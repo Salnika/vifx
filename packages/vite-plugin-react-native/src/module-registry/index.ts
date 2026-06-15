@@ -1,5 +1,6 @@
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { build, type InlineConfig, type Plugin } from "vite";
 import { VifxError } from "@vifx/errors";
 import { planMetroEntryModule, type MetroEntryPlan } from "./ordering.ts";
@@ -215,8 +216,13 @@ export async function buildModuleRegistryBundle(
     root: options.projectRoot,
   };
 
+  // "transform+bundle": there is a single `await build()` here — Babel transform
+  // and Rolldown bundling are one Vite build call with no isolatable pure-Babel
+  // phase — so this one span is reported as transformMs by the caller.
   options.onPhaseStart?.("build");
+  const buildStartedAt = performance.now();
   const buildResult = await build(stagingConfig);
+  const buildMs = performance.now() - buildStartedAt;
   options.onPhaseEnd?.("build");
   const chunks = collectStagedChunks(buildResult);
   if (chunks.length === 0) {
@@ -229,6 +235,7 @@ export async function buildModuleRegistryBundle(
   }
 
   options.onPhaseStart?.("serialize");
+  const serializeStartedAt = performance.now();
   const serialized = serializeModuleRegistryBundle({
     absoluteOutDir: options.absoluteOutDir,
     chunks,
@@ -237,6 +244,7 @@ export async function buildModuleRegistryBundle(
     outputFileName: BUNDLE_FILE_NAME,
     stagingDir,
   });
+  const serializeMs = performance.now() - serializeStartedAt;
   options.onPhaseEnd?.("serialize");
   if (serialized.unresolvedModules.length > 0) {
     const warn = options.onWarn ?? ((message: string) => console.warn(message));
@@ -249,7 +257,11 @@ export async function buildModuleRegistryBundle(
 
   const bundlePath = path.join(options.absoluteOutDir, BUNDLE_FILE_NAME);
   const sourceMapPath = `${bundlePath}.map`;
+  // writeMs spans the whole emit: the two writeFiles, the staged-assets rename,
+  // and the staging-dir cleanup — every fs mutation that turns the serialized
+  // bundle into the final on-disk output layout.
   options.onPhaseStart?.("write");
+  const writeStartedAt = performance.now();
   await mkdir(options.absoluteOutDir, { recursive: true });
   await writeFile(bundlePath, serialized.code, "utf8");
   await writeFile(sourceMapPath, JSON.stringify(serialized.map), "utf8");
@@ -260,6 +272,7 @@ export async function buildModuleRegistryBundle(
     await rename(stagedAssetsDir, path.join(options.absoluteOutDir, "assets"));
   }
   await rm(stagingDir, { force: true, recursive: true });
+  const writeMs = performance.now() - writeStartedAt;
 
   return {
     bundlePath,
@@ -269,5 +282,6 @@ export async function buildModuleRegistryBundle(
     modules: serialized.modules,
     plan,
     sourceMapPath,
+    timings: { transformMs: buildMs, serializeMs, writeMs },
   };
 }

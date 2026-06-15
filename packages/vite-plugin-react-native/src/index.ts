@@ -1,6 +1,7 @@
 import { access, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 import {
   build,
@@ -30,6 +31,7 @@ import type {
   VifxModuleFormat,
   VifxPlatform,
   VifxReactNativePluginOptions,
+  VifxRebuildPhaseTimings,
   VifxTransformCacheStats,
   VifxWebRuntimeArtifact,
 } from "@vifx/types";
@@ -67,6 +69,7 @@ import { buildVifxPluginPipeline } from "./pipeline.ts";
 export { VIFX_HMR_URL_GLOBAL } from "./hmr-client.ts";
 export { createIndirectEvalPlugin } from "./indirect-eval.ts";
 export { buildVifxPluginPipeline } from "./pipeline.ts";
+export type { TransformCache } from "@vifx/transform-cache";
 
 export {
   resolveBuildMinify,
@@ -2284,6 +2287,30 @@ function resolveProjectBabelVersion(projectRoot: string): string {
   return resolveDependencyVersion("@babel/core", projectManifestUrl);
 }
 
+/**
+ * Builds a transform cache with the canonical version key for `projectRoot`
+ * (cache-format + plugin + Vite + project Babel versions). Callers that want to
+ * inject their own instance via `transformCacheInstance` must create it with
+ * this helper so the version key — and therefore the on-disk entries and their
+ * invalidation — stay byte-for-byte identical to the non-injected path.
+ *
+ * The instrumentation workstream uses this to hand the same cache to the build
+ * and read `snapshotDelta()` off it for the per-cycle hit-rate.
+ */
+export function createReactNativeTransformCache(projectRoot: string): TransformCache {
+  const version = [
+    TRANSFORM_CACHE_FORMAT,
+    `plugin@${resolvePluginVersion()}`,
+    `vite@${resolveDependencyVersion("vite")}`,
+    `babel@${resolveProjectBabelVersion(projectRoot)}`,
+  ].join("|");
+
+  return createTransformCache({
+    cacheDir: defaultTransformCacheDir(projectRoot),
+    version,
+  });
+}
+
 function createTransformCacheForState(options: {
   projectRoot: string;
   transformCache?: boolean;
@@ -2295,23 +2322,14 @@ function createTransformCacheForState(options: {
 
   // Injection seam (instrumentation workstream): when a caller supplies its own
   // cache instance, use it instead of creating one so it can observe the build.
-  // Reserved and inert today — no caller passes an instance, so this is never
-  // taken and the created cache (and its version key) is byte-for-byte unchanged.
+  // The injected instance must be built with `createReactNativeTransformCache`
+  // so its version key matches what this would otherwise create — the output is
+  // then byte-for-byte unchanged.
   if (options.transformCacheInstance != null) {
     return options.transformCacheInstance as TransformCache;
   }
 
-  const version = [
-    TRANSFORM_CACHE_FORMAT,
-    `plugin@${resolvePluginVersion()}`,
-    `vite@${resolveDependencyVersion("vite")}`,
-    `babel@${resolveProjectBabelVersion(options.projectRoot)}`,
-  ].join("|");
-
-  return createTransformCache({
-    cacheDir: defaultTransformCacheDir(options.projectRoot),
-    version,
-  });
+  return createReactNativeTransformCache(options.projectRoot);
 }
 
 function createReactNativePlugin(state: ReactNativePluginState): Plugin {
@@ -3350,7 +3368,9 @@ export async function buildReactNativeBundle(
     });
 
     let hermesBytecodePath: string | undefined;
+    let hbcMs: number | undefined;
     if (options.hermes) {
+      const hermesStartedAt = performance.now();
       const hermesResult = await compileHermesBytecode({
         compilerPath: options.hermesCompilerPath,
         cwd: projectRoot,
@@ -3358,8 +3378,28 @@ export async function buildReactNativeBundle(
         inputBundlePath: registry.bundlePath,
         outputBytecodePath: path.join(absoluteOutDir, "index.hbc"),
       });
+      hbcMs = performance.now() - hermesStartedAt;
       hermesBytecodePath = relativeFrom(projectRoot, hermesResult.outputBytecodePath);
     }
+
+    // Surface the per-phase timings the module-registry build measured, plus the
+    // optional Hermes-compile span (export path only — dev metro bundles skip
+    // hbc, so hbcMs stays undefined there). cacheStats mirrors the hoisted path:
+    // it is the cumulative count; instrumentation reads the per-cycle delta
+    // directly off the injected transform cache instead.
+    const rebuildTimings: VifxRebuildPhaseTimings | undefined = registry.timings
+      ? {
+          transformMs: registry.timings.transformMs,
+          serializeMs: registry.timings.serializeMs,
+          writeMs: registry.timings.writeMs,
+          ...(hbcMs === undefined ? {} : { hbcMs }),
+          totalMs:
+            registry.timings.transformMs +
+            registry.timings.serializeMs +
+            registry.timings.writeMs +
+            (hbcMs ?? 0),
+        }
+      : undefined;
 
     return {
       assets,
@@ -3367,6 +3407,8 @@ export async function buildReactNativeBundle(
         path: relativeFrom(projectRoot, registry.bundlePath),
         sizeBytes: bundleStats.size,
       },
+      cacheStats: transformCache?.stats(),
+      rebuildTimings,
       entry,
       hermesBytecodePath,
       mode: "react-native",

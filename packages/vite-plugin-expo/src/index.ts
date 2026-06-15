@@ -9,6 +9,7 @@ import {
 import { createRequire } from "node:module";
 import { networkInterfaces } from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { build, createServer as createViteServer, type Plugin, type ViteDevServer } from "vite";
 import {
   collectAssetGroup,
@@ -21,19 +22,23 @@ import {
   buildModuleRegistryBundle,
   buildVifxPluginPipeline,
   computeHmrUpdate,
+  createReactNativeTransformCache,
   reactNative,
   resolveBuildMinify,
   resolveBundleMode,
   resolveOutputOptions,
   VIFX_HMR_URL_GLOBAL,
 } from "@vifx/vite-plugin-react-native";
+import type { TransformCache } from "@vifx/vite-plugin-react-native";
 import type {
   VifxBuildAssetArtifact,
   VifxBundleArtifacts,
   VifxBundlePlatform,
+  VifxCycleCacheStats,
   VifxExpoPluginOptions,
   VifxJsonObject,
   VifxJsonValue,
+  VifxRebuildPhaseTimings,
   VifxRebuildReport,
   VifxSerializedModule,
 } from "@vifx/types";
@@ -1100,6 +1105,18 @@ export async function buildExpoBundle(
     // ids stay stable across rebuilds (required for /hot deltas to patch the
     // right module). Production metro bundles get neither.
     const metroMode = resolveBundleMode(options);
+    // Inject an explicit transform cache so this layer can read snapshotDelta()
+    // for the per-cycle hit-rate. Build it with the RN factory so its version
+    // key (and on-disk entries/invalidation) is byte-identical to the cache the
+    // build would otherwise create on its own — the bundle output is unchanged.
+    // A caller-supplied instance (e.g. across rebuilds) wins so the same cache
+    // observes every cycle. transformCache:false opts out (no instance, no
+    // delta), matching the non-instrumented path.
+    const transformCache: TransformCache | undefined =
+      options.transformCache === false
+        ? undefined
+        : ((options.transformCacheInstance as TransformCache | undefined) ??
+          createReactNativeTransformCache(projectRoot));
     const registry = await buildModuleRegistryBundle({
       absoluteOutDir,
       entry,
@@ -1111,6 +1128,7 @@ export async function buildExpoBundle(
             ...options,
             entry,
             projectRoot,
+            transformCacheInstance: transformCache,
           }),
         ],
         mode: metroMode,
@@ -1127,6 +1145,19 @@ export async function buildExpoBundle(
       projectRoot,
     });
 
+    // The per-cycle delta (this rebuild only); cumulative stats() would converge
+    // to ~100% on a warm cache and hide what one save actually recomputed.
+    const cacheStats: VifxCycleCacheStats | undefined = transformCache?.snapshotDelta();
+    const rebuildTimings: VifxRebuildPhaseTimings | undefined = registry.timings
+      ? {
+          transformMs: registry.timings.transformMs,
+          serializeMs: registry.timings.serializeMs,
+          writeMs: registry.timings.writeMs,
+          totalMs:
+            registry.timings.transformMs + registry.timings.serializeMs + registry.timings.writeMs,
+        }
+      : undefined;
+
     return {
       appConfigPath: appConfigPath ? relativeFrom(projectRoot, appConfigPath) : undefined,
       assets,
@@ -1134,6 +1165,19 @@ export async function buildExpoBundle(
         path: relativeFrom(projectRoot, registry.bundlePath),
         sizeBytes: bundleStats.size,
       },
+      // On the dev metro path cacheStats carries the PER-CYCLE delta (this
+      // rebuild only): hits/misses for the cycle, writes = entries computed.
+      // The report layer re-derives the VifxCycleCacheStats (with hitRate) from
+      // it. errors aren't part of the cycle delta, so they read as 0 here.
+      cacheStats: cacheStats
+        ? {
+            hits: cacheStats.hits,
+            misses: cacheStats.misses,
+            writes: cacheStats.computed,
+            errors: 0,
+          }
+        : undefined,
+      rebuildTimings,
       entry,
       mode: "expo",
       moduleGraph: {
@@ -1231,6 +1275,54 @@ export async function buildExpoBundle(
   };
 }
 
+/**
+ * Composes one rebuild report from freshly built artifacts. `rebuildTimings`
+ * (transform+serialize+write) come from the metro build; `applyMs` is the
+ * HMR diff/broadcast span measured by the caller. `artifacts.cacheStats` on the
+ * dev metro path is the PER-CYCLE delta (see buildExpoBundle), so we re-derive
+ * `VifxCycleCacheStats` (with hitRate) from it. `changedPaths` is omitted by
+ * design (the watcher does not propagate it).
+ */
+export function composeRebuildReport(input: {
+  artifacts: VifxBundleArtifacts;
+  applyMs: number;
+  cycle: number;
+  hmr: VifxRebuildReport["hmr"];
+}): VifxRebuildReport {
+  const { artifacts, applyMs, cycle, hmr } = input;
+  const timings = artifacts.rebuildTimings;
+  const transformMs = timings?.transformMs ?? 0;
+  const serializeMs = timings?.serializeMs ?? 0;
+  const writeMs = timings?.writeMs ?? 0;
+  const phases: VifxRebuildPhaseTimings = {
+    transformMs,
+    serializeMs,
+    writeMs,
+    applyMs,
+    totalMs: transformMs + serializeMs + writeMs + applyMs,
+  };
+
+  let cache: VifxCycleCacheStats | undefined;
+  if (artifacts.cacheStats) {
+    const { hits, misses, writes } = artifacts.cacheStats;
+    const lookups = hits + misses;
+    cache = {
+      hits,
+      misses,
+      computed: writes,
+      hitRate: lookups === 0 ? 0 : hits / lookups,
+    };
+  }
+
+  return {
+    cycle,
+    phases,
+    ...(cache ? { cache } : {}),
+    moduleCount: artifacts.moduleGraph?.modules.length,
+    hmr,
+  };
+}
+
 interface ExpoGoServedBundle {
   assets: VifxBuildAssetArtifact[];
   bundleSource: string;
@@ -1303,6 +1395,15 @@ export async function startExpoGoDevServer(
   const mainModuleName = normalizeMainModuleName(entry);
   const { exp, packageJson } = await readExpoAppManifest(projectRoot, options.appConfigPath);
   const outDir = options.outDir ?? `.vifx/expo-go/${options.platform}`;
+  // One persistent transform cache shared by the initial build and every
+  // rebuild, so snapshotDelta() observes each save cycle in isolation. Built
+  // with the canonical version key, so output stays byte-identical to the
+  // non-injected path; transformCache:false opts out (no per-cycle hit-rate).
+  const transformCacheInstance =
+    options.transformCache === false
+      ? undefined
+      : ((options.transformCacheInstance as TransformCache | undefined) ??
+        createReactNativeTransformCache(projectRoot));
   const bundleOptions: VifxExpoPluginOptions = {
     ...options,
     entry,
@@ -1314,6 +1415,7 @@ export async function startExpoGoDevServer(
     shimJsxRuntime: options.shimJsxRuntime ?? false,
     shimReact: options.shimReact ?? false,
     shimReactNative: options.shimReactNative ?? false,
+    transformCacheInstance,
   };
   const bundle = await buildExpoBundle(bundleOptions);
   let servedBundle = await loadExpoGoServedBundle(projectRoot, bundle);
@@ -1326,6 +1428,7 @@ export async function startExpoGoDevServer(
   let prevModuleIds = bundle.moduleGraph?.moduleIds;
   let prevModules: readonly VifxSerializedModule[] = bundle.moduleGraph?.modules ?? [];
   let hmrRevision = 0;
+  let rebuildCycle = 0;
   const bundleUrlPath = await createExpoGoBundleUrlPath({
     dev: resolveBundleMode(options) !== "production",
     exp,
@@ -1342,17 +1445,31 @@ export async function startExpoGoDevServer(
 
   // Extracted/renamed in the contracts commit so the instrumentation (timing +
   // report) and incremental-HMR workstreams plug into one stable entry point.
-  // `_ctx` is the reserved seam (onPhase + incremental); both fields are inert
-  // today, so each rebuild behaves exactly as before.
+  // `_ctx` is the reserved seam (onPhase + incremental); `incremental` is still
+  // inert (HMR PoC), `onPhase` is observed here for symmetry but the report is
+  // the primary surface.
   const runExpoGoRebuild = async (_ctx: ExpoGoRebuildContext = {}): Promise<void> => {
     hotChannel.broadcastUpdateStart();
+    rebuildCycle += 1;
+    const cycle = rebuildCycle;
 
     try {
+      const rebuildStartedAt = performance.now();
       const artifacts = await buildExpoBundle({
         ...bundleOptions,
         existingModuleIds: prevModuleIds,
       });
+      // buildExpoBundle's rebuildTimings already sums transform+serialize+write;
+      // the wall span around the build is an upper bound on it. Use the measured
+      // phase breakdown when present (metro path), else fall back to the wall.
+      const rebuildMs = performance.now() - rebuildStartedAt;
+      _ctx.onPhase?.("rebuild", rebuildMs);
       servedBundle = await loadExpoGoServedBundle(projectRoot, artifacts);
+
+      // Time the HMR-apply block (diff + broadcast/reload) on its own so the
+      // report can attribute applyMs distinctly from the rebuild phases.
+      const applyStartedAt = performance.now();
+      let hmr: VifxRebuildReport["hmr"] = "reload";
       // In Fast Refresh mode the metro build always populates moduleGraph; the
       // else is the hoisted/non-FR path. Advance prev state together with the
       // diff so it can never desync from servedBundle.
@@ -1372,19 +1489,42 @@ export async function startExpoGoDevServer(
         // A deleted module can't be hot-applied; fall back to a full reload.
         if (update.deleted.length > 0) {
           messageChannel.broadcast("reload");
+          hmr = "reload";
         } else {
           hotChannel.broadcastUpdate(update);
+          hmr = "fast-refresh";
         }
       } else {
         messageChannel.broadcast("reload");
+        hmr = "reload";
       }
       hotChannel.broadcastUpdateDone();
+      const applyMs = performance.now() - applyStartedAt;
+      _ctx.onPhase?.("apply", applyMs);
+
+      // Compose the rebuild report and hand it to the caller (CLI prints it /
+      // emits NDJSON). changedPaths is omitted: the watcher does not propagate
+      // it into this closure (kept out of watch.ts by design).
+      options.onRebuild?.(
+        composeRebuildReport({
+          artifacts,
+          applyMs,
+          cycle,
+          hmr,
+        }),
+      );
     } catch (error) {
       hotChannel.broadcastError(createHotErrorPayload(error));
       console.error(
         "[vifx] Expo Go rebuild failed; still serving the last good bundle.",
         error instanceof Error ? (error.stack ?? error.message) : error,
       );
+      options.onRebuild?.({
+        cycle,
+        phases: { transformMs: 0, serializeMs: 0, writeMs: 0, totalMs: 0 },
+        hmr: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   };
 

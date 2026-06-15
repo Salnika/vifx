@@ -510,6 +510,43 @@ test(
   BUILD_TIMEOUT,
 );
 
+test(
+  "buildModuleRegistryBundle reports per-phase timings and fires the phase hooks in order",
+  async () => {
+    const projectRoot = await createSyntheticProject("metro-timings", {
+      "index.js": 'globalThis.__order.push("entry");\n',
+    });
+    const phaseEvents: string[] = [];
+
+    const registry = await buildModuleRegistryBundle({
+      absoluteOutDir: path.join(projectRoot, ".vifx/metro-timings"),
+      entry: "./index.js",
+      onPhaseStart: (phase) => phaseEvents.push(`start:${phase}`),
+      onPhaseEnd: (phase) => phaseEvents.push(`end:${phase}`),
+      plugins: [reactNative({ entry: "./index.js", platform: "ios", projectRoot })],
+      projectRoot,
+    });
+
+    expect(phaseEvents).toEqual([
+      "start:build",
+      "end:build",
+      "start:serialize",
+      "end:serialize",
+      "start:write",
+      "end:write",
+    ]);
+
+    expect(registry.timings).toBeDefined();
+    const { transformMs, serializeMs, writeMs } = registry.timings!;
+    for (const ms of [transformMs, serializeMs, writeMs]) {
+      expect(typeof ms).toBe("number");
+      expect(Number.isFinite(ms)).toBe(true);
+      expect(ms).toBeGreaterThanOrEqual(0);
+    }
+  },
+  BUILD_TIMEOUT,
+);
+
 test("module-registry prelude implements importDefault/importAll interop and cycle partials", () => {
   const context = vm.createContext({});
   vm.runInContext(MODULE_REGISTRY_PRELUDE, context, { filename: "prelude.js" });

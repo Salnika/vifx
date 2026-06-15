@@ -216,6 +216,68 @@ test("stats accumulate across hits, misses, writes", async () => {
   expect(cache.stats()).toEqual({ hits: 2, misses: 2, writes: 2, errors: 0 });
 });
 
+test("snapshotDelta reports only the activity since the previous call", async () => {
+  const cache = newCache();
+
+  // First cycle: two distinct keys → two misses, both filled.
+  await cache.getOrCompute(["a.ts"], async () => "a");
+  await cache.getOrCompute(["b.ts"], async () => "b");
+  expect(cache.snapshotDelta()).toEqual({
+    hits: 0,
+    misses: 2,
+    computed: 2,
+    hitRate: 0,
+  });
+
+  // Second cycle: one warm hit + one new miss → the delta reflects THIS cycle,
+  // it does not accumulate the previous misses.
+  await cache.getOrCompute(["a.ts"], async () => "a");
+  await cache.getOrCompute(["c.ts"], async () => "c");
+  expect(cache.snapshotDelta()).toEqual({
+    hits: 1,
+    misses: 1,
+    computed: 1,
+    hitRate: 0.5,
+  });
+
+  // Third cycle: nothing looked up → hitRate is 0, not NaN.
+  expect(cache.snapshotDelta()).toEqual({
+    hits: 0,
+    misses: 0,
+    computed: 0,
+    hitRate: 0,
+  });
+
+  // A fully-warm cycle reports a 100% hit-rate, where cumulative stats would
+  // already be diluted by the earlier misses.
+  await cache.getOrCompute(["a.ts"], async () => "a");
+  await cache.getOrCompute(["c.ts"], async () => "c");
+  expect(cache.snapshotDelta()).toEqual({
+    hits: 2,
+    misses: 0,
+    computed: 0,
+    hitRate: 1,
+  });
+  // The cumulative stats meanwhile show the diluted lifetime view.
+  expect(cache.stats()).toEqual({ hits: 3, misses: 3, writes: 3, errors: 0 });
+});
+
+test("snapshotDelta resets its baseline after clear", async () => {
+  const cache = newCache();
+  await cache.getOrCompute(["pre.ts"], async () => "pre");
+  cache.snapshotDelta();
+
+  await cache.clear();
+  await cache.getOrCompute(["post.ts"], async () => "post");
+
+  expect(cache.snapshotDelta()).toEqual({
+    hits: 0,
+    misses: 1,
+    computed: 1,
+    hitRate: 0,
+  });
+});
+
 test("clear removes entries and resets counters", async () => {
   const cache = newCache();
   await cache.getOrCompute(["cleared.ts"], async () => "value");

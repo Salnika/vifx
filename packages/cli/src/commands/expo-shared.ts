@@ -3,11 +3,12 @@ import {
   formatVifxHeader,
   formatVifxInfo,
   formatVifxKeyValues,
+  formatVifxMuted,
   formatVifxWarning,
 } from "@vifx/logger";
 import type { VifxExpoDevServer, VifxExpoGoDevServer } from "@vifx/vite-plugin-expo";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
-import type { VifxBundlePlatform, VifxBundleTargetConfig } from "@vifx/types";
+import type { VifxBundlePlatform, VifxBundleTargetConfig, VifxRebuildReport } from "@vifx/types";
 import qrcodeTerminal from "qrcode-terminal";
 
 export const EXPO_HELP = `Usage:
@@ -80,6 +81,48 @@ export function formatExpoGoServerOutput(options: {
     ...(options.keyHint ? [formatVifxInfo(options.keyHint)] : []),
     formatVifxInfo("Press Ctrl+C to stop the Expo Go dev server."),
   ].join("\n");
+}
+
+function roundMs(value: number): number {
+  return Math.round(value);
+}
+
+/**
+ * One-line terminal instrumentation for a dev rebuild cycle, e.g.:
+ *
+ *   ~210ms  transform 120  serialize 35  write 40  apply 15  cache 92% (11/12)
+ *
+ * The total is approximate (rounded). `hbcMs` is included only when present
+ * (export-flavored builds); dev metro bundles skip Hermes so it is omitted. The
+ * cache segment shows this CYCLE's hit-rate and `hits/(hits+misses)`, not the
+ * cumulative count. On an error cycle it renders the reason instead.
+ */
+export function formatRebuildReport(report: VifxRebuildReport): string {
+  if (report.hmr === "error") {
+    return formatVifxMuted(`rebuild #${String(report.cycle)} failed: ${report.error ?? "unknown"}`);
+  }
+
+  const { phases, cache } = report;
+  const segments: string[] = [
+    `${formatVifxMuted("transform")} ${String(roundMs(phases.transformMs))}`,
+    `${formatVifxMuted("serialize")} ${String(roundMs(phases.serializeMs))}`,
+    `${formatVifxMuted("write")} ${String(roundMs(phases.writeMs))}`,
+  ];
+  if (phases.hbcMs !== undefined) {
+    segments.push(`${formatVifxMuted("hbc")} ${String(roundMs(phases.hbcMs))}`);
+  }
+  if (phases.applyMs !== undefined) {
+    segments.push(`${formatVifxMuted("apply")} ${String(roundMs(phases.applyMs))}`);
+  }
+  if (cache) {
+    const lookups = cache.hits + cache.misses;
+    const percent = Math.round(cache.hitRate * 100);
+    segments.push(
+      `${formatVifxMuted("cache")} ${String(percent)}% (${String(cache.hits)}/${String(lookups)})`,
+    );
+  }
+
+  return `~${String(roundMs(phases.totalMs))}ms  ${segments.join("  ")}`;
 }
 
 export function formatExpoDevServerOutput(options: {

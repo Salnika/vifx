@@ -4,6 +4,7 @@ import { loadVifxConfig } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
 import { startExpoDevServer, startExpoGoDevServer } from "@vifx/vite-plugin-expo";
 import type { VifxExpoGoDevServer } from "@vifx/vite-plugin-expo";
+import type { VifxRebuildReport } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
 import type { CliResult } from "../types.ts";
 import {
@@ -13,6 +14,7 @@ import {
   createExpoGoDevServerLifetime,
   formatExpoDevServerOutput,
   formatExpoGoServerOutput,
+  formatRebuildReport,
   parseExpoDevServerPort,
   selectSingleExpoTarget,
   validateRequestedDevPlatform,
@@ -273,6 +275,18 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
   // the target's configured moduleFormat (default hoisted = full reload).
   const moduleFormat = parsed.flags["fast-refresh"] ? "metro" : target.moduleFormat;
   if (parsed.flags["expo-go"]) {
+    // Per-cycle rebuild instrumentation. In --json mode each rebuild emits one
+    // compact NDJSON line; in terminal mode it emits the one-line breakdown.
+    // Written straight to stdout because rebuilds happen after the command has
+    // already returned its initial output and is parked in waitUntilExit.
+    const onRebuild = parsed.flags.json
+      ? (report: VifxRebuildReport) => {
+          process.stdout.write(`${JSON.stringify(report)}\n`);
+        }
+      : (report: VifxRebuildReport) => {
+          process.stdout.write(`${formatRebuildReport(report)}\n`);
+        };
+
     const server = await startExpoGoDevServer({
       aliases: target.aliases,
       appConfigPath: loaded.config.expoOptions.appConfigPath,
@@ -285,6 +299,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
       mainFields: loaded.config.resolver.mainFields,
       mode: "development",
       moduleFormat,
+      onRebuild,
       platform: target.platform,
       port,
       projectRoot: loaded.config.projectRoot,
@@ -299,35 +314,35 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
     if (parsed.flags.json) {
       const waitUntilExit = createExpoGoDevServerLifetime(server);
 
+      // Compact single line so the stdout stream stays pure NDJSON: this initial
+      // dev-server snapshot is line 1, and every subsequent rebuild (via
+      // onRebuild) appends one more line. A pretty-printed multi-line blob here
+      // would make the stream unparseable line-by-line.
       return {
         exitCode: 0,
-        stdout: JSON.stringify(
-          {
-            bundleUrl: server.bundleUrl,
-            configFile: loaded.filePath,
-            ...(server.devClientUrl === undefined ? {} : { devClientUrl: server.devClientUrl }),
-            eventsSocketUrl: server.eventsSocketUrl,
-            expoGoUrl: server.expoGoUrl,
-            fastRefresh: server.fastRefresh,
-            hmr: server.hmr,
-            host: server.host,
-            hostUri: server.hostUri,
-            hotSocketUrl: server.hotSocketUrl,
-            inspectorProxyUrl: server.inspectorProxyUrl ?? null,
-            manifestUrl: server.manifestUrl,
-            messageSocketUrl: server.messageSocketUrl,
-            metro: server.metro,
-            nativeRuntime: server.nativeRuntime,
-            platform: server.platform,
-            port: server.port,
-            projectRoot: server.projectRoot,
-            sourceMapUrl: server.sourceMapUrl,
-            url: server.url,
-            watching: server.watching,
-          },
-          null,
-          2,
-        ),
+        stdout: JSON.stringify({
+          bundleUrl: server.bundleUrl,
+          configFile: loaded.filePath,
+          ...(server.devClientUrl === undefined ? {} : { devClientUrl: server.devClientUrl }),
+          eventsSocketUrl: server.eventsSocketUrl,
+          expoGoUrl: server.expoGoUrl,
+          fastRefresh: server.fastRefresh,
+          hmr: server.hmr,
+          host: server.host,
+          hostUri: server.hostUri,
+          hotSocketUrl: server.hotSocketUrl,
+          inspectorProxyUrl: server.inspectorProxyUrl ?? null,
+          manifestUrl: server.manifestUrl,
+          messageSocketUrl: server.messageSocketUrl,
+          metro: server.metro,
+          nativeRuntime: server.nativeRuntime,
+          platform: server.platform,
+          port: server.port,
+          projectRoot: server.projectRoot,
+          sourceMapUrl: server.sourceMapUrl,
+          url: server.url,
+          watching: server.watching,
+        }),
         stderr: "",
         waitUntilExit,
       };

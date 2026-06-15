@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { toVifxError } from "@vifx/errors";
-import type { VifxTransformCacheStats } from "@vifx/types";
+import type { VifxCycleCacheStats, VifxTransformCacheStats } from "@vifx/types";
 
 /**
  * A transform result that carries both code and an optional source map.
@@ -55,6 +55,19 @@ export interface TransformCache {
   ): Promise<TransformCacheValue>;
   /** Returns a snapshot of cache counters since creation (or last {@link clear}). */
   stats(): TransformCacheStatsSnapshot;
+  /**
+   * Returns hit/miss activity for the SINGLE cycle since the previous
+   * `snapshotDelta()` call (or since creation/{@link clear} for the first call),
+   * then advances the baseline so the next call observes only the next cycle.
+   *
+   * This is what instrumentation surfaces as the per-cycle hit-rate: unlike
+   * {@link stats} (cumulative, which converges toward ~100% on a warm cache and
+   * hides per-save behavior), the delta reflects exactly what one rebuild looked
+   * up. `computed` counts entries written this cycle (cache-filling misses);
+   * `hitRate` is `hits / (hits + misses)` for the cycle, or 0 when nothing was
+   * looked up.
+   */
+  snapshotDelta(): VifxCycleCacheStats;
   /** Removes the entire cache directory and resets counters. Never throws. */
   clear(): Promise<void>;
 }
@@ -174,6 +187,12 @@ export function createTransformCache(options: CreateTransformCacheOptions): Tran
   let writes = 0;
   let errors = 0;
 
+  // Baselines captured at the last `snapshotDelta()` (or creation/`clear()`), so
+  // each call reports only the activity of the cycle that elapsed since.
+  let deltaHitsBaseline = 0;
+  let deltaMissesBaseline = 0;
+  let deltaWritesBaseline = 0;
+
   const inFlight = new Map<string, Promise<TransformCacheValue>>();
 
   async function readEntry(key: string): Promise<TransformCacheValue | null> {
@@ -274,12 +293,31 @@ export function createTransformCache(options: CreateTransformCacheOptions): Tran
     stats() {
       return { hits, misses, writes, errors } satisfies TransformCacheStatsSnapshot;
     },
+    snapshotDelta() {
+      const cycleHits = hits - deltaHitsBaseline;
+      const cycleMisses = misses - deltaMissesBaseline;
+      const cycleComputed = writes - deltaWritesBaseline;
+      deltaHitsBaseline = hits;
+      deltaMissesBaseline = misses;
+      deltaWritesBaseline = writes;
+
+      const lookups = cycleHits + cycleMisses;
+      return {
+        hits: cycleHits,
+        misses: cycleMisses,
+        computed: cycleComputed,
+        hitRate: lookups === 0 ? 0 : cycleHits / lookups,
+      } satisfies VifxCycleCacheStats;
+    },
     async clear() {
       inFlight.clear();
       hits = 0;
       misses = 0;
       writes = 0;
       errors = 0;
+      deltaHitsBaseline = 0;
+      deltaMissesBaseline = 0;
+      deltaWritesBaseline = 0;
       try {
         await rm(cacheDir, { force: true, recursive: true });
       } catch {
