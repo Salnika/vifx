@@ -291,20 +291,15 @@ test("buildReactNativeBundle can use the built-in react-native-web compat layer"
   expect(bundleSource).toContain("react-native-web compat active");
   expect(bundleSource).toContain("compat native modules");
   expect(bundleSource).toContain("compat turbo module");
-  expect(bundle.runtime?.htmlPath).toBe(".vifx/helper-ios-compat/index.html");
-  expect(bundle.runtime?.scriptPath).toBe(".vifx/helper-ios-compat/runtime/runtime.js");
-  expect(bundle.runtime?.rootElementId).toBe("root");
-  const runtimeScriptSource = await readFile(
-    path.join(projectRoot, ".vifx/helper-ios-compat/runtime/runtime.js"),
-    "utf8",
-  );
-
-  expect(runtimeScriptSource).toContain('runtime.mount("root")');
-  expect(runtimeScriptSource).toContain("globalThis.__VIFX_BROWSER_GLOBALS__");
-  expect(runtimeScriptSource).toContain("globalThis.ErrorUtils");
-  expect(
-    await readFile(path.join(projectRoot, ".vifx/helper-ios-compat/index.html"), "utf8"),
-  ).toContain('<div id="root"></div>');
+  // The shim-based browser preview (writeWebRuntimeArtifacts + the static
+  // runtime.js/index.html + __VIFX_WEB_RUNTIME__) was removed (ADR-005). The
+  // compat layer now wraps the real react-native-web AppRegistry inside the
+  // bundle itself, with no preview artifact and no global runtime shim.
+  expect(bundle.runtime).toBeNull();
+  expect(bundleSource).not.toContain("__VIFX_WEB_RUNTIME__");
+  expect(bundleSource).not.toContain("runtime.mount");
+  // The compat AppRegistry routes to the real RNW base registry.
+  expect(bundleSource).toContain("baseAppRegistry.runApplication");
 });
 
 test("buildReactNativeBundle does not tag react-native-worklets internals as compat on web", async () => {
@@ -480,7 +475,7 @@ test("buildReactNativeBundle uses native Reanimated compat for Expo Go bundles w
   expect(bundleSource).not.toContain("initializeReanimatedModule");
 });
 
-test("buildReactNativeBundle generates an Expo Router context for web runtime previews", async () => {
+test("buildReactNativeBundle generates an Expo Router context with platform routing", async () => {
   const projectRoot = await copyFixture("expo-router-basic");
   const packageRoot = path.join(projectRoot, "node_modules", "expo-router");
   const metroRuntimeRoot = path.join(projectRoot, "node_modules", "@expo", "metro-runtime");
@@ -673,18 +668,19 @@ test("buildReactNativeBundle generates an Expo Router context for web runtime pr
     projectRoot,
     reactNativeCompat: "web",
   });
-  const previewBundleSource = await readFile(
-    path.join(projectRoot, ".vifx/helper-ios-expo-router/runtime/bundle.js"),
-    "utf8",
-  );
+  // The web-preview artifact (runtime/bundle.js + index.html) was removed with
+  // the __VIFX_WEB_RUNTIME__ shim (ADR-005). The router context, platform route
+  // resolution, and require.context replacement are now asserted on the native
+  // bundle directly — the same coverage without the dead preview path.
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
 
-  expect(bundle.runtime?.htmlPath).toBe(".vifx/helper-ios-expo-router/index.html");
-  expect(previewBundleSource).toContain("vifx-expo-router-context");
-  expect(previewBundleSource).toContain("./post.tsx");
-  expect(previewBundleSource).not.toContain("expo-router app");
-  expect(previewBundleSource).not.toContain("__require.context");
-  expect(previewBundleSource).toContain("ios route");
-  expect(previewBundleSource).not.toContain('routeName = "android route"');
+  expect(bundle.runtime).toBeNull();
+  expect(bundleSource).toContain("vifx-expo-router-context");
+  expect(bundleSource).toContain("./post.tsx");
+  expect(bundleSource).not.toContain("expo-router app");
+  expect(bundleSource).not.toContain("__require.context");
+  expect(bundleSource).toContain("ios route");
+  expect(bundleSource).not.toContain('routeName = "android route"');
 });
 
 test("buildReactNativeBundle generates a native Expo Router context without require.context", async () => {
@@ -1260,22 +1256,23 @@ test("buildReactNativeBundle uses captured browser globals for Expo winter URL c
     ].join("\n"),
   );
 
+  // Web resolution (resolvePlatform "web") is what triggers the browser-globals
+  // winter URL. With the preview artifact gone (ADR-005), this is now asserted
+  // on the web-resolved native bundle directly instead of runtime/bundle.js.
   const bundle = await buildReactNativeBundle({
     entry: "./index.js",
     outDir: ".vifx/helper-ios-expo-winter-url",
     platform: "ios",
     projectRoot,
     reactNativeCompat: "web",
+    resolvePlatform: "web",
   });
-  const previewBundleSource = await readFile(
-    path.join(projectRoot, ".vifx/helper-ios-expo-winter-url/runtime/bundle.js"),
-    "utf8",
-  );
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
 
-  expect(bundle.runtime?.htmlPath).toBe(".vifx/helper-ios-expo-winter-url/index.html");
-  expect(previewBundleSource).toContain("globalThis.__VIFX_BROWSER_GLOBALS__ ?? {}");
-  expect(previewBundleSource).toContain("browserGlobals.URL ??");
-  expect(previewBundleSource).toContain("browserGlobals.URLSearchParams ??");
+  expect(bundle.runtime).toBeNull();
+  expect(bundleSource).toContain("globalThis.__VIFX_BROWSER_GLOBALS__ ?? {}");
+  expect(bundleSource).toContain("browserGlobals.URL ??");
+  expect(bundleSource).toContain("browserGlobals.URLSearchParams ??");
 });
 
 test("buildReactNativeBundle keeps the native Expo winter URL implementation", async () => {

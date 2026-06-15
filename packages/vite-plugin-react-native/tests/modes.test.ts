@@ -276,7 +276,93 @@ test("hermes production builds compile bytecode from the minified bundle", async
   expect(bytecodeSource).toBe(`HBC:${bundleSource}`);
 });
 
-test("web runtime previews keep ESM output while the native bundle is IIFE", async () => {
+test("resolveDefines inlines public env (EXPO_PUBLIC_*) for both native and web", () => {
+  const publicEnv = {
+    EXPO_PUBLIC_VIFX_DEMO: "hello",
+    EXPO_PUBLIC_API_URL: "https://api.example.test",
+    // Non-prefixed keys are dropped; non-string values are dropped upstream.
+    NOT_PUBLIC: "secret",
+  };
+
+  // Native: import.meta.env AND process.env, plus EXPO_OS.
+  expect(
+    resolveDefines({
+      mode: "development",
+      platform: "ios",
+      publicEnv,
+      resolvePlatform: "ios",
+    }),
+  ).toEqual({
+    __DEV__: "true",
+    global: "globalThis",
+    "process.env.EXPO_OS": '"ios"',
+    "process.env.NODE_ENV": '"development"',
+    "import.meta.env.EXPO_PUBLIC_API_URL": '"https://api.example.test"',
+    "import.meta.env.EXPO_PUBLIC_VIFX_DEMO": '"hello"',
+    "process.env.EXPO_PUBLIC_API_URL": '"https://api.example.test"',
+    "process.env.EXPO_PUBLIC_VIFX_DEMO": '"hello"',
+  });
+
+  // Web: same public-env injection, but WITHOUT EXPO_OS (tested invariant).
+  expect(
+    resolveDefines({
+      mode: "development",
+      platform: "ios",
+      publicEnv,
+      resolvePlatform: "web",
+    }),
+  ).toEqual({
+    __DEV__: "true",
+    global: "globalThis",
+    "process.env.NODE_ENV": '"development"',
+    "import.meta.env.EXPO_PUBLIC_API_URL": '"https://api.example.test"',
+    "import.meta.env.EXPO_PUBLIC_VIFX_DEMO": '"hello"',
+    "process.env.EXPO_PUBLIC_API_URL": '"https://api.example.test"',
+    "process.env.EXPO_PUBLIC_VIFX_DEMO": '"hello"',
+  });
+});
+
+test("resolveDefines emits public env keys in a stable sorted order for byte-identity", () => {
+  const defines = resolveDefines({
+    mode: "development",
+    platform: "android",
+    publicEnv: {
+      EXPO_PUBLIC_Z: "z",
+      EXPO_PUBLIC_A: "a",
+      EXPO_PUBLIC_M: "m",
+    },
+    resolvePlatform: "android",
+  });
+  const publicKeys = Object.keys(defines).filter((key) =>
+    key.startsWith("import.meta.env.EXPO_PUBLIC_"),
+  );
+
+  expect(publicKeys).toEqual([
+    "import.meta.env.EXPO_PUBLIC_A",
+    "import.meta.env.EXPO_PUBLIC_M",
+    "import.meta.env.EXPO_PUBLIC_Z",
+  ]);
+});
+
+test("resolveDefines honors a custom publicEnvPrefix", () => {
+  const defines = resolveDefines({
+    mode: "development",
+    platform: "ios",
+    publicEnv: { MY_PUBLIC_X: "x", EXPO_PUBLIC_Y: "y" },
+    publicEnvPrefix: "MY_PUBLIC_",
+    resolvePlatform: "ios",
+  });
+
+  expect(defines["import.meta.env.MY_PUBLIC_X"]).toBe('"x"');
+  expect(defines["process.env.MY_PUBLIC_X"]).toBe('"x"');
+  expect(defines["import.meta.env.EXPO_PUBLIC_Y"]).toBeUndefined();
+});
+
+test("the web-compat build no longer emits a shim browser-preview runtime artifact", async () => {
+  // The __VIFX_WEB_RUNTIME__ shim + writeWebRuntimeArtifacts were removed
+  // (ADR-005): the web target is served by the real react-native-web + Vite
+  // dev server, not a static build artifact. reactNativeCompat: "web" still
+  // resolves imports to react-native-web, but the build emits no preview.
   const projectRoot = await copyFixture("rn-bare-basic");
 
   await writeFakeReactNativeWebPackage(projectRoot);
@@ -299,12 +385,8 @@ test("web runtime previews keep ESM output while the native bundle is IIFE", asy
     reactNativeCompat: "web",
   });
   const nativeBundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
-  const previewBundleSource = await readFile(
-    path.join(projectRoot, ".vifx/modes-ios-web-compat/runtime/bundle.js"),
-    "utf8",
-  );
 
   expectScriptBundle(nativeBundleSource);
-  expect(bundle.runtime?.htmlPath).toBe(".vifx/modes-ios-web-compat/index.html");
-  expect(previewBundleSource).toContain("vifx modes compat probe");
+  expect(bundle.runtime).toBe(null);
+  expect(nativeBundleSource).not.toContain("__VIFX_WEB_RUNTIME__");
 });

@@ -159,19 +159,6 @@ export interface VifxExpoGoDevServer {
   watching: boolean;
 }
 
-function resolvePublicEnv(
-  explicitEnv: Record<string, string> | undefined,
-  processEnv: NodeJS.ProcessEnv | undefined,
-  prefix: string,
-) {
-  const source = explicitEnv ?? processEnv ?? {};
-  return Object.fromEntries(
-    Object.entries(source)
-      .filter(([name, value]) => name.startsWith(prefix) && typeof value === "string")
-      .sort(([left], [right]) => left.localeCompare(right)),
-  );
-}
-
 async function pathExists(filePath: string) {
   try {
     await access(filePath);
@@ -820,11 +807,20 @@ function renderExpoDevClient(entrySpecifier: string) {
     "  };",
     "}",
     "",
+    // Real react-native-web AppRegistry, not a __VIFX_WEB_RUNTIME__ shim. The
+    // native-module globals above must be installed before react-native-web is
+    // evaluated, so AppRegistry is pulled in with a dynamic import (after the
+    // entry) rather than a hoisted static import. The entry registers its root
+    // via expo's registerRootComponent (appKey "main") and already calls
+    // runApplication when a document is present; we re-run it defensively against
+    // the dev root element. The RNW compat AppRegistry memoizes the last mounted
+    // appKey/rootTag, so this is a no-op when the entry already mounted.
     `await import(${JSON.stringify(entrySpecifier)});`,
     "",
-    "const runtime = globalThis.__VIFX_WEB_RUNTIME__;",
-    "if (runtime && typeof runtime.mount === 'function') {",
-    `  runtime.mount(${JSON.stringify(EXPO_DEV_ROOT_ELEMENT_ID)});`,
+    `const rootTag = typeof document !== 'undefined' ? document.getElementById(${JSON.stringify(EXPO_DEV_ROOT_ELEMENT_ID)}) : null;`,
+    "if (rootTag) {",
+    '  const { AppRegistry } = await import("react-native");',
+    '  AppRegistry.runApplication("main", { rootTag });',
     "}",
     "",
     "if (import.meta.hot) {",
@@ -922,14 +918,8 @@ export async function findExpoAppConfig(projectRoot: string, explicitPath?: stri
 
 export function expo(options: VifxExpoPluginOptions): Plugin[] {
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
-  const publicEnvPrefix = options.publicEnvPrefix ?? "EXPO_PUBLIC_";
   const resolvePlatform = options.resolvePlatform ?? options.platform;
   const shimExpoPackage = options.reactNativeCompat === "web" || resolvePlatform === "web";
-  const publicEnv = resolvePublicEnv(
-    options.publicEnv,
-    options.env ?? process.env,
-    publicEnvPrefix,
-  );
 
   return [
     {
@@ -937,17 +927,15 @@ export function expo(options: VifxExpoPluginOptions): Plugin[] {
       enforce: "pre",
       async config() {
         const appConfigPath = await findExpoAppConfig(projectRoot, options.appConfigPath);
-        const defineEntries = Object.fromEntries(
-          Object.entries(publicEnv).flatMap(([name, value]) => [
-            [`import.meta.env.${name}`, JSON.stringify(value)],
-            [`process.env.${name}`, JSON.stringify(value)],
-          ]),
-        );
 
+        // Only the Expo-specific define lives here. Public env (`EXPO_PUBLIC_*`)
+        // and the mode/platform defines come from the single source of truth:
+        // the reactNative plugin's config hook (`resolveDefines`), reached via
+        // the `reactNative({ ...options })` spread below. This keeps one define
+        // table for native and web (ADR-005 / native+web unification).
         return {
           define: {
             __EXPO_APP_CONFIG_PATH__: JSON.stringify(path.relative(projectRoot, appConfigPath)),
-            ...defineEntries,
           },
         };
       },

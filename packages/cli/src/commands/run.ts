@@ -347,7 +347,11 @@ export async function runRunCommand(argv: string[], cwd: string): Promise<CliRes
       throw new VifxError({
         code: "VIFX_RUN_RUNTIME_MISSING",
         message: `Target "${target.platform}" did not emit a browser runtime.`,
-        hint: 'Enable reactNativeCompat: "web" and rebuild the target.',
+        // The shim-based static browser preview was removed (ADR-005): the web
+        // target is now served by the real react-native-web + Vite dev server,
+        // not a static build artifact. `vifx build`/`vifx run` no longer emit a
+        // runtime, so this path no longer has a preview to serve.
+        hint: "Serve web with the dev server (vifx expo dev --platform web) instead; static web build output was removed.",
         docsPath: "/reference/cli#run",
       });
     }
