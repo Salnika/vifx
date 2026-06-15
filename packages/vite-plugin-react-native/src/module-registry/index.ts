@@ -159,6 +159,26 @@ async function pathExists(filePath: string) {
 }
 
 /**
+ * Layers ONLY the `resolve`/`define` slices of a user inline config onto the
+ * metro staging config. `build` (and therefore `build.rollupOptions.output`) is
+ * deliberately never read here: the staging CJS layout is the Fast Refresh
+ * serialization contract and stays vifx-owned. The slices are expected to be
+ * pre-filtered of reserved keys by the plugin workstream; this merge is the
+ * single, one-time injection point (not per Fast Refresh cycle).
+ */
+function applyUserStagingSlices(target: InlineConfig, userInlineConfig?: InlineConfig): void {
+  if (userInlineConfig === undefined) {
+    return;
+  }
+  if (userInlineConfig.resolve !== undefined) {
+    target.resolve = { ...target.resolve, ...userInlineConfig.resolve };
+  }
+  if (userInlineConfig.define !== undefined) {
+    target.define = { ...target.define, ...userInlineConfig.define };
+  }
+}
+
+/**
  * Builds a Metro-compatible module-registry bundle (`moduleFormat: "metro"`).
  *
  * The target project is first built as per-module CommonJS chunks
@@ -214,6 +234,13 @@ export async function buildModuleRegistryBundle(
     publicDir: false,
     root: options.projectRoot,
   };
+
+  // The metro staging output (`format: "cjs"`, `preserveModules`, …) is the Fast
+  // Refresh serialization contract, so the user config is NEVER merged wholesale
+  // here — `build.rollupOptions.output` must stay vifx-owned. Only the narrow,
+  // already-reserved-key-filtered `resolve`/`define` slices supplied by the
+  // plugin workstream are layered on (user plugins arrive via `options.plugins`).
+  applyUserStagingSlices(stagingConfig, options.userInlineConfig);
 
   options.onPhaseStart?.("build");
   const buildResult = await build(stagingConfig);
