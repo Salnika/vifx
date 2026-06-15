@@ -51,6 +51,21 @@ const VIFX_PLUGIN_NAME_PREFIX = "vifx";
 const RESERVED_RESOLVE_KEYS = ["conditions", "dedupe"] as const;
 
 /**
+ * `resolve.alias` entries that vifx must own: a user aliasing these would
+ * reroute the entire React Native runtime (e.g. to react-native-web) or the
+ * asset registry, breaking the native bundle. Unlike `resolve.conditions`,
+ * `alias` is otherwise a legitimate user key, so only these specific entries are
+ * stripped (the rest of the user's alias map survives). Vite resolves
+ * `resolve.alias` through its own pre-enforced alias plugin, which can win the
+ * race against vifx's `resolveId`, so a warning alone is not enough — the
+ * colliding entries are physically removed.
+ */
+const VIFX_OWNED_ALIAS_KEYS = [
+  "react-native",
+  "react-native/Libraries/Image/AssetRegistry",
+] as const;
+
+/**
  * The vifx-owned `define` keys. The native+web workstream owns their *values*;
  * this package only guards their *non-overridability*. Mirrors
  * `@vifx/vite-plugin-react-native`'s `VIFX_IMPOSED_DEFINE_KEYS` (read-only
@@ -506,6 +521,14 @@ function pruneUserConfig(
         delete resolve[key];
       }
     }
+    // Strip the vifx-owned alias entries (react-native / AssetRegistry). Vite's
+    // own alias plugin is pre-enforced and can resolve these before vifx's
+    // `resolveId`, so they must be physically removed, not merely warned about.
+    // The warning is emitted separately by `detectNativeResolutionConflicts`
+    // (run per call-site), so the strip itself is silent to avoid a duplicate.
+    if (resolve.alias !== undefined) {
+      resolve.alias = stripVifxOwnedAliases(resolve.alias);
+    }
     result.resolve = resolve;
   }
 
@@ -567,6 +590,37 @@ function isVifxPlugin(plugin: Plugin): boolean {
 
 function toPluginArray(plugins: InlineConfig["plugins"]): Plugin[] {
   return flattenPlugins(plugins as UserConfig["plugins"]);
+}
+
+/**
+ * Removes the vifx-owned alias entries (react-native / AssetRegistry) from a
+ * user `resolve.alias`, preserving the rest. Handles both the object-map form
+ * (`{ "react-native": "..." }`) and the array form
+ * (`[{ find: "react-native", replacement: "..." }]`). Silent — the warning is
+ * emitted by `detectNativeResolutionConflicts`; this only enforces. Returns the
+ * original value untouched when there is nothing to strip.
+ */
+function stripVifxOwnedAliases(alias: unknown): unknown {
+  const owned = new Set<string>(VIFX_OWNED_ALIAS_KEYS);
+
+  if (Array.isArray(alias)) {
+    return alias.filter((entry) => {
+      const find = (entry as { find?: unknown } | null)?.find;
+      return !(typeof find === "string" && owned.has(find));
+    });
+  }
+
+  if (alias !== null && typeof alias === "object") {
+    const next: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(alias)) {
+      if (!owned.has(key)) {
+        next[key] = value;
+      }
+    }
+    return next;
+  }
+
+  return alias;
 }
 
 function collectAliasKeys(alias: unknown): Set<string> {

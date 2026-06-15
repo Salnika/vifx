@@ -110,6 +110,48 @@ test("reserved top-level keys (build/root/appType) are restored from vifx", () =
   });
 });
 
+test("user react-native / AssetRegistry aliases are physically stripped (object map)", () => {
+  const merged = mergeWithVifx(
+    userResult({
+      resolve: {
+        alias: {
+          "react-native": "react-native-web",
+          "react-native/Libraries/Image/AssetRegistry": "./shim",
+          "@app": "./src",
+        },
+      },
+    }),
+    vifxBase(),
+    { resolvePlatform: "ios" },
+  );
+  // vifx-owned aliases removed; the user's own (@app) survives.
+  expect(merged.resolve?.alias).toEqual({ "@app": "./src" });
+});
+
+test("user react-native alias is stripped from the array form too", () => {
+  const merged = mergeWithVifx(
+    userResult({
+      resolve: {
+        alias: [
+          { find: "react-native", replacement: "react-native-web" },
+          { find: "@app", replacement: "./src" },
+        ],
+      },
+    }),
+    vifxBase(),
+    { resolvePlatform: "ios" },
+  );
+  expect(merged.resolve?.alias).toEqual([{ find: "@app", replacement: "./src" }]);
+});
+
+test("metro staging slices also strip the vifx-owned alias", () => {
+  const slices = extractMetroStagingUserSlices(
+    userResult({ resolve: { alias: { "react-native": "react-native-web", "@app": "./src" } } }),
+    { resolvePlatform: "ios" },
+  );
+  expect(slices?.resolve?.alias).toEqual({ "@app": "./src" });
+});
+
 test("ALLOWED keys (css/esbuild) pass through verbatim", () => {
   const merged = mergeWithVifx(
     userResult({ esbuild: { jsxDev: false }, css: { devSourcemap: true } }),
