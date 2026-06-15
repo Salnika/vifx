@@ -18,48 +18,52 @@ Caveat : runs uniques (les écarts sont assez larges pour que la variance ne ren
 
 ## Résultats
 
-| Métrique | Metro | Vifx | Écart |
-|---|---|---|---|
-| **Build cold** (JS bundle) | 20,7 s | **13,2 s** | **Vifx −36 %** |
-| **Rebuild warm** (2ᵉ run, cache chaud) | 12,3 s | **3,8 s** | **Vifx ~3,2× plus rapide** |
-| Speedup du cache (cold→warm) | 1,7× | **3,4×** | cache de transform Vifx (#06) |
-| Compile Hermes (.bundle→.hbc) | 2,0 s | 1,8 s | ~égalité |
-| Bundle JS (release) | 3,54 Mo | **3,46 Mo**³ | **Vifx −2,2 %** |
-| **Bytecode Hermes** (ce qui ship) | **4,96 Mo** | 5,24 Mo¹ | Metro −5,8 % |
-| Modules / sources | 2007 | **1711** | Vifx −15 % (moins de modules) |
-| Assets émis | 39 | 32² | — |
+| Métrique                               | Metro       | Vifx         | Écart                         |
+| -------------------------------------- | ----------- | ------------ | ----------------------------- |
+| **Build cold** (JS bundle)             | 20,7 s      | **13,2 s**   | **Vifx −36 %**                |
+| **Rebuild warm** (2ᵉ run, cache chaud) | 12,3 s      | **3,8 s**    | **Vifx ~3,2× plus rapide**    |
+| Speedup du cache (cold→warm)           | 1,7×        | **3,4×**     | cache de transform Vifx (#06) |
+| Compile Hermes (.bundle→.hbc)          | 2,0 s       | 1,8 s        | ~égalité                      |
+| Bundle JS (release)                    | 3,54 Mo     | **3,46 Mo**³ | **Vifx −2,2 %**               |
+| **Bytecode Hermes** (ce qui ship)      | **4,96 Mo** | 5,24 Mo¹     | Metro −5,8 %                  |
+| Modules / sources                      | 2007        | **1711**     | Vifx −15 % (moins de modules) |
+| Assets émis                            | 39          | 32²          | —                             |
 
 ¹ **Après le fix du path production Expo** (commit `80a50d7`) : `export:embed --dev false` minifie (Oxc) + émet un IIFE. **Avant le fix**, `buildExpoBundle` ignorait le mode et émettait un bundle dev-flavored : 6,82 Mo JS / 5,82 Mo hbc — le benchmark a révélé ce bug. ² Écart d'assets à investiguer (grouping différent). ³ **Après le fix indirect-eval** (commit `9ce03c1`) : 3,82 → 3,46 Mo. Voir §« Taille » ci-dessous.
 
 ## Lecture honnête
 
 ### ✅ Avantage réel : la vitesse de build (surtout à chaud)
+
 - **Cold −36 %**, et surtout **warm ~3,2× plus rapide** (3,8 s vs 12,3 s). Le cache de transform content-addressed (#06) sur Rolldown écrase le cache de Metro (×3,4 vs ×1,7). Pour la DX quotidienne (rebuilds répétés), c'est l'argument le plus solide — et il est **mesuré, pas supposé**.
 - L'avantage cold tient même en ajoutant la minification manquante (oxc-minify = 154 ms, négligeable).
 
 ### Taille : JS désormais < Metro, mais bytecode encore +5,8 % (cause isolée)
 
-**JS release : Vifx passe sous Metro (−2,2 %, commit `9ce03c1`).** Cause de l'écart précédent (+7,8 %) : RN ne ship **qu'un seul `eval` direct** (le fallback de `loadBundleFromServer.js`). oxc-minify **désactive le mangling des identifiants *globalement*** dès qu'il voit un `eval` direct (il ne peut pas prouver que l'eval ne référence pas un local par nom) — Metro/terser limite ça à la fonction contenante. Ce seul `eval` laissait **tout** le bundle release non-manglé (`__commonJSMin` ×1858, tous les `require_*` intacts). Le plugin `createIndirectEvalPlugin` réécrit `eval(` → `(0,eval)(` en `renderChunk` avant le minify (sémantique préservée : indirect eval = scope global, ce que ces call-sites veulent déjà) → le minifier mangle tout le bundle. `__commonJSMin` 1858→0.
+**JS release : Vifx passe sous Metro (−2,2 %, commit `9ce03c1`).** Cause de l'écart précédent (+7,8 %) : RN ne ship **qu'un seul `eval` direct** (le fallback de `loadBundleFromServer.js`). oxc-minify **désactive le mangling des identifiants _globalement_** dès qu'il voit un `eval` direct (il ne peut pas prouver que l'eval ne référence pas un local par nom) — Metro/terser limite ça à la fonction contenante. Ce seul `eval` laissait **tout** le bundle release non-manglé (`__commonJSMin` ×1858, tous les `require_*` intacts). Le plugin `createIndirectEvalPlugin` réécrit `eval(` → `(0,eval)(` en `renderChunk` avant le minify (sémantique préservée : indirect eval = scope global, ce que ces call-sites veulent déjà) → le minifier mangle tout le bundle. `__commonJSMin` 1858→0.
 
 **Bytecode Hermes : encore +5,8 % (5,24 vs 4,96 Mo) — et le mangling n'y change RIEN** (Hermes ignore les noms d'identifiants ; le mangling réduit le texte JS, pas le bytecode). Diagnostic au désassembleur (`hermesc -dump-bytecode`) :
 
-| | Functions | String table | hbc |
-|---|---|---|---|
-| Metro | 18 179 | 31 043 | 4,96 Mo |
-| Vifx **hoisted** | 23 078 | 30 617 | **+5,8 %** |
-| Vifx **metro** (`__d`/`__r`, minifié) | 27 062 | 30 656 | +17,3 % |
+|                                       | Functions | String table | hbc        |
+| ------------------------------------- | --------- | ------------ | ---------- |
+| Metro                                 | 18 179    | 31 043       | 4,96 Mo    |
+| Vifx **hoisted**                      | 23 078    | 30 617       | **+5,8 %** |
+| Vifx **metro** (`__d`/`__r`, minifié) | 27 062    | 30 656       | +17,3 %    |
 
-- L'écart est **entièrement des fonctions en trop** (+4 899), pas des strings (la string table de Vifx est même *plus petite*).
-- Les +4 899 fonctions = **+8 145 arrows getter-thunk `:()=>`** (Metro : 317). Ce sont les wrappers d'interop esbuild-style de Rolldown : `__esm(() => {...})` (init différée) + `__export(ns, { nom: () => binding })` (un getter par export). Rolldown ne peut pas hoister *eagerly* un graphe RN saturé de CJS↔ESM (cœur RN + nombreuses libs en CJS, entry CJS, `require()` partout) → il enveloppe chaque module ESM atteint en lazy-init. ~8 000 arrows triviaux × ~40 o de bytecode ≈ l'écart de +287 Ko.
-- **Le format `metro` (`__d`/`__r`) n'est PAS la solution** : il supprime bien les 8 145 getters (→ 0) mais **perd le scope-hoisting cross-module de Rolldown** (DCE/inlining inter-modules) → finit avec *plus* de fonctions (27 062) et un hbc **pire** (+17,3 %). Mesuré, pas supposé.
+- L'écart est **entièrement des fonctions en trop** (+4 899), pas des strings (la string table de Vifx est même _plus petite_).
+- Les +4 899 fonctions = **+8 145 arrows getter-thunk `:()=>`** (Metro : 317). Ce sont les wrappers d'interop esbuild-style de Rolldown : `__esm(() => {...})` (init différée) + `__export(ns, { nom: () => binding })` (un getter par export). Rolldown ne peut pas hoister _eagerly_ un graphe RN saturé de CJS↔ESM (cœur RN + nombreuses libs en CJS, entry CJS, `require()` partout) → il enveloppe chaque module ESM atteint en lazy-init. ~8 000 arrows triviaux × ~40 o de bytecode ≈ l'écart de +287 Ko.
+- **Le format `metro` (`__d`/`__r`) n'est PAS la solution** : il supprime bien les 8 145 getters (→ 0) mais **perd le scope-hoisting cross-module de Rolldown** (DCE/inlining inter-modules) → finit avec _plus_ de fonctions (27 062) et un hbc **pire** (+17,3 %). Mesuré, pas supposé.
 - **Le levier réel** : Vifx hoisted = 8 145 getters + ~14 933 « vraies » fonctions ; ces 14 933 sont **déjà sous** les 18 179 de Metro. Éliminer les getters (sans perdre le hoisting) ferait passer le bytecode **sous Metro**. Mais ça n'est pas un flag Rolldown — il faudrait soit un transform custom de dé-lazification (risqué, sémantique, à valider device), soit un travail upstream Rolldown sur l'eager-hoisting des graphes CJS-lourds.
 
 ### ✅ Bug trouvé par le benchmark — CORRIGÉ
+
 Le benchmark a révélé que `vifx export:embed` sur un projet **Expo** émettait un bundle **dev-flavored même avec `--dev false`** :
+
 ```
 WARN production semantics pending: --dev false / --minify true were forwarded as
 mode "production", but this Vifx version still emits a development-flavored bundle.
 ```
+
 Cause : l'unité 14 (mode production + oxc-minify) était implémentée dans `buildReactNativeBundle`, mais le chemin Expo passe par `buildExpoBundle` (dans `@vifx/vite-plugin-expo`) qui hardcodait `minify:false` / `format:"es"` — non câblé à `resolveOutputOptions`/`resolveBuildMinify`. Intégration verte mais **lacune non couverte par les gates isolés** (aucun test ne couvrait le path production Expo) — exactement ce qu'un run réel révèle.
 
 **Résolu** (commit `80a50d7`) : `buildExpoBundle` applique désormais `resolveBundleMode` → `resolveBuildMinify` + `resolveOutputOptions` en production, tout en gardant le path development byte-identique au corridor Expo Go validé. Avertissement obsolète retiré, test de régression dev-vs-prod ajouté. Résultat re-mesuré : **6,82 → 3,82 Mo JS, 5,82 → 5,24 Mo hbc** (chiffres post-fix dans le tableau).

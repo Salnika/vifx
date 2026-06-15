@@ -80,14 +80,14 @@ resolution (`message.ios.ts` vs `message.web.ts`):
 
 Invariants verified on the emitted bundles:
 
-| Check                                                  | iOS (native) | web         |
-| ------------------------------------------------------ | ------------ | ----------- |
-| `import.meta.env.EXPO_PUBLIC_VIFX_DEMO` → `"hello"`    | yes          | yes         |
-| `process.env.EXPO_PUBLIC_VIFX_DEMO` → `"hello"`        | yes          | yes         |
-| `both-match` folds to `true` (same value both ways)    | yes          | yes         |
-| `EXPO_OS` define present                               | yes (native) | **no** (web invariant) |
-| `__VIFX_WEB_RUNTIME__` shim in output                  | **no**       | **no**      |
-| platform file resolved                                 | `message.ios.ts` | `message.web.ts` |
+| Check                                               | iOS (native)     | web                    |
+| --------------------------------------------------- | ---------------- | ---------------------- |
+| `import.meta.env.EXPO_PUBLIC_VIFX_DEMO` → `"hello"` | yes              | yes                    |
+| `process.env.EXPO_PUBLIC_VIFX_DEMO` → `"hello"`     | yes              | yes                    |
+| `both-match` folds to `true` (same value both ways) | yes              | yes                    |
+| `EXPO_OS` define present                            | yes (native)     | **no** (web invariant) |
+| `__VIFX_WEB_RUNTIME__` shim in output               | **no**           | **no**                 |
+| platform file resolved                              | `message.ios.ts` | `message.web.ts`       |
 
 The web define table keeps its existing shape with no `EXPO_OS` (web detects the
 platform through `Platform.OS`); the public-env keys are emitted in a stable
@@ -108,15 +108,15 @@ The dev web target now mounts through the **real react-native-web
 
 ## Honest degradations (web is secondary, dev-only — ADR-005)
 
-| Area                          | Native (iOS/Android)        | Web                                                                 |
-| ----------------------------- | --------------------------- | ------------------------------------------------------------------- |
-| Production build path         | yes (Hermes/hoisted)        | **none** — web is a dev/preview target only (ADR-005)               |
-| `react-native` core           | real RN                     | rerouted to `react-native-web` (`WEB_COMPAT_SPECIFIERS`)            |
-| Native module bridge          | real TurboModules/bridge    | `NativeModules`/`TurboModuleRegistry`/`NativeEventEmitter` rerouted to RNW/browser shims |
-| `react-native-reanimated`     | native-compat shim (preview)| not shimmed by vifx — resolves to the library's own web build (may no-op/lag) |
-| `expo-sqlite`                 | rerouted compat module      | no native SQLite; behavior diverges from device                    |
-| `react-native-skia`, `react-native-gesture-handler` | as-shipped | **not** brought to parity by vifx — use each library's own web support, if any |
-| Networking globals            | RN polyfills                | browser `fetch`/`FormData`/`URL` re-exported from `window`         |
+| Area                                                | Native (iOS/Android)         | Web                                                                                      |
+| --------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
+| Production build path                               | yes (Hermes/hoisted)         | **none** — web is a dev/preview target only (ADR-005)                                    |
+| `react-native` core                                 | real RN                      | rerouted to `react-native-web` (`WEB_COMPAT_SPECIFIERS`)                                 |
+| Native module bridge                                | real TurboModules/bridge     | `NativeModules`/`TurboModuleRegistry`/`NativeEventEmitter` rerouted to RNW/browser shims |
+| `react-native-reanimated`                           | native-compat shim (preview) | not shimmed by vifx — resolves to the library's own web build (may no-op/lag)            |
+| `expo-sqlite`                                       | rerouted compat module       | no native SQLite; behavior diverges from device                                          |
+| `react-native-skia`, `react-native-gesture-handler` | as-shipped                   | **not** brought to parity by vifx — use each library's own web support, if any           |
+| Networking globals                                  | RN polyfills                 | browser `fetch`/`FormData`/`URL` re-exported from `window`                               |
 
 These are intentional non-goals for this unit: no production web path, no
 reanimated/skia parity. Web faithfulness is a separate, sequenced effort
