@@ -231,18 +231,24 @@ test("findExpoAppConfig discovers app.json in the Expo fixture", async () => {
   await expect(findExpoAppConfig(projectRoot)).resolves.toBe(path.join(projectRoot, "app.json"));
 });
 
-test("expo() loads on the Expo fixture and injects EXPO_PUBLIC_ values", async () => {
+test("expo() injects EXPO_PUBLIC_ values as both import.meta.env and process.env", async () => {
   const projectRoot = await copyFixture("expo-basic");
   const appPath = path.join(projectRoot, "App.tsx");
   const originalSource = await readFile(appPath, "utf8");
 
   await writeNativeReactNativePackage(projectRoot);
   await writeNativeExpoPackage(projectRoot);
+  // Both forms must be inlined from the single define table (resolveDefines):
+  // import.meta.env.<k> AND process.env.<k> (native+web unification, ADR-005).
   await writeFile(
     appPath,
-    [originalSource.trimEnd(), "", "console.log(import.meta.env.EXPO_PUBLIC_VIFX_LABEL);", ""].join(
-      "\n",
-    ),
+    [
+      originalSource.trimEnd(),
+      "",
+      "console.log(import.meta.env.EXPO_PUBLIC_VIFX_LABEL);",
+      "console.log(process.env.EXPO_PUBLIC_VIFX_LABEL);",
+      "",
+    ].join("\n"),
   );
 
   await build({
@@ -312,6 +318,11 @@ NETWORK_SERVER_TESTS("startExpoDevServer serves bounded dev HTML and Vite HMR cl
     expect(clientResponse.status).toBe(200);
     expect(client).toContain("import.meta.hot.accept");
     expect(client).toContain("await import");
+    // The dev client mounts via the real react-native-web AppRegistry, not the
+    // removed __VIFX_WEB_RUNTIME__ shim (ADR-005 native+web unification).
+    expect(client).toContain('AppRegistry.runApplication("main"');
+    expect(client).not.toContain("__VIFX_WEB_RUNTIME__");
+    expect(client).not.toContain("runtime.mount");
   } finally {
     await server.close();
   }
