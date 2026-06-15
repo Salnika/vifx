@@ -340,6 +340,7 @@ export async function runRunCommand(argv: string[], cwd: string): Promise<CliRes
       shimReact: target.shimReact,
       shimReactNative: target.shimReactNative,
       transformCache: target.transformCache,
+      userViteConfig: loaded.config.vite.userConfigFile,
     });
 
     if (!buildResult.runtime) {

@@ -151,6 +151,7 @@ export async function runBuildCommand(argv: string[], cwd: string): Promise<CliR
       shimReact: target.shimReact,
       shimReactNative: target.shimReactNative,
       transformCache: target.transformCache,
+      userViteConfig: loaded.config.vite.userConfigFile,
     });
     results.push({
       bundleMode: resolveBundleMode({ mode: requestedMode ?? target.mode }),

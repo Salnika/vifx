@@ -230,6 +230,7 @@ export async function runDevCommand(argv: string[], cwd: string): Promise<CliRes
       shimJsxRuntime: target.shimJsxRuntime,
       shimReact: target.shimReact,
       shimReactNative: target.shimReactNative,
+      userViteConfig: loaded.config.vite.userConfigFile,
     });
     bundlePath = path.resolve(loaded.config.projectRoot, buildResult.bundle.path);
   }

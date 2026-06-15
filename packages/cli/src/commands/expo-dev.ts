@@ -294,6 +294,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
       shimJsxRuntime: target.shimJsxRuntime,
       shimReact: target.shimReact,
       shimReactNative: target.shimReactNative,
+      userViteConfig: loaded.config.vite.userConfigFile,
     });
 
     if (parsed.flags.json) {
@@ -368,6 +369,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
     shimJsxRuntime: target.shimJsxRuntime,
     shimReact: target.shimReact,
     shimReactNative: target.shimReactNative,
+    userViteConfig: loaded.config.vite.userConfigFile,
   });
   const waitUntilExit = createExpoDevServerLifetime(server);
 

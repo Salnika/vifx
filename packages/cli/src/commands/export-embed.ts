@@ -510,6 +510,9 @@ export async function runExportEmbedCommand(argv: string[], cwd: string): Promis
     shimJsxRuntime: target?.shimJsxRuntime,
     shimReact: target?.shimReact,
     shimReactNative: target?.shimReactNative,
+    // Thread the user vite.config.vifx.* path (or `false` opt-out, or undefined →
+    // auto-detect) so the in-process build loads + merges it.
+    userViteConfig: loaded.config.vite.userConfigFile,
   };
   const result = expo
     ? await buildExpoBundle({
