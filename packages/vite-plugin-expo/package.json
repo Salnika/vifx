@@ -23,6 +23,7 @@
     "@vifx/errors": "workspace:*",
     "@vifx/source-map-tools": "workspace:*",
     "@vifx/types": "workspace:*",
+    "@vifx/vite-config-bridge": "workspace:*",
     "@vifx/vite-plugin-react-native": "workspace:*",
     "vite": "catalog:",
     "ws": "catalog:"

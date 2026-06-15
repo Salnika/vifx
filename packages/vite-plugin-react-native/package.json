@@ -25,6 +25,7 @@
     "@vifx/source-map-tools": "workspace:*",
     "@vifx/transform-cache": "workspace:*",
     "@vifx/types": "workspace:*",
+    "@vifx/vite-config-bridge": "workspace:*",
     "magic-string": "^0.30.21",
     "react-refresh": "catalog:",
     "vite": "catalog:"

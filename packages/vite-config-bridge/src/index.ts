@@ -208,6 +208,39 @@ async function autodetectUserConfigFile(projectRoot: string): Promise<string | u
   return undefined;
 }
 
+export interface PreparedUserViteConfig {
+  /** The loaded user config, or `null` when there is none. */
+  userResult: LoadedUserViteConfig | null;
+  /** Native-resolution conflict diagnostics, already collected for the caller. */
+  diagnostics: VifxDiagnosticData[];
+}
+
+export interface PrepareUserViteConfigOptions extends LoadUserViteConfigOptions {
+  /** Resolution platform of the build (drives reserved keys + conflict checks). */
+  resolvePlatform: VifxPlatform;
+}
+
+/**
+ * One-shot helper for build/dev call-sites: loads the user config and collects
+ * the native-resolution conflict diagnostics in a single call, so each call-site
+ * does not repeat the load + detect plumbing.
+ *
+ * Returns `{ userResult: null, diagnostics: [] }` when there is no user config,
+ * so callers stay on the exact historic (no-user-config) path.
+ */
+export async function prepareUserViteConfig(
+  options: PrepareUserViteConfigOptions,
+): Promise<PreparedUserViteConfig> {
+  const userResult = await loadUserViteConfig(options);
+  if (userResult === null) {
+    return { userResult: null, diagnostics: [] };
+  }
+  return {
+    userResult,
+    diagnostics: detectNativeResolutionConflicts(userResult, options.resolvePlatform),
+  };
+}
+
 export interface MergeWithVifxContext {
   /**
    * Resolution platform of the build. Drives which keys are reserved

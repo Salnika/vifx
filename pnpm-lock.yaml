@@ -571,6 +571,9 @@ importers:
       '@vifx/types':
         specifier: workspace:*
         version: link:../types
+      '@vifx/vite-config-bridge':
+        specifier: workspace:*
+        version: link:../vite-config-bridge
       '@vifx/vite-plugin-react-native':
         specifier: workspace:*
         version: link:../vite-plugin-react-native
@@ -617,6 +620,9 @@ importers:
       '@vifx/types':
         specifier: workspace:*
         version: link:../types
+      '@vifx/vite-config-bridge':
+        specifier: workspace:*
+        version: link:../vite-config-bridge
       magic-string:
         specifier: ^0.30.21
         version: 0.30.21

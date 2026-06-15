@@ -10,6 +10,7 @@ import {
   type LoadedUserViteConfig,
   loadUserViteConfig,
   mergeWithVifx,
+  prepareUserViteConfig,
   reservedViteKeys,
 } from "../src/index.ts";
 
@@ -301,6 +302,41 @@ test("loadUserViteConfig wraps a load failure as VIFX_USER_VITE_CONFIG_CONFLICT"
     await expect(
       loadUserViteConfig({ projectRoot: dir, command: "build", mode: "production" }),
     ).rejects.toMatchObject({ code: "VIFX_USER_VITE_CONFIG_CONFLICT" });
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
+// --- prepareUserViteConfig (load + detect, one shot) -------------------------
+
+test("prepareUserViteConfig returns null result + empty diagnostics when absent", async () => {
+  const prepared = await prepareUserViteConfig({
+    projectRoot: "/anywhere",
+    configFile: false,
+    command: "build",
+    mode: "production",
+    resolvePlatform: "ios",
+  });
+  expect(prepared.userResult).toBeNull();
+  expect(prepared.diagnostics).toEqual([]);
+});
+
+test("prepareUserViteConfig loads the config and surfaces native-resolution conflicts", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "vifx-bridge-"));
+  try {
+    await writeFile(
+      path.join(dir, "vite.config.vifx.ts"),
+      'export default { resolve: { alias: { "react-native": "react-native-web" } } };\n',
+      "utf8",
+    );
+    const prepared = await prepareUserViteConfig({
+      projectRoot: dir,
+      command: "build",
+      mode: "production",
+      resolvePlatform: "ios",
+    });
+    expect(prepared.userResult).not.toBeNull();
+    expect(prepared.diagnostics.some((diag) => diag.details?.alias === "react-native")).toBe(true);
   } finally {
     await rm(dir, { force: true, recursive: true });
   }
