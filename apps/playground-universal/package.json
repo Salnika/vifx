@@ -1,0 +1,27 @@
+{
+  "name": "playground-universal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "vifx:doctor": "vifx doctor .",
+    "vifx:inspect": "vifx inspect .",
+    "vifx:build:ios": "vifx build . --platform ios",
+    "vite:build:web": "VIFX_PLATFORM=web vp build --config vite.config.vifx.ts",
+    "validate": "EXPO_PUBLIC_VIFX_DEMO=hello pnpm run vifx:doctor && EXPO_PUBLIC_VIFX_DEMO=hello pnpm run vifx:inspect && EXPO_PUBLIC_VIFX_DEMO=hello pnpm run vifx:build:ios && EXPO_PUBLIC_VIFX_DEMO=hello pnpm run vite:build:web"
+  },
+  "dependencies": {
+    "expo": "file:./vendor/expo",
+    "react-native": "file:./vendor/react-native",
+    "react-native-web": "file:./vendor/react-native-web"
+  },
+  "devDependencies": {
+    "@vifx/cli": "workspace:*",
+    "@vifx/config": "workspace:*",
+    "@vifx/vite-plugin-expo": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "packageManager": "pnpm@11.1.2"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "react-native-web",
+  "version": "0.0.0-vifx-playground",
+  "private": true,
+  "type": "module",
+  "main": "index.js"
+}
