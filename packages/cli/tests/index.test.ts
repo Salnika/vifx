@@ -518,11 +518,11 @@ test("doctor formats remediation hints without forcing command wording", async (
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("WARN  VIFX_CONFIG_MISSING");
   expect(result.stdout).toContain("Run: vifx init to create vifx.config.ts.");
-  expect(result.stdout).toContain("WARN  VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST");
-  expect(result.stdout).toContain(
-    "Hint: Keep Metro for that path or remove the custom resolver before migrating.",
-  );
-  expect(result.stdout).not.toContain("Run: Keep Metro");
+  // resolveRequest is now supported via vite.config.vifx.ts, so the diagnostic
+  // is an informative migration hint, not a refusal.
+  expect(result.stdout).toContain("INFO  VIFX_METRO_RESOLVE_REQUEST_MIGRATION");
+  expect(result.stdout).toContain("Hint: Port your resolveRequest to vite.config.vifx.ts");
+  expect(result.stdout).not.toContain("VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST");
 });
 
 test("build --json uses vifx.config.ts targets to produce bundle artifacts", async () => {
@@ -1129,13 +1129,18 @@ test("doctor --json includes the metroConfigMigration analysis", async () => {
       found: boolean;
       extraction: string;
       unsupported: Array<{ code: string }>;
+      hints: Array<{ source: string; severity: string }>;
     };
   };
 
   expect(payload.metroConfigMigration.found).toBe(true);
-  expect(payload.metroConfigMigration.unsupported[0]?.code).toBe(
-    "VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST",
+  // resolveRequest is no longer a hard-refused unsupported feature; it is an
+  // actionable migration hint pointing at the vite.config.vifx.ts mechanism.
+  expect(payload.metroConfigMigration.unsupported).toHaveLength(0);
+  const hint = payload.metroConfigMigration.hints.find((entry) =>
+    entry.source.endsWith("resolver.resolveRequest"),
   );
+  expect(hint?.severity).toBe("action");
 });
 
 test("setup includes Metro config migration notes for projects with a metro config", async () => {

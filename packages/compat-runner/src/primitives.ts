@@ -463,11 +463,11 @@ async function buildDiagnostics(
 
     if (metroConfigContents.includes("resolveRequest")) {
       diagnostics.push({
-        level: "warn",
-        code: "VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST",
-        summary: "Custom Metro resolveRequest hooks are not implemented in the Vifx adapter yet.",
-        hint: "Keep Metro for that path or remove the custom resolver before migrating.",
-        docsPath: "/migration/metro#unsupported-resolve-request",
+        level: "info",
+        code: "VIFX_METRO_RESOLVE_REQUEST_MIGRATION",
+        summary: "Custom Metro resolveRequest hooks are supported via vite.config.vifx.ts.",
+        hint: "Port your resolveRequest to vite.config.vifx.ts with vifxResolveRequest(...) — same (context, moduleName, platform) contract, including the recursive context.resolveRequest for delegation.",
+        docsPath: "/guide/migration#resolverequest",
       });
     }
 

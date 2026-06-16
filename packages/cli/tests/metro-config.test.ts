@@ -74,7 +74,7 @@ test("maps the svg transformer to a named recipe hint with a docs pointer", asyn
   expect(hint?.vifxConfigKey).toBe("plugins");
 });
 
-test("flags a custom resolveRequest function as unsupported", async () => {
+test("maps a custom resolveRequest function to an actionable migration hint", async () => {
   const projectRoot = await createProject({
     "metro.config.js": [
       "module.exports = {",
@@ -87,9 +87,13 @@ test("flags a custom resolveRequest function as unsupported", async () => {
   const analysis = await analyzeMetroConfig(projectRoot);
 
   expect(analysis.extraction).toBe("evaluated");
-  expect(analysis.unsupported).toHaveLength(1);
-  expect(analysis.unsupported[0]?.code).toBe("VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST");
-  expect(analysis.unsupported[0]?.source).toBe("metro.config.js:resolver.resolveRequest");
+  // resolveRequest is now supported via vite.config.vifx.ts, so it is no longer
+  // a hard refusal — it is surfaced as an `action` hint instead.
+  expect(analysis.unsupported).toHaveLength(0);
+  const hint = analysis.hints.find((entry) => entry.source.endsWith("resolver.resolveRequest"));
+  expect(hint?.severity).toBe("action");
+  expect(hint?.suggestion).toContain("vite.config.vifx.ts");
+  expect(hint?.suggestion).toContain("vifxResolveRequest");
 });
 
 test("flags custom serializer hooks as unsupported", async () => {
@@ -194,8 +198,12 @@ test("falls back to a conservative static scan when the config is unparseable", 
   expect(analysis.found).toBe(true);
   expect(analysis.extraction).toBe("static");
 
+  // resolveRequest is now an actionable migration hint (supported via
+  // vite.config.vifx.ts), even on the conservative static scan.
   expect(
-    analysis.unsupported.some((entry) => entry.code === "VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST"),
+    analysis.hints.some(
+      (entry) => entry.source.endsWith("resolver.resolveRequest") && entry.severity === "action",
+    ),
   ).toBe(true);
   expect(analysis.hints.some((entry) => entry.source.endsWith("resolver.assetExts"))).toBe(true);
 });
@@ -252,7 +260,9 @@ test("a broken .mjs config degrades to the static scan instead of throwing", asy
   expect(analysis.found).toBe(true);
   expect(analysis.extraction).toBe("static");
   expect(
-    analysis.unsupported.some((entry) => entry.code === "VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST"),
+    analysis.hints.some(
+      (entry) => entry.source.endsWith("resolver.resolveRequest") && entry.severity === "action",
+    ),
   ).toBe(true);
 });
 

@@ -40,10 +40,14 @@ export interface MetroMigrationHint {
 
 /** A Metro feature with no Vifx equivalent yet, carrying a Vifx error code. */
 export interface MetroUnsupportedFeature {
-  /** Where the finding came from, e.g. `metro.config.js:resolver.resolveRequest`. */
+  /** Where the finding came from, e.g. `metro.config.js:serializer`. */
   source: string;
-  /** Stable Vifx error code (see `@vifx/errors`). */
-  code: "VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST" | "VIFX_UNSUPPORTED_METRO_SERIALIZER";
+  /**
+   * Stable Vifx error code (see `@vifx/errors`). `resolver.resolveRequest` is no
+   * longer here: it is supported via `vite.config.vifx.ts` and surfaced as an
+   * actionable migration hint instead (see {@link buildResolveRequestHint}).
+   */
+  code: "VIFX_UNSUPPORTED_METRO_SERIALIZER";
   /** Human-readable explanation of why the feature is unsupported. */
   suggestion: string;
 }
@@ -211,12 +215,22 @@ function buildBabelTransformerHint(
   };
 }
 
-function buildResolveRequestUnsupported(filename: MetroConfigFilename): MetroUnsupportedFeature {
+const RESOLVE_REQUEST_DOCS = "https://vifx.dev/guide/migration#resolverequest";
+
+/**
+ * A custom `resolver.resolveRequest` is now supported via a Vite-side hook, so
+ * this is an actionable migration hint (port the function to
+ * `vite.config.vifx.ts`), not a hard refusal. The function itself cannot ride
+ * vifx's serializable config across the `export:embed` subprocess boundary, so
+ * its home is the in-process `vite.config.vifx.*`, declared with
+ * `vifxResolveRequest(...)` from `@vifx/vite-config-bridge`.
+ */
+function buildResolveRequestHint(filename: MetroConfigFilename): MetroMigrationHint {
   return {
-    code: "VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST",
+    severity: "action",
     source: `${filename}:resolver.resolveRequest`,
-    suggestion:
-      "Custom Metro resolveRequest hooks are not implemented in Vifx yet. Keep Metro for that path or remove the custom resolver before migrating.",
+    suggestion: `Port your custom resolveRequest to vite.config.vifx.ts with vifxResolveRequest(...) (same (context, moduleName, platform) contract, including the recursive context.resolveRequest for delegation). See ${RESOLVE_REQUEST_DOCS}.`,
+    vifxConfigKey: "vite.config.vifx.ts",
   };
 }
 
@@ -291,7 +305,7 @@ function mapEvaluatedConfig(config: RawMetroConfig, filename: MetroConfigFilenam
   }
 
   if (typeof config.resolver?.resolveRequest === "function") {
-    unsupported.push(buildResolveRequestUnsupported(filename));
+    hints.push(buildResolveRequestHint(filename));
   }
 
   if (isPlainObject(config.serializer) && Object.keys(config.serializer).length > 0) {
@@ -375,7 +389,7 @@ function analyzeMetroConfigSource(source: string, filename: MetroConfigFilename)
   }
 
   if (/\bresolveRequest\b/u.test(scrubbed)) {
-    unsupported.push(buildResolveRequestUnsupported(filename));
+    hints.push(buildResolveRequestHint(filename));
   }
 
   if (/\bserializer\b/u.test(scrubbed)) {
