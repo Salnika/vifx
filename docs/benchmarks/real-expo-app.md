@@ -49,12 +49,12 @@ all of these as unsupported/manual before a single module is transformed.
 
 ### What actually blocks the build (the 44 errors)
 
-| # | Blocker class | Concrete instance | Root cause |
-|---|---------------|-------------------|------------|
-| B1 | **Babel preset gap: static class blocks** | `@atproto/api/dist/agent.js` → `SyntaxError: Static class blocks are not enabled. Please add @babel/plugin-transform-class-static-block` | vifx transforms this `node_modules` file through the project's Babel config with `caller.isNodeModule:true` / `supportsStaticESM:false`; the resulting plugin set omits `@babel/plugin-transform-class-static-block`, so modern `static { ... }` blocks in `@atproto/api` throw. Metro's preset handles it. |
-| B2 | **Asset registry: duplicate 1x scale** | `@react-navigation/elements/.../assets/clear-icon.png` and `close-icon.png` → `VifxError: Multiple asset variants declare scale 1x` | `assertUniqueAssetScales` (in `@vifx/asset-registry`) hard-fails when it groups two files it reads as the same `1x` variant. Metro tolerates the duplicate; vifx is stricter and aborts the build. |
-| B3 | **Unresolved generated catalogs** | `Could not resolve './locales/ast/messages'`, `'./locales/an/messages'` in `src/locale/i18n.ts` | bsky ships only Lingui **source** catalogs (50× `messages.po`); the imported `messages.ts` are produced by a `lingui compile` build step that `--ignore-scripts` (and any plain install) skips. This is a "needs a project build step vifx didn't run" gap, not a vifx bug per se — but vifx hard-fails on the missing module rather than degrading. |
-| B4 | **Workspace-package config import** | `vifx init` writes `import { defineVifxConfig } from "@vifx/config"`, which is **not resolvable from a fresh app's `node_modules`** → `VIFX_CONFIG_LOAD_FAILED` | `@vifx/config` is a monorepo workspace package, not published/linked into target projects. A user who runs the global `vifx` against any external app cannot load the config the CLI itself just generated. Worked around here by replacing it with a plain default-exported object (`defineVifxConfig` is an identity function), which is what let the build reach B1–B3. |
+| #   | Blocker class                             | Concrete instance                                                                                                                                               | Root cause                                                                                                                                                                                                                                                                                                                                                                 |
+| --- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1  | **Babel preset gap: static class blocks** | `@atproto/api/dist/agent.js` → `SyntaxError: Static class blocks are not enabled. Please add @babel/plugin-transform-class-static-block`                        | vifx transforms this `node_modules` file through the project's Babel config with `caller.isNodeModule:true` / `supportsStaticESM:false`; the resulting plugin set omits `@babel/plugin-transform-class-static-block`, so modern `static { ... }` blocks in `@atproto/api` throw. Metro's preset handles it.                                                                |
+| B2  | **Asset registry: duplicate 1x scale**    | `@react-navigation/elements/.../assets/clear-icon.png` and `close-icon.png` → `VifxError: Multiple asset variants declare scale 1x`                             | `assertUniqueAssetScales` (in `@vifx/asset-registry`) hard-fails when it groups two files it reads as the same `1x` variant. Metro tolerates the duplicate; vifx is stricter and aborts the build.                                                                                                                                                                         |
+| B3  | **Unresolved generated catalogs**         | `Could not resolve './locales/ast/messages'`, `'./locales/an/messages'` in `src/locale/i18n.ts`                                                                 | bsky ships only Lingui **source** catalogs (50× `messages.po`); the imported `messages.ts` are produced by a `lingui compile` build step that `--ignore-scripts` (and any plain install) skips. This is a "needs a project build step vifx didn't run" gap, not a vifx bug per se — but vifx hard-fails on the missing module rather than degrading.                       |
+| B4  | **Workspace-package config import**       | `vifx init` writes `import { defineVifxConfig } from "@vifx/config"`, which is **not resolvable from a fresh app's `node_modules`** → `VIFX_CONFIG_LOAD_FAILED` | `@vifx/config` is a monorepo workspace package, not published/linked into target projects. A user who runs the global `vifx` against any external app cannot load the config the CLI itself just generated. Worked around here by replacing it with a plain default-exported object (`defineVifxConfig` is an identity function), which is what let the build reach B1–B3. |
 
 > The build printer truncates after the first few detailed frames, but the
 > header is `Build failed with 44 errors`. The four classes above are the
@@ -93,15 +93,15 @@ Method (apples-to-apples release path): same app, iOS, `--dev false`, the **same
 - Cold = transform cache cleared (`rm -rf .vifx` for vifx); warm = immediate
   re-run with a hot cache.
 
-| Metric | Metro | Vifx | Delta |
-|---|---|---|---|
-| Build cold (JS bundle) | 19.9 s | **15.0 s** | vifx −25% |
-| Rebuild warm (hot cache) | 12.4 s | **3.6 s** | **vifx ~3.4× faster** |
-| Hermes compile (.bundle→.hbc) | 1.7 s | ~1.7 s | ~tie |
-| Bundle JS (release) | 3.54 MB | **3.46 MB** | **vifx −2.2%** |
-| Bytecode Hermes (`.hbc`, ships) | **4.96 MB** | 5.24 MB | metro −5.8% |
-| Modules / sources (sourcemap) | 2007 | **1680** | vifx −16% |
-| Assets emitted | 39 | 38 | ~tie |
+| Metric                          | Metro       | Vifx        | Delta                 |
+| ------------------------------- | ----------- | ----------- | --------------------- |
+| Build cold (JS bundle)          | 19.9 s      | **15.0 s**  | vifx −25%             |
+| Rebuild warm (hot cache)        | 12.4 s      | **3.6 s**   | **vifx ~3.4× faster** |
+| Hermes compile (.bundle→.hbc)   | 1.7 s       | ~1.7 s      | ~tie                  |
+| Bundle JS (release)             | 3.54 MB     | **3.46 MB** | **vifx −2.2%**        |
+| Bytecode Hermes (`.hbc`, ships) | **4.96 MB** | 5.24 MB     | metro −5.8%           |
+| Modules / sources (sourcemap)   | 2007        | **1680**    | vifx −16%             |
+| Assets emitted                  | 39          | 38          | ~tie                  |
 
 Raw bytes measured this run: Metro JS 3,541,154 / hbc 4,956,093; vifx JS
 3,463,833 / hbc 5,243,062. These match the prior `BENCHMARKS.md` figures within
@@ -114,7 +114,7 @@ diagnosis; not re-derived here).
 
 > **Build-time caveat.** The headline warm/cold gap is real and reproducible
 > (cold cache → 15.0 s, hot cache → 3.6 s = a true ~4× cache speedup for a
-> *full from-scratch export*). But that 3.6 s is a **full hoisted export**, which
+> _full from-scratch export_). But that 3.6 s is a **full hoisted export**, which
 > is **not** the same code path as a per-save dev rebuild — see §3, where the
 > warm per-save number is much higher.
 
@@ -128,13 +128,13 @@ save emits one `VifxRebuildReport` line (`phases`, `cache`, `moduleCount`, `hmr`
 
 **7 fast-refresh rebuild cycles, median across saves:**
 
-| Phase | Median | p95 | What it is |
-|---|---|---|---|
+| Phase       | Median      | p95     | What it is                                                        |
+| ----------- | ----------- | ------- | ----------------------------------------------------------------- |
 | `transform` | **7340 ms** | 7740 ms | the single `await build()` (Babel transform + Rolldown re-bundle) |
-| `serialize` | 428 ms | 577 ms | assemble the `__d`/`__r` registry + sourcemap |
-| `write` | 1295 ms | 1455 ms | write bundle + map, asset rename, staging cleanup |
-| `apply` | **6.6 ms** | 23.5 ms | HMR diff + `/hot` broadcast |
-| **total** | **9069 ms** | 9626 ms | |
+| `serialize` | 428 ms      | 577 ms  | assemble the `__d`/`__r` registry + sourcemap                     |
+| `write`     | 1295 ms     | 1455 ms | write bundle + map, asset rename, staging cleanup                 |
+| `apply`     | **6.6 ms**  | 23.5 ms | HMR diff + `/hot` broadcast                                       |
+| **total**   | **9069 ms** | 9626 ms |                                                                   |
 
 - **Cache hit-rate per cycle = 1.00** every single save (1971 hits / 0 misses /
   0 computed). The content-addressed transform cache is doing its job perfectly.
