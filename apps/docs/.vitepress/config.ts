@@ -5,6 +5,26 @@ export default defineConfig({
   description: "A unified Vite + Rolldown toolchain that replaces Metro for React Native and Expo.",
   lastUpdated: true,
   outDir: "./dist",
+  // The workspace aliases `vite` to @voidzero-dev/vite-plus-core (rolldown-vite).
+  // In vite-plus-core 0.1.21 (the copy vitepress@2.0.0-alpha.17 resolves) the JS
+  // bridge that forwards rolldown bundle logs to the native `BindingLog`
+  // ThreadsafeFunction is declared `async`, so it always resolves to a Promise.
+  // That ThreadsafeFunction is typed `Either<(), InvalidReturnValue>` and rejects
+  // any non-`undefined` return, so the *first* bundle log that survives the level
+  // filter crashes the build with:
+  //   The function returned `object`, but expected `undefined` in
+  //   `Arc<ThreadsafeFunction<FnArgs<(String, BindingLog)>, ...>>`.
+  // The trigger here is rolldown's INVALID_ANNOTATION warning for a misplaced
+  // `/* #__PURE__ */` comment in @vueuse/core. Silencing the rolldown bundle log
+  // level (via rollupOptions) drops every bundle log *before* it reaches that buggy
+  // async bridge, so the crash never fires. This only gates rolldown's own bundle
+  // logs; vitepress's dead-link / build reporting uses a separate vite logger and
+  // is unaffected.
+  vite: {
+    build: {
+      rollupOptions: { logLevel: "silent" },
+    },
+  },
   themeConfig: {
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
