@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Plugin } from "vite";
@@ -8,7 +8,7 @@ import type {
   VifxMetroResolutionContext,
   VifxMetroResolveRequest,
 } from "@vifx/types";
-import { reactNative } from "../src/index.ts";
+import { buildReactNativeBundle, reactNative } from "../src/index.ts";
 
 type HookFn = (...args: unknown[]) => unknown;
 
@@ -170,12 +170,13 @@ test("(d) returning {type:'empty'} resolves to an empty virtual module", async (
   expect(resolved).not.toBeNull();
   expect(resolved).toContain("vifx:empty:");
 
-  // The empty id loads as an empty module so `import x from 'server-only'` works.
+  // The empty id loads as an ESM module so `import x from 'server-only'` works
+  // (default-exports an empty object; named imports are undefined, like Metro).
   const loadHandler = getHookHandler(plugin.load);
   const loaded = await loadHandler.call({}, resolved as string);
   const loadedCode =
     typeof loaded === "string" ? loaded : (loaded as { code?: string } | null)?.code;
-  expect(loadedCode).toContain("module.exports = {}");
+  expect(loadedCode).toContain("export default {}");
 });
 
 test("a throwing hook falls through to vifx's default resolution", async () => {
@@ -228,4 +229,44 @@ test("without a hook, resolution is unchanged (the historic default path)", asyn
 
   const resolved = await callResolveId(plugin, "./util", path.join(projectRoot, "src/index.js"));
   expect(resolved).toBe(path.join(projectRoot, "src/util.ts"));
+});
+
+test("end-to-end: a delegating + empty-stub hook produces a real ESM bundle", async () => {
+  // Exercises the full pipeline through Rolldown (not just resolveId), proving
+  // the {type:"empty"} stub is valid ESM in the bundle graph (a CJS
+  // `module.exports` stub would throw "module is not defined" here). Built in
+  // development mode + a side-effecting global write so tree-shaking keeps the
+  // swapped module's marker.
+  const projectRoot = await createProject({
+    "index.js": [
+      'import stub from "server-only";',
+      'import { value } from "./real";',
+      "globalThis.__rrResult = { stub, value };",
+      "",
+    ].join("\n"),
+    "src/override.js": "export const value = 'override-marker';\n",
+  });
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    mode: "development",
+    outDir: ".vifx/resolve-request-e2e",
+    platform: "ios",
+    projectRoot,
+    userResolveRequest: async (context, moduleName, platform): Promise<VifxMetroResolution> => {
+      if (moduleName === "server-only") {
+        return { type: "empty" };
+      }
+      if (moduleName === "./real") {
+        return { type: "sourceFile", filePath: path.join(projectRoot, "src/override.js") };
+      }
+      return context.resolveRequest(context, moduleName, platform);
+    },
+  });
+
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+  // The build succeeded (no "module is not defined" from the empty stub) and the
+  // conditional swap pulled in the override file's marker.
+  expect(bundleSource.length).toBeGreaterThan(0);
+  expect(bundleSource).toContain("override-marker");
 });

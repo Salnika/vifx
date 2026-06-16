@@ -136,10 +136,13 @@ const SHIM_PREFIX = "\0vifx:shim:";
 const TRANSFORM_PREFIX = "\0vifx:transformed:";
 const ASSET_PREFIX = "\0vifx:asset:";
 // Virtual id for a `resolveRequest` hook returning `{ type: "empty" }` (Metro's
-// "stub this import out"). Loaded as an empty CommonJS-shaped module so both
-// `import x from "..."` and `require("...")` see an empty object.
+// "stub this import out"). Loaded as an ESM module that default-exports an empty
+// object, matching the ESM convention every other vifx virtual module uses
+// (renderShim / renderCompat) — `module.exports` would throw "module is not
+// defined" in the ESM hoisted/web graph. Named imports resolve to `undefined`,
+// exactly like Metro's empty module.
 const EMPTY_PREFIX = "\0vifx:empty:";
-const EMPTY_MODULE_SOURCE = "module.exports = {};\n";
+const EMPTY_MODULE_SOURCE = "export default {};\n";
 // Captured browser globals key used by the web-compat shims (e.g. FormData
 // re-export). Still consumed by renderCompat; the build-time preview runtime
 // that also referenced it was removed with __VIFX_WEB_RUNTIME__ (ADR-005).
