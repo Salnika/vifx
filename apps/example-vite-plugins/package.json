@@ -1,0 +1,25 @@
+{
+  "name": "example-vite-plugins",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "vifx:build:ios": "vifx build . --platform ios",
+    "vifx:export:embed": "vifx export:embed . --platform ios --dev false --bundle-output dist/index.bundle",
+    "verify": "pnpm run vifx:export:embed && node ./scripts/verify-bundle.mjs dist/index.bundle"
+  },
+  "dependencies": {
+    "expo": "file:./vendor/expo",
+    "react-native": "file:./vendor/react-native",
+    "react-native-web": "file:./vendor/react-native-web"
+  },
+  "devDependencies": {
+    "@vifx/cli": "workspace:*",
+    "@vifx/config": "workspace:*",
+    "@vifx/vite-plugin-expo": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "packageManager": "pnpm@11.1.2"
+}

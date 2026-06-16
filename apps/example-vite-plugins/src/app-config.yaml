@@ -1,0 +1,4 @@
+# Loaded at build time by the example:yaml plugin (see plugins/yaml.ts).
+# These values become string literals in the built bundle.
+appName: vifx-example-vite-plugins
+releaseChannel: yaml-channel-c4d5e6f7

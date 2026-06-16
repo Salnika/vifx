@@ -58,6 +58,18 @@ Your plugins always run after vifx's own, so a user plugin can never shadow `.io
 
 Opt out of the bridge entirely by setting `vite.userConfigFile: false`, or point it at an explicit path with a string. With no user config the build is byte-identical to the no-bridge path.
 
+### Example: Vite plugins on a React Native app
+
+The runnable [`apps/example-vite-plugins`](https://github.com/) example (in this repo) wires three plugins into `vite.config.vifx.ts` — a virtual-module plugin (`resolveId`/`load`), a custom `transform` plugin that rewrites a token, and a `.yaml` asset loader (the `@rollup/plugin-yaml` pattern) — and proves each one ran with a single grep over the built native bundle, no device required:
+
+```sh
+vifx export:embed apps/example-vite-plugins --platform ios --dev false \
+  --bundle-output dist/index.bundle
+node apps/example-vite-plugins/scripts/verify-bundle.mjs dist/index.bundle
+```
+
+Each plugin emits a unique sentinel that survives tree-shaking (the app logs it) and therefore appears verbatim in the release IIFE, while the transform plugin's pre-rewrite token is asserted absent. See the example's `README.md` for the full walkthrough.
+
 ## Metro-compatible dev server and Fast Refresh
 
 Vifx serves the Metro dev-server conventions the React Native and Expo tooling already speak, from a Vite-powered server with no Metro runtime dependency.

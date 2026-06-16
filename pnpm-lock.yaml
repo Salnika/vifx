@@ -70,6 +70,37 @@ importers:
         specifier: next
         version: 2.0.0-alpha.17(@types/node@24.12.4)(esbuild@0.28.1)(oxc-minify@0.130.0)(postcss@8.5.14)(typescript@5.9.3)
 
+  apps/example-vite-plugins:
+    dependencies:
+      expo:
+        specifier: file:./vendor/expo
+        version: file:apps/example-vite-plugins/vendor/expo
+      react-native:
+        specifier: file:./vendor/react-native
+        version: file:apps/example-vite-plugins/vendor/react-native
+      react-native-web:
+        specifier: file:./vendor/react-native-web
+        version: file:apps/example-vite-plugins/vendor/react-native-web
+    devDependencies:
+      '@vifx/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@vifx/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@vifx/vite-plugin-expo':
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin-expo
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: npm:@voidzero-dev/vite-plus-core@latest
+        version: '@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.12.4)(esbuild@0.28.1)(typescript@5.9.3)'
+      vite-plus:
+        specifier: 'catalog:'
+        version: 0.1.24(@types/node@24.12.4)(@voidzero-dev/vite-plus-core@0.1.24(@types/node@24.12.4)(esbuild@0.28.1)(typescript@5.9.3))(esbuild@0.28.1)(typescript@5.9.3)
+
   apps/playground-expo:
     dependencies:
       expo:
@@ -2125,6 +2156,9 @@ packages:
     resolution: {integrity: sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==}
     engines: {node: '>= 0.6'}
 
+  expo@file:apps/example-vite-plugins/vendor/expo:
+    resolution: {directory: apps/example-vite-plugins/vendor/expo, type: directory}
+
   expo@file:apps/playground-expo/vendor/expo:
     resolution: {directory: apps/playground-expo/vendor/expo, type: directory}
 
@@ -2527,6 +2561,9 @@ packages:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
     engines: {node: '>= 0.6'}
 
+  react-native-web@file:apps/example-vite-plugins/vendor/react-native-web:
+    resolution: {directory: apps/example-vite-plugins/vendor/react-native-web, type: directory}
+
   react-native-web@file:apps/playground-expo/vendor/react-native-web:
     resolution: {directory: apps/playground-expo/vendor/react-native-web, type: directory}
 
@@ -2535,6 +2572,9 @@ packages:
 
   react-native-web@file:apps/playground-universal/vendor/react-native-web:
     resolution: {directory: apps/playground-universal/vendor/react-native-web, type: directory}
+
+  react-native@file:apps/example-vite-plugins/vendor/react-native:
+    resolution: {directory: apps/example-vite-plugins/vendor/react-native, type: directory}
 
   react-native@file:apps/playground-expo/vendor/react-native:
     resolution: {directory: apps/playground-expo/vendor/react-native, type: directory}
@@ -3958,6 +3998,8 @@ snapshots:
 
   etag@1.8.1: {}
 
+  expo@file:apps/example-vite-plugins/vendor/expo: {}
+
   expo@file:apps/playground-expo/vendor/expo: {}
 
   expo@file:apps/playground-universal/vendor/expo: {}
@@ -4420,11 +4462,15 @@ snapshots:
 
   range-parser@1.2.1: {}
 
+  react-native-web@file:apps/example-vite-plugins/vendor/react-native-web: {}
+
   react-native-web@file:apps/playground-expo/vendor/react-native-web: {}
 
   react-native-web@file:apps/playground-rn-bare/vendor/react-native-web: {}
 
   react-native-web@file:apps/playground-universal/vendor/react-native-web: {}
+
+  react-native@file:apps/example-vite-plugins/vendor/react-native: {}
 
   react-native@file:apps/playground-expo/vendor/react-native: {}
 
