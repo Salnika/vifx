@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { VifxError } from "@vifx/errors";
-import type { VifxDiagnosticData, VifxPlatform } from "@vifx/types";
+import type { VifxDiagnosticData, VifxMetroResolveRequest, VifxPlatform } from "@vifx/types";
 import {
   type ConfigEnv,
   type InlineConfig,
@@ -39,6 +39,89 @@ export const VIFX_VITE_CONFIG_FILE_NAMES = [
   "vite.config.vifx.js",
   "vite.config.vifx.mjs",
 ] as const;
+
+/**
+ * The sentinel plugin `name` carrying a user `resolveRequest`. The hook is a
+ * FUNCTION, so it cannot ride vifx's serializable `VifxResolverConfig` across
+ * the `export:embed`/CLI subprocess boundary. Its home is the in-process
+ * `vite.config.vifx.*`, smuggled as a no-op Vite plugin whose `api` holds the
+ * function. The build extracts it via {@link extractVifxResolveRequest} and runs
+ * it inside vifx's own `resolveId`; it never executes as a real Vite plugin (it
+ * is dropped from the user-plugin list along with every other `vifx:*` plugin).
+ */
+const VIFX_RESOLVE_REQUEST_PLUGIN_NAME = "vifx:resolve-request";
+
+/** Shape of the `api` object the resolveRequest sentinel plugin carries. */
+interface VifxResolveRequestPluginApi {
+  resolveRequest: VifxMetroResolveRequest;
+}
+
+/**
+ * Declares a Metro-compatible `resolveRequest` hook inside a user's
+ * `vite.config.vifx.*`, for projects migrating a custom `metro.config.js`
+ * resolver. Drop the result into the config's `plugins` array:
+ *
+ * ```ts
+ * import { defineConfig } from "vite";
+ * import { vifxResolveRequest } from "@vifx/vite-config-bridge";
+ *
+ * export default defineConfig({
+ *   plugins: [
+ *     vifxResolveRequest((context, moduleName, platform) => {
+ *       if (moduleName === "crypto") {
+ *         return context.resolveRequest(context, "expo-crypto", platform);
+ *       }
+ *       return context.resolveRequest(context, moduleName, platform);
+ *     }),
+ *   ],
+ * });
+ * ```
+ *
+ * The returned value is a Vite plugin only as a transport: vifx pulls the
+ * function out and runs it inside its own resolver (so it sees vifx's resolution
+ * surface, can delegate via `context.resolveRequest`, and its tagged-union
+ * result routes into vifx's asset/transform post-processing). It does NOT run as
+ * a normal Vite plugin.
+ */
+export function vifxResolveRequest(resolveRequest: VifxMetroResolveRequest): Plugin {
+  const api: VifxResolveRequestPluginApi = { resolveRequest };
+  return { name: VIFX_RESOLVE_REQUEST_PLUGIN_NAME, api };
+}
+
+/**
+ * Extracts the user `resolveRequest` hook from a loaded `vite.config.vifx.*`.
+ *
+ * Two channels are supported (the plugin form wins when both are present):
+ *   1. a {@link vifxResolveRequest} sentinel plugin in `config.plugins`, or
+ *   2. a top-level `vifx.resolveRequest` field on the config object.
+ *
+ * Returns `null` when neither is present, so the build stays on its exact
+ * historic resolution path.
+ */
+export function extractVifxResolveRequest(
+  userResult: LoadedUserViteConfig | null,
+): VifxMetroResolveRequest | null {
+  if (userResult === null) {
+    return null;
+  }
+
+  for (const plugin of flattenPlugins(userResult.config.plugins)) {
+    if (plugin.name !== VIFX_RESOLVE_REQUEST_PLUGIN_NAME) {
+      continue;
+    }
+    const api = plugin.api as Partial<VifxResolveRequestPluginApi> | undefined;
+    if (typeof api?.resolveRequest === "function") {
+      return api.resolveRequest;
+    }
+  }
+
+  const vifxField = (userResult.config as { vifx?: { resolveRequest?: unknown } }).vifx;
+  if (typeof vifxField?.resolveRequest === "function") {
+    return vifxField.resolveRequest as VifxMetroResolveRequest;
+  }
+
+  return null;
+}
 
 /** Plugins whose `name` starts with this prefix are vifx's own. */
 const VIFX_PLUGIN_NAME_PREFIX = "vifx";
@@ -228,6 +311,13 @@ export interface PreparedUserViteConfig {
   userResult: LoadedUserViteConfig | null;
   /** Native-resolution conflict diagnostics, already collected for the caller. */
   diagnostics: VifxDiagnosticData[];
+  /**
+   * The user's Metro-compatible `resolveRequest` hook, when the config exposes
+   * one (via {@link vifxResolveRequest} or a `vifx.resolveRequest` field), else
+   * `null`. The build threads this into the RN plugin so it runs inside vifx's
+   * own resolver.
+   */
+  resolveRequest: VifxMetroResolveRequest | null;
 }
 
 export interface PrepareUserViteConfigOptions extends LoadUserViteConfigOptions {
@@ -248,11 +338,12 @@ export async function prepareUserViteConfig(
 ): Promise<PreparedUserViteConfig> {
   const userResult = await loadUserViteConfig(options);
   if (userResult === null) {
-    return { userResult: null, diagnostics: [] };
+    return { userResult: null, diagnostics: [], resolveRequest: null };
   }
   return {
     userResult,
     diagnostics: detectNativeResolutionConflicts(userResult, options.resolvePlatform),
+    resolveRequest: extractVifxResolveRequest(userResult),
   };
 }
 
@@ -489,6 +580,12 @@ function pruneUserConfig(
   for (const [key, value] of Object.entries(config)) {
     if (key === "plugins") {
       // Handled separately by extractUserPlugins; never merge raw plugins.
+      continue;
+    }
+    if (key === "vifx") {
+      // vifx-internal channel (e.g. `vifx.resolveRequest`), not a Vite key.
+      // Read separately via extractVifxResolveRequest; never merged into the
+      // Vite config so it can't pollute the emitted bundle.
       continue;
     }
     if (reservedTopLevel.has(key)) {
