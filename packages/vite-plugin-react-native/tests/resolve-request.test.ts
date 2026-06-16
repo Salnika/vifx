@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ObjectHook, Plugin, ResolveIdResult } from "rollup";
+import type { Plugin } from "vite";
 import { expect, test } from "vite-plus/test";
 import type {
   VifxMetroResolution,
@@ -9,6 +9,24 @@ import type {
   VifxMetroResolveRequest,
 } from "@vifx/types";
 import { reactNative } from "../src/index.ts";
+
+type HookFn = (...args: unknown[]) => unknown;
+
+/**
+ * Extracts a plugin hook handler whether it is declared as a bare function or
+ * the `{ handler }` object form, without depending on rollup's `ObjectHook`
+ * type (not re-exported by vite). vifx declares these as bare functions.
+ */
+function getHookHandler(hook: unknown): HookFn {
+  if (typeof hook === "function") {
+    return hook as HookFn;
+  }
+  const handler = (hook as { handler?: unknown } | undefined)?.handler;
+  if (typeof handler !== "function") {
+    throw new Error("plugin hook is missing or not callable");
+  }
+  return handler as HookFn;
+}
 
 /**
  * Builds a synthetic project on disk with a real `node_modules` so the platform
@@ -25,20 +43,20 @@ async function createProject(files: Record<string, string>): Promise<string> {
   return projectRoot;
 }
 
-/** Invokes a Vite/Rollup plugin's `resolveId` hook (function or object form). */
+/** Invokes a plugin's `resolveId` hook with a bare PluginContext. */
 async function callResolveId(
   plugin: Plugin,
   source: string,
   importer: string | undefined,
-): Promise<ResolveIdResult> {
-  const hook = plugin.resolveId as ObjectHook<NonNullable<Plugin["resolveId"]>> | undefined;
-  const handler = typeof hook === "function" ? hook : hook?.handler;
-  if (handler === undefined) {
-    throw new Error("plugin has no resolveId hook");
-  }
+): Promise<string | null> {
+  const handler = getHookHandler(plugin.resolveId);
   // The resolveId hook here reads no PluginContext members, so a bare `this` is
   // sufficient for a direct unit-level invocation.
-  return (await handler.call({} as never, source, importer, {} as never)) as ResolveIdResult;
+  const result = await handler.call({}, source, importer, {});
+  if (result === null || result === undefined) {
+    return null;
+  }
+  return typeof result === "string" ? result : ((result as { id: string }).id ?? null);
 }
 
 function makePlugin(projectRoot: string, userResolveRequest: VifxMetroResolveRequest): Plugin {
@@ -47,7 +65,7 @@ function makePlugin(projectRoot: string, userResolveRequest: VifxMetroResolveReq
     platform: "ios",
     projectRoot,
     userResolveRequest,
-  }) as Plugin;
+  });
 }
 
 test("(a) delegate-to-default with modified args resolves the swapped module", async () => {
@@ -86,12 +104,15 @@ test("(b) a conditional swap returns a fabricated sourceFile resolution", async 
   });
 
   const overridePath = path.join(projectRoot, "src/override.ts");
-  const plugin = makePlugin(projectRoot, (context, moduleName, platform): VifxMetroResolution => {
-    if (moduleName === "./real") {
-      return { type: "sourceFile", filePath: overridePath };
-    }
-    return context.resolveRequest(context, moduleName, platform);
-  });
+  const plugin = makePlugin(
+    projectRoot,
+    async (context, moduleName, platform): Promise<VifxMetroResolution> => {
+      if (moduleName === "./real") {
+        return { type: "sourceFile", filePath: overridePath };
+      }
+      return context.resolveRequest(context, moduleName, platform);
+    },
+  );
 
   const resolved = await callResolveId(plugin, "./real", path.join(projectRoot, "index.js"));
 
@@ -146,14 +167,14 @@ test("(d) returning {type:'empty'} resolves to an empty virtual module", async (
 
   const resolved = await callResolveId(plugin, "server-only", path.join(projectRoot, "index.js"));
 
-  expect(typeof resolved).toBe("string");
-  expect(resolved as string).toContain("vifx:empty:");
+  expect(resolved).not.toBeNull();
+  expect(resolved).toContain("vifx:empty:");
 
   // The empty id loads as an empty module so `import x from 'server-only'` works.
-  const loadHook = plugin.load as ObjectHook<NonNullable<Plugin["load"]>> | undefined;
-  const loadHandler = typeof loadHook === "function" ? loadHook : loadHook?.handler;
-  const loaded = await loadHandler?.call({} as never, resolved as string);
-  const loadedCode = typeof loaded === "string" ? loaded : loaded?.code;
+  const loadHandler = getHookHandler(plugin.load);
+  const loaded = await loadHandler.call({}, resolved as string);
+  const loadedCode =
+    typeof loaded === "string" ? loaded : (loaded as { code?: string } | null)?.code;
   expect(loadedCode).toContain("module.exports = {}");
 });
 

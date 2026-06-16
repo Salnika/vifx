@@ -421,8 +421,12 @@ test("the vifxResolveRequest sentinel plugin is stripped from the merged plugin 
 
 test("a top-level vifx field never pollutes the merged Vite config", () => {
   const hook = () => ({ type: "empty" as const });
-  const merged = mergeWithVifx(userResult({ vifx: { resolveRequest: hook } } as UserConfig), vifxBase(), {
-    resolvePlatform: "ios",
-  });
+  const merged = mergeWithVifx(
+    userResult({ vifx: { resolveRequest: hook } } as UserConfig),
+    vifxBase(),
+    {
+      resolvePlatform: "ios",
+    },
+  );
   expect("vifx" in merged).toBe(false);
 });

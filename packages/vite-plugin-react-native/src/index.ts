@@ -2495,8 +2495,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     // Honor the user's vifx `aliases` (Metro's default resolver folds in
     // `extraNodeModules` the same way), so a delegating hook sees aliased specs.
     const aliasedSource = applyAliases(moduleName, state.aliases, state.projectRoot);
-    const specifier =
-      aliasedSource && aliasedSource !== moduleName ? aliasedSource : moduleName;
+    const specifier = aliasedSource && aliasedSource !== moduleName ? aliasedSource : moduleName;
     const resolved = await resolveReactNativeModule({
       conditions: state.conditions,
       extensions: [...state.extensions, ...state.assetExtensions],
@@ -2523,10 +2522,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
    * `originModulePath` mirrors how the legacy path picked `resolverFromFile`
    * (project-root package.json for the native singletons, else the importer).
    */
-  const buildResolutionContext = (
-    source: string,
-    fromFile: string,
-  ): VifxMetroResolutionContext => {
+  const buildResolutionContext = (source: string, fromFile: string): VifxMetroResolutionContext => {
     // Match the historic `resolverFromFile` choice against the ALIASED spec so a
     // user alias onto a native singleton still resolves from the project root.
     const aliased = applyAliases(source, state.aliases, state.projectRoot);
@@ -2547,9 +2543,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
    * into the Vite resolved id, reusing vifx's asset/compat/transform
    * post-processing so a hook's result behaves exactly like a native resolution.
    */
-  const mapResolutionToViteId = async (
-    resolution: VifxMetroResolution,
-  ): Promise<string | null> => {
+  const mapResolutionToViteId = async (resolution: VifxMetroResolution): Promise<string | null> => {
     if (resolution.type === "empty") {
       return EMPTY_PREFIX + "module";
     }
@@ -2851,8 +2845,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       // re-applies the same single alias step internally, so resolution itself
       // still aliases exactly once.
       const aliasedSource = applyAliases(source, state.aliases, state.projectRoot);
-      const rewriteSource =
-        aliasedSource && aliasedSource !== source ? aliasedSource : source;
+      const rewriteSource = aliasedSource && aliasedSource !== source ? aliasedSource : source;
 
       const compatId = resolveCompatId(rewriteSource, state);
       if (compatId) {
