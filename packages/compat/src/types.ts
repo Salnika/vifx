@@ -21,6 +21,10 @@ export const FIXTURE_IDS = [
   "lib-lottie-react-native",
   "lib-nativewind",
   "lib-react-native-webview",
+  "lib-react-native-mmkv",
+  "lib-async-storage",
+  "lib-react-native-maps",
+  "lib-expo-camera",
 ] as const;
 
 export type FixtureId = (typeof FIXTURE_IDS)[number];

@@ -647,4 +647,126 @@ export const compatCases: CompatCase[] = [
     notes: ["Synthetic replica rendering a native RNCWebView host component from a TSX entry."],
     docsPath: "/compat/libraries#react-native-webview",
   },
+  {
+    id: "lib-react-native-mmkv",
+    title: "react-native-mmkv bundles its exports/react-native TS entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-mmkv",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-mmkv",
+      platform: "ios",
+      bundleProbes: ["MMKV", "MmkvPlatformContext"],
+      partialAspects: [
+        "the JSI-installed MMKV native binding is only available on a device, so a storage instance backed by real persistence cannot be created from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "react-native-mmkv",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the exports map / react-native condition to TypeScript sources and bundles them. The JSI-installed native binding is unavailable at build time, so the synchronous storage instance is not backed by native persistence.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica with an exports map plus a JSI native-binding dependency."],
+    docsPath: "/compat/libraries#react-native-mmkv",
+  },
+  {
+    id: "lib-async-storage",
+    title: "@react-native-async-storage/async-storage bundles its scoped react-native TS entry",
+    category: "libraries",
+    fixtureId: "lib-async-storage",
+    operation: {
+      kind: "library-build",
+      packageName: "@react-native-async-storage/async-storage",
+      platform: "ios",
+      bundleProbes: ["AsyncStorage", "multiGet"],
+      partialAspects: [
+        "the RNCAsyncStorage native module is only registered on a device, so reads and writes do not reach native storage from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "@react-native-async-storage/async-storage",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the scoped react-native field to TypeScript sources and bundles them. The native storage module is unavailable at build time, so getItem/setItem return inert results.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic scoped package proxying a native storage module from a TS entry."],
+    docsPath: "/compat/libraries#react-native-async-storage",
+  },
+  {
+    id: "lib-react-native-maps",
+    title: "react-native-maps bundles its TSX native-component entry",
+    category: "libraries",
+    fixtureId: "lib-react-native-maps",
+    operation: {
+      kind: "library-build",
+      packageName: "react-native-maps",
+      platform: "ios",
+      bundleProbes: ["MapView", "Marker"],
+      partialAspects: [
+        "the AIRMap and AIRMapMarker native host components are only available on a device, so the map and its markers do not render from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "react-native-maps",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Transpiles the TSX react-native entry and bundles it, but the AIRMap native components are not registered at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: ["Synthetic replica registering native host components from a TSX entry."],
+    docsPath: "/compat/libraries#react-native-maps",
+  },
+  {
+    id: "lib-expo-camera",
+    title: "expo-camera bundles its precompiled Expo-module build entry",
+    category: "libraries",
+    fixtureId: "lib-expo-camera",
+    operation: {
+      kind: "library-build",
+      packageName: "expo-camera",
+      platform: "ios",
+      bundleProbes: ["CameraView", "getAvailableCameraTypesAsync"],
+      partialAspects: [
+        "the ExpoCamera native view manager and module are only registered on a device, so the camera preview does not render and capability queries return empty from a bundler build",
+      ],
+    },
+    expected: {
+      packageName: "expo-camera",
+      toolchains: {
+        vifx: {
+          status: "partial",
+          note: "Resolves the Expo module's precompiled build entry and its vendored expo-modules-core, then bundles them. The native ExpoCamera view and module are unavailable at build time.",
+        },
+        metro: {
+          status: "skip",
+          note: "Not exercised against live Metro.",
+        },
+      },
+    },
+    notes: [
+      "Synthetic Expo module rendering a native camera view via a vendored expo-modules-core.",
+    ],
+    docsPath: "/compat/libraries#expo-camera",
+  },
 ];

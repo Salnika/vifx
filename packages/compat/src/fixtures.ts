@@ -278,6 +278,75 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
       "Synthetic replica rendering a native RNCWebView host component from a TSX react-native entry.",
     ],
   },
+  {
+    id: "lib-react-native-mmkv",
+    title: "Library: react-native-mmkv",
+    relativePath: "fixtures/libs/react-native-mmkv",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "exports-map",
+      "native-module",
+      "ts-source-entry",
+    ],
+    notes: [
+      "Synthetic replica whose MMKV storage constructor reaches into a JSI-installed native module via the React Native default export.",
+    ],
+  },
+  {
+    id: "lib-async-storage",
+    title: "Library: @react-native-async-storage/async-storage",
+    relativePath: "fixtures/libs/async-storage",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "scoped-package",
+      "native-module",
+      "ts-source-entry",
+    ],
+    notes: [
+      "Synthetic scoped package whose default export proxies a native storage module (RNCAsyncStorage) from a TS react-native entry.",
+    ],
+  },
+  {
+    id: "lib-react-native-maps",
+    title: "Library: react-native-maps",
+    relativePath: "fixtures/libs/react-native-maps",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "native-component",
+      "jsx-source",
+      "ts-source-entry",
+    ],
+    notes: [
+      "Synthetic replica registering native host components (AIRMap, AIRMapMarker) from a TSX react-native entry.",
+    ],
+  },
+  {
+    id: "lib-expo-camera",
+    title: "Library: expo-camera",
+    relativePath: "fixtures/libs/expo-camera",
+    projectType: "react-native",
+    packageManager: "pnpm",
+    features: [
+      "library-fixture",
+      "synthetic-package",
+      "expo-module",
+      "native-component",
+      "native-module",
+      "exports-map",
+    ],
+    notes: [
+      "Synthetic Expo module rendering a native camera view and querying a native module via a vendored expo-modules-core.",
+    ],
+  },
 ];
 
 const FIXTURE_MANIFEST_MAP = new Map(FIXTURE_MANIFESTS.map((fixture) => [fixture.id, fixture]));

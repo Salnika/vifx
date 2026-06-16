@@ -1,0 +1,11 @@
+{
+  "name": "lib-react-native-mmkv-consumer",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "react": "19.1.0",
+    "react-native": "0.81.0",
+    "react-native-mmkv": "3.1.0"
+  },
+  "packageManager": "pnpm@11.1.2"
+}

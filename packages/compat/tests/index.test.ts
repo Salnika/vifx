@@ -8,7 +8,7 @@ import {
 } from "../src/index.ts";
 
 test("fixture manifests expose the compatibility fixtures", () => {
-  expect(getFixtureManifests()).toHaveLength(22);
+  expect(getFixtureManifests()).toHaveLength(26);
   expect(getFixtureManifest("expo-basic").projectType).toBe("expo");
   expect(getFixtureManifest("expo-router-basic").features).toContain("expo-router");
   expect(resolveFixturePath("expo-basic")).toContain("fixtures/expo-basic");
@@ -58,7 +58,7 @@ test("compat cases cover the NEXT minimum categories", () => {
 test("the libraries category covers the top synthetic library fixtures", () => {
   const libraryCases = compatCases.filter((compatCase) => compatCase.category === "libraries");
 
-  expect(libraryCases).toHaveLength(12);
+  expect(libraryCases).toHaveLength(16);
   for (const libraryCase of libraryCases) {
     expect(libraryCase.operation.kind).toBe("library-build");
     // Every library case must carry a per-toolchain status snapshot.
