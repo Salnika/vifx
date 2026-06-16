@@ -251,6 +251,31 @@ A user config that fails to load (a syntax or export error in `vite.config.vifx.
 
 The `moduleFormat: "metro"` dev build does not merge your whole config. It pulls only your plugins plus the non-reserved parts of `resolve` and `define`, because its CJS staging output (`format: "cjs"`, `preserveModules`, `exports: "named"`) is the Fast Refresh serialization contract and must stay vifx-owned. Your plugins still run; the output layout does not change.
 
+### `resolveRequest` (Metro drop-in)
+
+A Metro-compatible `resolver.resolveRequest` is supported through the user Vite config, declared with the `vifxResolveRequest` helper from `@vifx/vite-config-bridge`. The hook is a function, so it lives in the in-process `vite.config.vifx.*` (it never crosses the `vifx export:embed` / CLI subprocess boundary, where only the serializable `vifx.config.*` travels).
+
+```ts
+// vite.config.vifx.ts
+import { defineConfig } from "vite";
+import { vifxResolveRequest } from "@vifx/vite-config-bridge";
+
+export default defineConfig({
+  plugins: [
+    vifxResolveRequest((context, moduleName, platform) => {
+      if (moduleName === "crypto") {
+        return context.resolveRequest(context, "expo-crypto", platform);
+      }
+      return context.resolveRequest(context, moduleName, platform);
+    }),
+  ],
+});
+```
+
+The contract mirrors Metro: `(context, moduleName, platform) => Resolution` (may be `async`), where `context.resolveRequest` is the recursive default resolver for delegation, and the return is the tagged union `{ type: "sourceFile", filePath }` | `{ type: "assetFiles", filePaths }` | `{ type: "empty" }`. The hook runs above vifx's alias/compat pre-filter and its result routes into vifx's asset/transform post-processing. A throwing hook falls through to vifx's default resolution rather than failing the build. See the [migration guide](../guide/migration#resolverequest) for the full walkthrough.
+
+The sentinel plugin `vifxResolveRequest(...)` produces is a transport only — it never runs as a normal Vite plugin and is not appended to your plugin list. A `vifx.resolveRequest` field on the config object works as an alternative channel; the plugin form wins when both are present. Programmatic callers may pass `userResolveRequest` directly to `reactNative()` / `expo()`, which takes precedence over the config-declared hook.
+
 ## Related
 
 - [CLI reference](./cli) — every command and flag.
