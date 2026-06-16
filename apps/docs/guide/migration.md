@@ -115,7 +115,7 @@ vifx never rewrites `metro.config.js` automatically. It analyzes the file and pr
 | `resolver.assetExts` (additions)   | `assetExtensions` on the Vite plugin in `vite.config.vifx.ts`    |
 | `transformer.babelTransformerPath` | Port to a Vite/Rollup plugin in `vite.config.vifx.ts`            |
 | `watchFolders`                     | No mapping needed — vifx resolves workspace packages natively    |
-| `resolver.resolveRequest`          | No vifx equivalent — keep Metro for this path or remove the hook |
+| `resolver.resolveRequest`          | `vifxResolveRequest(...)` in `vite.config.vifx.ts` (see below)   |
 | `serializer` (custom hooks)        | No vifx equivalent — keep Metro for this path or remove the hook |
 
 A note on asset extensions: the Metro-config hint phrases the target as `assetExtensions`, which is a Vite **plugin** option, not a `vifx.config.ts` key. Set it on the plugin instance in your `vite.config.vifx.ts`:
@@ -148,9 +148,54 @@ import svgr from "vite-plugin-svgr";
 export default defineConfig({ plugins: [svgr()] });
 ```
 
-`resolver.resolveRequest` and custom `serializer` hooks are reported with stable error codes (`VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST`, `VIFX_UNSUPPORTED_METRO_SERIALIZER`). These are a genuine boundary: keep Metro for those paths, or drop the custom hook before migrating.
+A custom `serializer` is still a genuine boundary: it is reported with the stable `VIFX_UNSUPPORTED_METRO_SERIALIZER` code, so keep Metro for serializer-specific workflows or drop the hook before migrating. `resolver.resolveRequest`, by contrast, is supported — see below.
 
 `resolver.mainFields`, `resolver.conditions`, and `resolver.extensions` are first-class top-level keys in `vifx.config.ts`. The platform-extension resolution you rely on (`.ios` / `.android` / `.native` / `.web`) is built in — see [Features](/reference/features).
+
+### resolveRequest
+
+A custom `resolver.resolveRequest` — the single biggest Metro drop-in blocker for monorepos, `react-native-svg-transformer`, and conditional aliasing — is supported. Because the hook is a **function**, it cannot ride vifx's serializable config across the `vifx export:embed` / CLI subprocess boundary, so its home is the in-process `vite.config.vifx.ts`, declared with `vifxResolveRequest(...)`:
+
+```ts
+// vite.config.vifx.ts
+import { defineConfig } from "vite";
+import { vifxResolveRequest } from "@vifx/vite-config-bridge";
+
+export default defineConfig({
+  plugins: [
+    vifxResolveRequest((context, moduleName, platform) => {
+      // Conditional swap: reroute "crypto" to "expo-crypto".
+      if (moduleName === "crypto") {
+        return context.resolveRequest(context, "expo-crypto", platform);
+      }
+      // Delegate everything else to vifx's default resolver.
+      return context.resolveRequest(context, moduleName, platform);
+    }),
+  ],
+});
+```
+
+The contract matches Metro's exactly:
+
+- **Signature**: `(context, moduleName, platform) => Resolution`, and the hook may be `async`.
+- **Delegation**: `context.resolveRequest(context, moduleName, platform)` runs vifx's own resolver (backed by `@vifx/platform-resolver`), so the dominant Metro pattern — delegate to the default with modified arguments — works unchanged. `context` also carries `originModulePath`, `projectRoot`, `sourceExts`, and `assetExts`.
+- **Return**: a tagged union — `{ type: "sourceFile", filePath }`, `{ type: "assetFiles", filePaths }`, or `{ type: "empty" }`. vifx routes each variant into its own asset / transform post-processing, so a `sourceFile` resolving to a `.png` still becomes an `AssetRegistry` id, a `.tsx` still gets transformed, and `{ type: "empty" }` stubs the import out (Metro's empty module).
+
+The hook runs **above** vifx's alias/compat pre-filter, matching Metro's surface (it sees the raw specifier). If it throws, vifx falls through to its own default resolution for that request — it does not hard-fail the build, mirroring Metro. When no `resolveRequest` is declared, resolution is byte-identical to the historic path.
+
+An `svg-transformer`-style resolver that inspects the resolved file then delegates works the same way:
+
+```ts
+vifxResolveRequest(async (context, moduleName, platform) => {
+  const resolution = await context.resolveRequest(context, moduleName, platform);
+  // branch on resolution.filePath, e.g. route *.svg to a transform
+  return resolution;
+});
+```
+
+A migration hint (`vifx doctor` / `vifx setup`) points you here when it detects a `resolveRequest` in your `metro.config.js`.
+
+> Note: an explicit `userResolveRequest` option on `reactNative()` / `expo()` takes precedence over the `vite.config.vifx.ts` hook, for programmatic callers.
 
 ## 4. Build and preview
 

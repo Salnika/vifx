@@ -7,11 +7,13 @@ import {
   allowedViteKeys,
   detectNativeResolutionConflicts,
   extractMetroStagingUserSlices,
+  extractVifxResolveRequest,
   type LoadedUserViteConfig,
   loadUserViteConfig,
   mergeWithVifx,
   prepareUserViteConfig,
   reservedViteKeys,
+  vifxResolveRequest,
 } from "../src/index.ts";
 
 function userResult(config: UserConfig): LoadedUserViteConfig {
@@ -382,4 +384,49 @@ test("prepareUserViteConfig loads the config and surfaces native-resolution conf
   } finally {
     await rm(dir, { force: true, recursive: true });
   }
+});
+
+test("extractVifxResolveRequest pulls the hook from a vifxResolveRequest() sentinel plugin", () => {
+  const hook = () => ({ type: "empty" as const });
+  const extracted = extractVifxResolveRequest(
+    userResult({ plugins: [vifxResolveRequest(hook), { name: "user-banner" }] }),
+  );
+  expect(extracted).toBe(hook);
+});
+
+test("extractVifxResolveRequest reads a top-level vifx.resolveRequest field", () => {
+  const hook = () => ({ type: "empty" as const });
+  const extracted = extractVifxResolveRequest(
+    userResult({ vifx: { resolveRequest: hook } } as UserConfig),
+  );
+  expect(extracted).toBe(hook);
+});
+
+test("extractVifxResolveRequest returns null when no hook is declared", () => {
+  expect(extractVifxResolveRequest(userResult({ plugins: [{ name: "user-banner" }] }))).toBeNull();
+  expect(extractVifxResolveRequest(null)).toBeNull();
+});
+
+test("the vifxResolveRequest sentinel plugin is stripped from the merged plugin list", () => {
+  const hook = () => ({ type: "empty" as const });
+  const merged = mergeWithVifx(
+    userResult({ plugins: [vifxResolveRequest(hook), { name: "user-banner" }] }),
+    vifxBase(),
+    { resolvePlatform: "ios" },
+  );
+  // It is a vifx:* plugin, so it must never run as a real Vite plugin.
+  const names = (merged.plugins as Plugin[]).map((plugin) => plugin.name);
+  expect(names).toEqual(["vifx:react-native", "user-banner"]);
+});
+
+test("a top-level vifx field never pollutes the merged Vite config", () => {
+  const hook = () => ({ type: "empty" as const });
+  const merged = mergeWithVifx(
+    userResult({ vifx: { resolveRequest: hook } } as UserConfig),
+    vifxBase(),
+    {
+      resolvePlatform: "ios",
+    },
+  );
+  expect("vifx" in merged).toBe(false);
 });

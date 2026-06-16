@@ -129,9 +129,11 @@ Hermes bytecode is +5.8% vs Metro (vifx 5.24 MB vs Metro 4.96 MB on HNewsPro). T
 
 Compiling `.bundle` → `.hbc` is roughly equal (Metro 2.0 s vs vifx 1.8 s on HNewsPro). vifx does not vendor Hermes; it detects and orchestrates `hermesc` and validates its source maps and symbolication against Metro. Treat this as parity.
 
-### Custom `resolveRequest` and `serializer` hooks — keep Metro
+### Custom `resolveRequest` — supported; `serializer` — keep Metro
 
-Two Metro extension points have no vifx equivalent, and vifx tells you so with stable error codes when it finds them in a `metro.config.js`: a custom `resolver.resolveRequest` (`VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST`) and a custom `serializer` (`VIFX_UNSUPPORTED_METRO_SERIALIZER`). For those paths you keep Metro, or remove the custom hook before migrating. Everything else vifx interop reports — `assetExts`, `sourceExts`, `extraNodeModules`, `babelTransformerPath`, `watchFolders` — maps to a `vifx.config.ts` setting or a Vite plugin. See [Migration](../guide/migration) for the full mapping.
+A custom `resolver.resolveRequest` is a drop-in: port it to `vite.config.vifx.ts` with `vifxResolveRequest(...)`, which mirrors Metro's `(context, moduleName, platform) => Resolution` contract — including the recursive `context.resolveRequest` for delegation — and routes the tagged-union result into vifx's asset/transform post-processing. vifx detects a `resolveRequest` in your `metro.config.js` and points you there with a migration hint. See [resolveRequest](../guide/migration#resolverequest).
+
+A custom `serializer` still has no vifx equivalent: vifx flags it with the stable `VIFX_UNSUPPORTED_METRO_SERIALIZER` code, so keep Metro for serializer-specific workflows or remove the hook before migrating. Everything else vifx interop reports — `assetExts`, `sourceExts`, `extraNodeModules`, `babelTransformerPath`, `watchFolders` — maps to a `vifx.config.ts` setting or a Vite plugin. See [Migration](../guide/migration) for the full mapping.
 
 ### Web is a companion target
 

@@ -34,6 +34,9 @@ import type {
   VifxBundleArtifacts,
   VifxBundleMode,
   VifxDiagnosticData,
+  VifxMetroResolution,
+  VifxMetroResolutionContext,
+  VifxMetroResolveRequest,
   VifxModuleFormat,
   VifxPlatform,
   VifxReactNativePluginOptions,
@@ -132,6 +135,14 @@ const NATIVE_SINGLETON_PACKAGE_SET = new Set<string>(NATIVE_SINGLETON_PACKAGES);
 const SHIM_PREFIX = "\0vifx:shim:";
 const TRANSFORM_PREFIX = "\0vifx:transformed:";
 const ASSET_PREFIX = "\0vifx:asset:";
+// Virtual id for a `resolveRequest` hook returning `{ type: "empty" }` (Metro's
+// "stub this import out"). Loaded as an ESM module that default-exports an empty
+// object, matching the ESM convention every other vifx virtual module uses
+// (renderShim / renderCompat) — `module.exports` would throw "module is not
+// defined" in the ESM hoisted/web graph. Named imports resolve to `undefined`,
+// exactly like Metro's empty module.
+const EMPTY_PREFIX = "\0vifx:empty:";
+const EMPTY_MODULE_SOURCE = "export default {};\n";
 // Captured browser globals key used by the web-compat shims (e.g. FormData
 // re-export). Still consumed by renderCompat; the build-time preview runtime
 // that also referenced it was removed with __VIFX_WEB_RUNTIME__ (ADR-005).
@@ -189,6 +200,12 @@ interface ReactNativePluginState {
   shimReact: boolean;
   shimReactNative: boolean;
   transformCache: TransformCache | null;
+  /**
+   * A user Metro-compatible `resolveRequest` hook (from `vite.config.vifx.*`),
+   * run before vifx's own resolution to mirror Metro's surface. `null` (the
+   * default) keeps resolution byte-identical to the historic path.
+   */
+  userResolveRequest: VifxMetroResolveRequest | null;
 }
 
 interface ExpoRouterContextEntry {
@@ -2466,6 +2483,113 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     return transformed satisfies TransformResult;
   };
 
+  /**
+   * vifx's default resolver, shaped as a Metro `resolveRequest`. Runs
+   * `resolveReactNativeModule` and classifies the hit as a `sourceFile` or
+   * `assetFiles` resolution. This IS the recursive `context.resolveRequest` a
+   * user hook delegates to, so a migrated Metro resolver can call it with
+   * modified arguments exactly like it called Metro's default.
+   */
+  const defaultResolveRequest: VifxMetroResolveRequest = async (
+    context,
+    moduleName,
+    platform,
+  ): Promise<VifxMetroResolution> => {
+    // Honor the user's vifx `aliases` (Metro's default resolver folds in
+    // `extraNodeModules` the same way), so a delegating hook sees aliased specs.
+    const aliasedSource = applyAliases(moduleName, state.aliases, state.projectRoot);
+    const specifier = aliasedSource && aliasedSource !== moduleName ? aliasedSource : moduleName;
+    const resolved = await resolveReactNativeModule({
+      conditions: state.conditions,
+      extensions: [...state.extensions, ...state.assetExtensions],
+      fromFile: context.originModulePath,
+      mainFields: state.mainFields,
+      platform: (platform ?? state.resolvePlatform) as VifxPlatform,
+      projectRoot: state.projectRoot,
+      specifier,
+    });
+    const resolvedPath = stripQuery(resolved.filePath);
+
+    if (isSupportedAssetFile(resolvedPath, state.assetExtensions)) {
+      // Metro returns every scale variant in `assetFiles`. vifx's asset module
+      // renderer (renderNativeAssetModule) recollects the scale group from the
+      // base file, so the single resolved path is sufficient and faithful.
+      return { type: "assetFiles", filePaths: [resolvedPath] };
+    }
+
+    return { type: "sourceFile", filePath: resolvedPath };
+  };
+
+  /**
+   * Builds the Metro-shaped `ResolutionContext` for a single `resolveId` call.
+   * `originModulePath` mirrors how the legacy path picked `resolverFromFile`
+   * (project-root package.json for the native singletons, else the importer).
+   */
+  const buildResolutionContext = (source: string, fromFile: string): VifxMetroResolutionContext => {
+    // Match the historic `resolverFromFile` choice against the ALIASED spec so a
+    // user alias onto a native singleton still resolves from the project root.
+    const aliased = applyAliases(source, state.aliases, state.projectRoot);
+    const effectiveSource = aliased && aliased !== source ? aliased : source;
+    return {
+      resolveRequest: defaultResolveRequest,
+      originModulePath: shouldResolveFromProjectRoot(effectiveSource)
+        ? path.join(state.projectRoot, "package.json")
+        : fromFile,
+      projectRoot: state.projectRoot,
+      sourceExts: state.extensions,
+      assetExts: state.assetExtensions,
+    };
+  };
+
+  /**
+   * Routes a `VifxMetroResolution` (from the user hook or the default resolver)
+   * into the Vite resolved id, reusing vifx's asset/compat/transform
+   * post-processing so a hook's result behaves exactly like a native resolution.
+   */
+  const mapResolutionToViteId = async (resolution: VifxMetroResolution): Promise<string | null> => {
+    if (resolution.type === "empty") {
+      return EMPTY_PREFIX + "module";
+    }
+
+    if (resolution.type === "assetFiles") {
+      const assetPath = stripQuery(resolution.filePaths[0] ?? "");
+      if (assetPath === "") {
+        return null;
+      }
+      state.assetFiles.add(assetPath);
+      if (state.resolvePlatform !== "web" && (await isNativeAssetRegistryAvailable(state))) {
+        return createAssetId(assetPath);
+      }
+      return assetPath;
+    }
+
+    const resolvedPath = stripQuery(resolution.filePath);
+
+    // A hook may legitimately return a still-classifiable asset path via
+    // `sourceFile` (Metro does the classification itself); mirror the native
+    // asset handling so `<Image source>` / fonts keep working.
+    if (isSupportedAssetFile(resolvedPath, state.assetExtensions)) {
+      state.assetFiles.add(resolvedPath);
+      if (state.resolvePlatform !== "web" && (await isNativeAssetRegistryAvailable(state))) {
+        return createAssetId(resolvedPath);
+      }
+    }
+
+    const compatPathId = resolveCompatPath(resolvedPath, state.resolvePlatform);
+    if (compatPathId) {
+      return compatPathId;
+    }
+
+    if (
+      shouldTransformJsxFile(resolvedPath, state.jsxInPackages) ||
+      shouldTransformExpoPackageSource(resolvedPath, state)
+    ) {
+      return createTransformId(resolvedPath);
+    }
+
+    return resolvedPath;
+  };
+
   return {
     name: "vifx:react-native",
     enforce: "pre",
@@ -2487,6 +2611,10 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     async load(id) {
       if (id.startsWith(REQUIRE_CONTEXT_PREFIX)) {
         return await renderRequireContextModule(id);
+      }
+
+      if (id.startsWith(EMPTY_PREFIX)) {
+        return EMPTY_MODULE_SOURCE;
       }
 
       if (id.startsWith(ASSET_PREFIX)) {
@@ -2666,25 +2794,15 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       };
     },
     async resolveId(source, importer) {
-      const aliasedSource = applyAliases(source, state.aliases, state.projectRoot);
-      if (aliasedSource && aliasedSource !== source) {
-        source = aliasedSource;
-      }
-
-      const compatId = resolveCompatId(source, state);
-      if (compatId) {
-        return compatId;
-      }
-
-      const shimId = resolveShimId(source, state);
-      if (shimId) {
-        return shimId;
-      }
-
+      // vifx-internal / non-specifier ids never reach the user hook or vifx's
+      // resolver: they are virtual modules vifx already owns, or things Vite
+      // resolves itself (`\0`-prefixed, data:, vite/...). Filtering them out
+      // first keeps a user `resolveRequest` from seeing vifx's plumbing.
       if (
         source.startsWith(COMPAT_PREFIX) ||
         source.startsWith(REQUIRE_CONTEXT_PREFIX) ||
-        source.startsWith(TRANSFORM_PREFIX)
+        source.startsWith(TRANSFORM_PREFIX) ||
+        source.startsWith(EMPTY_PREFIX)
       ) {
         return source;
       }
@@ -2703,48 +2821,52 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
           ? stripQuery(importer.slice(TRANSFORM_PREFIX.length))
           : stripQuery(importer)
         : path.resolve(state.projectRoot, state.entry);
-      const resolverFromFile = shouldResolveFromProjectRoot(source)
-        ? path.join(state.projectRoot, "package.json")
-        : fromFile;
+
+      // The user `resolveRequest` runs ABOVE vifx's alias/compat pre-filter, so
+      // its surface matches Metro's (it sees the raw specifier and the default
+      // resolver via `context.resolveRequest`). When it throws, fall through to
+      // vifx's own resolution — matching Metro, where a throwing custom resolver
+      // does not hard-fail the build for that request.
+      if (state.userResolveRequest) {
+        const context = buildResolutionContext(source, fromFile);
+        try {
+          const resolution = await state.userResolveRequest(
+            context,
+            source,
+            // Metro passes `null` for platform-agnostic resolution; vifx always
+            // has a concrete resolve platform, so pass it through.
+            state.resolvePlatform,
+          );
+          return await mapResolutionToViteId(resolution);
+        } catch {
+          // Hook threw — fall through to vifx's default resolution below.
+        }
+      }
+
+      // Specifier-level alias/compat/shim rewrites vifx owns. These run on the
+      // aliased specifier (matching the historic order); `defaultResolveRequest`
+      // re-applies the same single alias step internally, so resolution itself
+      // still aliases exactly once.
+      const aliasedSource = applyAliases(source, state.aliases, state.projectRoot);
+      const rewriteSource = aliasedSource && aliasedSource !== source ? aliasedSource : source;
+
+      const compatId = resolveCompatId(rewriteSource, state);
+      if (compatId) {
+        return compatId;
+      }
+
+      const shimId = resolveShimId(rewriteSource, state);
+      if (shimId) {
+        return shimId;
+      }
 
       try {
-        const resolved = await resolveReactNativeModule({
-          conditions: state.conditions,
-          extensions: [...state.extensions, ...state.assetExtensions],
-          fromFile: resolverFromFile,
-          mainFields: state.mainFields,
-          platform: state.resolvePlatform,
-          projectRoot: state.projectRoot,
-          specifier: source,
-        });
-        const resolvedPath = stripQuery(resolved.filePath);
-
-        if (isSupportedAssetFile(resolvedPath, state.assetExtensions)) {
-          state.assetFiles.add(resolvedPath);
-
-          // On native, an asset import must resolve to a registered asset id (a
-          // number) via AssetRegistry — like Metro — not Vite's default URL
-          // string, which breaks `<Image source>` and font loading. The web
-          // preview keeps the URL string for the browser runtime, and so does a
-          // native build with no resolvable AssetRegistry.
-          if (state.resolvePlatform !== "web" && (await isNativeAssetRegistryAvailable(state))) {
-            return createAssetId(resolvedPath);
-          }
-        }
-
-        const compatPathId = resolveCompatPath(resolvedPath, state.resolvePlatform);
-        if (compatPathId) {
-          return compatPathId;
-        }
-
-        if (
-          shouldTransformJsxFile(resolvedPath, state.jsxInPackages) ||
-          shouldTransformExpoPackageSource(resolvedPath, state)
-        ) {
-          return createTransformId(resolvedPath);
-        }
-
-        return resolvedPath;
+        const resolution = await defaultResolveRequest(
+          buildResolutionContext(source, fromFile),
+          source,
+          state.resolvePlatform,
+        );
+        return await mapResolutionToViteId(resolution);
       } catch {
         return null;
       }
@@ -2851,6 +2973,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
       transformCache: options.transformCache,
       transformCacheInstance: options.transformCacheInstance,
     }),
+    userResolveRequest: options.userResolveRequest ?? null,
   };
 
   return createReactNativePlugin(state);
@@ -2926,18 +3049,28 @@ export async function buildReactNativeBundle(
     shimReact: options.shimReact ?? true,
     shimReactNative: options.shimReactNative ?? true,
     transformCache,
+    userResolveRequest: options.userResolveRequest ?? null,
   };
 
   // Load the user `vite.config.vifx.*` once (null when absent → historic path).
   // On the metro path only the safe slices (plugins + filtered resolve/define)
   // are injected; the staging `build.rollupOptions.output` is reserved.
-  const { userResult, diagnostics } = await prepareUserViteConfig({
+  const {
+    userResult,
+    diagnostics,
+    resolveRequest: configResolveRequest,
+  } = await prepareUserViteConfig({
     projectRoot,
     configFile: options.userViteConfig,
     command: "build",
     mode,
     resolvePlatform: state.resolvePlatform,
   });
+  // An explicit `options.userResolveRequest` wins; otherwise honor the hook
+  // declared in `vite.config.vifx.*`. Set before the plugin is constructed.
+  if (state.userResolveRequest === null && configResolveRequest !== null) {
+    state.userResolveRequest = configResolveRequest;
+  }
   for (const diagnostic of diagnostics) {
     warnUserViteConfigDiagnostic(diagnostic);
   }

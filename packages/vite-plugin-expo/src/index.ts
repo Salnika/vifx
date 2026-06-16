@@ -1112,14 +1112,22 @@ export async function buildExpoBundle(
 
   // Load the user `vite.config.vifx.*` once. On the metro path only the safe
   // slices (plugins + filtered resolve/define) are injected; the staging
-  // `build.rollupOptions.output` stays vifx-owned.
-  const { userResult, diagnostics } = await prepareUserViteConfig({
+  // `build.rollupOptions.output` stays vifx-owned. A `resolveRequest` hook is a
+  // function, so it rides the config in-process (never the CLI subprocess); the
+  // explicit option wins, else the config-declared hook is threaded into the RN
+  // plugin via the `expo({...})` spreads below.
+  const {
+    userResult,
+    diagnostics,
+    resolveRequest: configResolveRequest,
+  } = await prepareUserViteConfig({
     projectRoot,
     configFile: options.userViteConfig,
     command: "build",
     mode: resolveBundleMode(options),
     resolvePlatform,
   });
+  const userResolveRequest = options.userResolveRequest ?? configResolveRequest ?? undefined;
   for (const diagnostic of diagnostics) {
     warnUserViteConfigDiagnostic(diagnostic);
   }
@@ -1158,6 +1166,7 @@ export async function buildExpoBundle(
             entry,
             projectRoot,
             transformCacheInstance: transformCache,
+            userResolveRequest,
           }),
         ],
         mode: metroMode,
@@ -1279,6 +1288,7 @@ export async function buildExpoBundle(
           ...options,
           entry,
           projectRoot,
+          userResolveRequest,
         }),
       ],
       mode,
@@ -1782,13 +1792,18 @@ export async function startExpoDevServer(
   // config. The `server` binding is re-applied AFTER the merge because vifx owns
   // the host/port/strictPort the CLI resolved (a user `server` block must not
   // change where we listen).
-  const { userResult, diagnostics } = await prepareUserViteConfig({
+  const {
+    userResult,
+    diagnostics,
+    resolveRequest: configResolveRequest,
+  } = await prepareUserViteConfig({
     projectRoot,
     configFile: options.userViteConfig,
     command: "serve",
     mode: resolveBundleMode(options),
     resolvePlatform: "web",
   });
+  const userResolveRequest = options.userResolveRequest ?? configResolveRequest ?? undefined;
   for (const diagnostic of diagnostics) {
     warnUserViteConfigDiagnostic(diagnostic);
   }
@@ -1808,6 +1823,7 @@ export async function startExpoDevServer(
           projectRoot,
           reactNativeCompat: "web",
           resolvePlatform: "web",
+          userResolveRequest,
         }),
       ],
       mode: resolveBundleMode(options),

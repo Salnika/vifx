@@ -62,6 +62,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_HERMES_INPUT_MISSING`                        | The requested Hermes input bundle does not exist.                                                                 |
 | `VIFX_HERMES_OUTPUT_MISSING`                       | Hermes completed without creating the requested bytecode output.                                                  |
 | `VIFX_HERMES_UNAVAILABLE`                          | No Hermes compiler was found through explicit path, env, workspace, or PATH.                                      |
+| `VIFX_METRO_RESOLVE_REQUEST_MIGRATION`             | Project inspection found a custom Metro `resolveRequest`; port it to `vite.config.vifx.ts` with `vifxResolveRequest`. |
 | `VIFX_MIGRATION_UNSAFE_CHANGE`                     | A requested migration step was too risky or targeted the wrong project type.                                      |
 | `VIFX_MODULE_FORMAT_UNSUPPORTED`                   | A bundle target requested the `metro` module format before Metro-graph serialization shipped.                     |
 | `VIFX_MODULE_REGISTRY_ENTRY_MISSING`               | A module-registry build produced no entry module or no module chunks.                                             |
@@ -91,7 +92,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_SETUP_APP_JSON_REQUIRED`                     | `vifx setup --experimental-embed` needs a static `app.json` to register the embed plugin.                         |
 | `VIFX_SETUP_CONFIRMATION_REQUIRED`                 | `vifx setup` was run without `--yes` in a non-interactive session.                                                |
 | `VIFX_SETUP_EXPO_ONLY`                             | `vifx setup` was pointed at a non-Expo project even though the v1 flow supports Expo only.                        |
-| `VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST`           | Project inspection found a custom Metro `resolveRequest` hook outside Vifx scope.                                 |
+| `VIFX_UNSUPPORTED_METRO_RESOLVE_REQUEST`           | Legacy code, retained for compatibility; a custom `resolveRequest` is now supported (see `VIFX_METRO_RESOLVE_REQUEST_MIGRATION`). |
 | `VIFX_UNSUPPORTED_METRO_SERIALIZER`                | Project inspection found a custom Metro serializer outside Vifx scope.                                            |
 | `VIFX_USER_VITE_CONFIG_CONFLICT`                   | A user Vite config tried to override a vifx-reserved option (resolve conditions/dedupe, defines, or output).      |
 | `VIFX_VITE_BUNDLE_MISSING`                         | A Vite bundle build finished without the expected JavaScript bundle artifact.                                     |

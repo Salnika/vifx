@@ -43,6 +43,60 @@ export interface VifxResolutionResult {
   trace: VifxResolutionTraceEntry[];
 }
 
+/**
+ * The Metro-shaped resolution result returned by a `resolveRequest` hook. A
+ * tagged union mirroring Metro's `Resolution`:
+ *
+ * - `sourceFile`: resolve the request to a single source/module file.
+ * - `assetFiles`: resolve to one or more asset files (every scale variant).
+ * - `empty`: resolve to an empty module (Metro's "stub this import out").
+ *
+ * vifx routes each variant into its own asset / transform post-processing so a
+ * migrated Metro resolver behaves the same way it did under Metro.
+ */
+export type VifxMetroResolution =
+  | { type: "sourceFile"; filePath: string }
+  | { type: "assetFiles"; filePaths: string[] }
+  | { type: "empty" };
+
+/**
+ * The `context` argument vifx passes to a user `resolveRequest`, shaped like
+ * Metro's `ResolutionContext`. Only the fields a real custom resolver reads are
+ * populated; the load-bearing one is the RECURSIVE `resolveRequest`, which runs
+ * vifx's own resolver so a hook can delegate (the dominant pattern:
+ * `context.resolveRequest(context, modifiedName, platform)`).
+ */
+export interface VifxMetroResolutionContext {
+  /**
+   * The default (vifx) resolver, exposed so a hook can delegate to it with
+   * modified arguments. Calling it is exactly what Metro's
+   * `context.resolveRequest` does: run the platform resolver and return a
+   * `VifxMetroResolution`.
+   */
+  resolveRequest: VifxMetroResolveRequest;
+  /** Absolute path of the importing file (Metro's `originModulePath`). */
+  originModulePath: string;
+  /** The project root the build runs against. */
+  projectRoot: string;
+  /** Source-file extensions vifx tries, without the leading dot. */
+  sourceExts: readonly string[];
+  /** Asset-file extensions vifx tries, without the leading dot. */
+  assetExts: readonly string[];
+}
+
+/**
+ * A Metro `resolver.resolveRequest`-compatible hook. Signature and semantics
+ * match Metro: `(context, moduleName, platform) => Resolution`. The hook may
+ * delegate to the default resolver via `context.resolveRequest(...)`, mutate the
+ * arguments, return a fabricated `VifxMetroResolution`, or throw to fail the
+ * resolution. May be async (vifx awaits the result).
+ */
+export type VifxMetroResolveRequest = (
+  context: VifxMetroResolutionContext,
+  moduleName: string,
+  platform: string | null,
+) => VifxMetroResolution | Promise<VifxMetroResolution>;
+
 export interface VifxAssetDescriptor {
   filePath: string;
   httpServerLocation: string;
@@ -373,6 +427,15 @@ export interface VifxReactNativePluginOptions {
    * via Vite's own `loadConfigFromFile`.
    */
   userViteConfig?: string | false;
+  /**
+   * A Metro-compatible `resolveRequest` hook to run before vifx's own
+   * resolution, for projects migrating a custom `metro.config.js` resolver.
+   * Carried in-process from the user's `vite.config.vifx.*` (it cannot cross the
+   * `export:embed`/CLI subprocess boundary, so the CLI never serializes it — the
+   * build extracts it from the loaded config). When omitted, resolution is
+   * exactly the historic path.
+   */
+  userResolveRequest?: VifxMetroResolveRequest;
   /**
    * Injection seam for a shared transform-cache instance (the concrete type is
    * `@vifx/transform-cache`'s `TransformCache`). Typed opaque to keep
