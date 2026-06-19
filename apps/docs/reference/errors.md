@@ -77,6 +77,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_PROJECT_INVALID_PACKAGE_JSON`                | Project detection could not parse or use a package manifest.                                                                      |
 | `VIFX_PROJECT_UNSUPPORTED_EXPO_VERSION`            | The project's Expo version falls outside the current experiment range.                                                            |
 | `VIFX_RESOLVE_AMBIGUOUS_PLATFORM_FILE`             | Multiple platform candidates matched and Vifx could not pick one safely.                                                          |
+| `VIFX_RESOLVE_GENERATED_MODULE_MISSING`            | A path-like import did not resolve and likely needs a project codegen/build step (e.g. `lingui compile`) to be run first.         |
 | `VIFX_RESOLVE_INVALID_PACKAGE_JSON`                | Resolver could not parse or use a package manifest.                                                                               |
 | `VIFX_RESOLVE_INVALID_SPECIFIER`                   | Resolver received a malformed package specifier.                                                                                  |
 | `VIFX_RESOLVE_NOT_FOUND`                           | Resolver could not find a matching module for the requested platform.                                                             |
