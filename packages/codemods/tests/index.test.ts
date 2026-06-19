@@ -21,6 +21,18 @@ test("planInit creates a vifx.config.ts preview", async () => {
   expect(formatPlannedChanges(plan.changes)).toContain("+++ create");
 });
 
+test("planInit imports defineVifxConfig from @vifx/cli, never the unresolvable @vifx/config", async () => {
+  // Regression for B4: a generated config must import from the package a user
+  // actually installs (@vifx/cli, which ships the `vifx` bin and re-exports
+  // defineVifxConfig). Importing the workspace-only @vifx/config makes the CLI
+  // generate a config it cannot itself load (VIFX_CONFIG_LOAD_FAILED).
+  const plan = await planInit(path.join(FIXTURE_ROOT, "rn-bare-basic"), {});
+  const generated = plan.changes[0]?.after ?? "";
+
+  expect(generated).toContain('import { defineVifxConfig } from "@vifx/cli";');
+  expect(generated).not.toContain('from "@vifx/config"');
+});
+
 test("planMigration previews package.json and Vifx config changes for Expo fixtures", async () => {
   const plan = await planMigration(path.join(FIXTURE_ROOT, "expo-basic"), "expo", {
     withVite: false,
