@@ -483,6 +483,7 @@ async function renderNativeAssetModule(options: {
     filePath: options.filePath,
     projectRoot: options.projectRoot,
     supportedExtensions: options.assetExtensions,
+    onWarning: warnDuplicateAssetScale,
   });
 
   for (const variant of group.variants) {
@@ -2885,6 +2886,7 @@ async function collectBuildAssets(options: {
     const descriptor = await collectAssetGroup({
       filePath: sourceFilePath,
       projectRoot: options.projectRoot,
+      onWarning: warnDuplicateAssetScale,
     });
     const emittedFilePath = path.join(
       options.outDir,
@@ -3004,6 +3006,16 @@ async function createBuildInputEntry(projectRoot: string, absoluteOutDir: string
 function warnUserViteConfigDiagnostic(diagnostic: VifxDiagnosticData): void {
   const hint = diagnostic.hint ? ` ${diagnostic.hint}` : "";
   console.warn(`[vifx] ${diagnostic.message}${hint}`);
+}
+
+/**
+ * Surfaces an asset-group duplicate-scale conflict as a warning on stderr.
+ * Mirrors Metro, which keeps one variant per scale and continues rather than
+ * failing the build. Wired into `collectAssetGroup` so the dedupe is visible
+ * without aborting.
+ */
+function warnDuplicateAssetScale(warning: { message: string }): void {
+  console.warn(`[vifx] ${warning.message}`);
 }
 
 export async function buildReactNativeBundle(
