@@ -143,6 +143,87 @@ const ASSET_PREFIX = "\0vifx:asset:";
 // exactly like Metro's empty module.
 const EMPTY_PREFIX = "\0vifx:empty:";
 const EMPTY_MODULE_SOURCE = "export default {};\n";
+// Virtual id for a path-like import that did not resolve on disk but matches a
+// "generated module" heuristic (e.g. Lingui's `./locales/<lng>/messages`, only
+// produced by a `lingui compile` codegen step). Rather than aborting the whole
+// build with a raw "Could not resolve" — Metro/the dev flow surface a clearer,
+// non-fatal signal — vifx degrades to a stub that throws only when the missing
+// module is actually used at runtime, and warns once at build time naming the
+// specifier + importer + the likely-missing codegen step. Matches the existing
+// throwing-stub behavior for unresolved optional bare requires (serializer.ts).
+const UNRESOLVED_GENERATED_PREFIX = "\0vifx:unresolved-generated:";
+// Heuristic: path-like imports that look like the output of a project codegen
+// step (catalog/AST/schema artifacts a plain install skips). Kept conservative
+// so a genuine typo in a hand-written relative import still hard-fails with a
+// clear diagnostic instead of silently degrading to a throwing stub.
+const GENERATED_MODULE_SPECIFIER_PATTERNS: readonly RegExp[] = [
+  // Lingui compiled catalogs: `./locales/<lng>/messages`, `./locales/messages`.
+  /(^|\/)locales?\/.*messages(\.[cm]?[jt]sx?)?$/u,
+  // Lingui/i18n AST output and generic compiled-catalog layouts.
+  /(^|\/)(ast|compiled|catalogs?)\/.*\bmessages?\b/u,
+  // GraphQL / schema / relay codegen artifact directories.
+  /(^|\/)__generated__\//u,
+  /(^|\/)(gql|graphql)\/.*\.(generated|gen)(\.[cm]?[jt]sx?)?$/u,
+  // Conventionally-named generated files (`*.generated.ts`, `*.gen.js`).
+  /\.(generated|gen)(\.[cm]?[jt]sx?)?$/u,
+];
+
+/**
+ * True when a path-like specifier that failed to resolve looks like the output
+ * of a project codegen/build step (e.g. `lingui compile`) rather than a real
+ * source file. Used to choose graceful degradation (throwing stub + warning)
+ * over a hard build abort, matching how Metro keeps building past a catalog the
+ * install step never generated.
+ */
+function looksLikeGeneratedModule(specifier: string): boolean {
+  const normalized = toPosixPath(specifier);
+  return GENERATED_MODULE_SPECIFIER_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function createUnresolvedGeneratedId(specifier: string): string {
+  return `${UNRESOLVED_GENERATED_PREFIX}${specifier}`;
+}
+
+/**
+ * ESM source for the throwing stub of an unresolved generated module. Importing
+ * the module (or its namespace) is inert; touching any export — the way app code
+ * actually consumes a catalog — throws a clear, actionable error. Safe in both
+ * the hoisted ESM graph and the metro CJS staging graph (the throw is lazy, so
+ * the module factory still loads). Mirrors `createUnresolvedStubChunk` in
+ * serializer.ts for unresolved optional bare requires.
+ */
+function renderUnresolvedGeneratedStub(specifier: string): string {
+  const message =
+    `Vifx could not resolve "${specifier}". ` +
+    "This looks like a code-generated module that a project build step produces " +
+    "(e.g. a Lingui catalog from `lingui compile`), which a plain install skips. " +
+    "Run your project's codegen/build step, then rebuild. Vifx emitted a throwing " +
+    "stub so the rest of the bundle still builds; this error fires only if the " +
+    "missing module is actually used at runtime.";
+  const literal = JSON.stringify(message);
+  return [
+    `const message = ${literal};`,
+    "function throwMissing() {",
+    "  throw new Error(message);",
+    "}",
+    "const handler = {",
+    "  get(_target, property) {",
+    "    if (property === '__esModule') {",
+    "      return true;",
+    "    }",
+    "    if (property === Symbol.toPrimitive || property === Symbol.toStringTag) {",
+    "      return undefined;",
+    "    }",
+    "    throwMissing();",
+    "  },",
+    "  apply: throwMissing,",
+    "  construct: throwMissing,",
+    "};",
+    "const stub = new Proxy(function () {}, handler);",
+    "export default stub;",
+    "",
+  ].join("\n");
+}
 // Captured browser globals key used by the web-compat shims (e.g. FormData
 // re-export). Still consumed by renderCompat; the build-time preview runtime
 // that also referenced it was removed with __VIFX_WEB_RUNTIME__ (ADR-005).
@@ -206,6 +287,12 @@ interface ReactNativePluginState {
    * default) keeps resolution byte-identical to the historic path.
    */
   userResolveRequest: VifxMetroResolveRequest | null;
+  /**
+   * Specifiers already warned about as unresolved generated modules, so the
+   * one-line build-time warning fires once per specifier instead of once per
+   * import site (a Lingui app imports ~50 per-locale catalogs).
+   */
+  warnedGeneratedModules: Set<string>;
 }
 
 interface ExpoRouterContextEntry {
@@ -2618,6 +2705,10 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         return EMPTY_MODULE_SOURCE;
       }
 
+      if (id.startsWith(UNRESOLVED_GENERATED_PREFIX)) {
+        return renderUnresolvedGeneratedStub(id.slice(UNRESOLVED_GENERATED_PREFIX.length));
+      }
+
       if (id.startsWith(ASSET_PREFIX)) {
         return await renderNativeAssetModule({
           assetExtensions: state.assetExtensions,
@@ -2803,7 +2894,8 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         source.startsWith(COMPAT_PREFIX) ||
         source.startsWith(REQUIRE_CONTEXT_PREFIX) ||
         source.startsWith(TRANSFORM_PREFIX) ||
-        source.startsWith(EMPTY_PREFIX)
+        source.startsWith(EMPTY_PREFIX) ||
+        source.startsWith(UNRESOLVED_GENERATED_PREFIX)
       ) {
         return source;
       }
@@ -2868,8 +2960,49 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
           state.resolvePlatform,
         );
         return await mapResolutionToViteId(resolution);
-      } catch {
-        return null;
+      } catch (error) {
+        // A bare specifier vifx could not resolve may still be resolved by Vite
+        // or a downstream plugin (node builtins, user virtual ids, optional peer
+        // deps the metro serializer later stubs), so keep the historic
+        // fall-through. A *path-like* specifier vifx owns outright: if vifx
+        // cannot resolve it, nothing downstream will either, and Rolldown would
+        // otherwise abort the whole build with a raw "Could not resolve". Turn
+        // that into actionable behavior instead.
+        if (!isPathLikeSpecifier(source)) {
+          return null;
+        }
+
+        const importerPath = relativeFrom(state.projectRoot, fromFile);
+
+        // Looks like a code-generated module (e.g. a Lingui catalog produced by
+        // `lingui compile`, which a plain install skips): degrade gracefully to
+        // a stub that throws only if the module is actually used at runtime, and
+        // warn once — so one missing generated file does not kill the bundle.
+        if (looksLikeGeneratedModule(source)) {
+          if (!state.warnedGeneratedModules.has(source)) {
+            state.warnedGeneratedModules.add(source);
+            console.warn(
+              `[vifx] Could not resolve "${source}" imported by "${importerPath}". ` +
+                "This looks like a code-generated module (e.g. a Lingui catalog from " +
+                "`lingui compile`) that a plain install skips. Vifx emitted a throwing " +
+                "stub so the build still succeeds; run your project's codegen/build step " +
+                "and rebuild if you need it at runtime.",
+            );
+          }
+          return createUnresolvedGeneratedId(source);
+        }
+
+        // A genuinely-missing relative module the app needs: surface a clear,
+        // structured @vifx/errors diagnostic naming the specifier + importer,
+        // instead of a raw bundler abort. Do not swallow it.
+        throw new VifxError({
+          code: "VIFX_RESOLVE_GENERATED_MODULE_MISSING",
+          cause: error,
+          details: { importer: importerPath, specifier: source },
+          hint: "Check the path is correct. If this is a generated module (e.g. a Lingui catalog, GraphQL types, or other codegen output), run your project's codegen/build step first — for example `lingui compile`.",
+          message: `Unable to resolve "${source}" imported by "${importerPath}".`,
+          docsPath: "/reference/packages#vifxvite-plugin-react-native",
+        });
       }
     },
   };
@@ -2976,6 +3109,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
       transformCacheInstance: options.transformCacheInstance,
     }),
     userResolveRequest: options.userResolveRequest ?? null,
+    warnedGeneratedModules: new Set<string>(),
   };
 
   return createReactNativePlugin(state);
@@ -3062,6 +3196,7 @@ export async function buildReactNativeBundle(
     shimReactNative: options.shimReactNative ?? true,
     transformCache,
     userResolveRequest: options.userResolveRequest ?? null,
+    warnedGeneratedModules: new Set<string>(),
   };
 
   // Load the user `vite.config.vifx.*` once (null when absent → historic path).
