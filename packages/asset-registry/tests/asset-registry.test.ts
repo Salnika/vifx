@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
 
 import {
+  type AssetScaleConflict,
   collectAssetGroup,
   createAssetServerUrl,
   isSupportedAssetFile,
@@ -88,25 +89,57 @@ test("rejects invalid asset scales with structured diagnostics", async () => {
   });
 });
 
-test("rejects duplicate scale variants with structured diagnostics", async () => {
+test("tolerates duplicate scale variants by de-duping and warning (matches Metro)", async () => {
   const projectRoot = await createTempProject();
 
   await writeBinaryFiles(projectRoot, {
     "assets/icon.png": createPngHeader(10, 12),
-    "assets/icon@1x.png": createPngHeader(10, 12),
+    "assets/icon@1x.png": createPngHeader(20, 24),
   });
 
-  await expect(
-    collectAssetGroup({
-      filePath: path.join(projectRoot, "assets/icon.png"),
-      projectRoot,
-    }),
-  ).rejects.toMatchObject({
-    code: "VIFX_ASSET_INVALID_SCALE",
-    details: {
-      duplicateScale: 1,
-    },
+  const warnings: { conflict: AssetScaleConflict; message: string }[] = [];
+
+  const descriptor = await collectAssetGroup({
+    filePath: path.join(projectRoot, "assets/icon.png"),
+    projectRoot,
+    onWarning: (warning) => warnings.push(warning),
   });
+
+  // Both files resolve to scale 1x; only one variant survives, deterministically
+  // the first by sorted path ("icon.png" sorts before "icon@1x.png").
+  expect(descriptor.scales).toEqual([1]);
+  expect(descriptor.variants).toHaveLength(1);
+  expect(descriptor.filePaths).toEqual([path.join(projectRoot, "assets/icon.png")]);
+  expect(descriptor.canonicalFilePath).toBe(path.join(projectRoot, "assets/icon.png"));
+
+  // The duplicate is reported, not thrown.
+  expect(warnings).toHaveLength(1);
+  expect(warnings[0]?.conflict).toMatchObject({
+    keptFilePath: path.join(projectRoot, "assets/icon.png"),
+    droppedFilePaths: [path.join(projectRoot, "assets/icon@1x.png")],
+    scale: 1,
+  });
+  expect(warnings[0]?.message).toContain("scale 1x");
+});
+
+test("de-dupes duplicate scales deterministically even without an onWarning callback", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeBinaryFiles(projectRoot, {
+    "assets/icon.png": createPngHeader(10, 12),
+    "assets/icon@1x.png": createPngHeader(20, 24),
+  });
+
+  // No callback: the duplicate is still dropped (silent, like Metro), and the
+  // build does not throw.
+  const descriptor = await collectAssetGroup({
+    filePath: path.join(projectRoot, "assets/icon@1x.png"),
+    projectRoot,
+  });
+
+  expect(descriptor.scales).toEqual([1]);
+  expect(descriptor.variants).toHaveLength(1);
+  expect(descriptor.filePaths).toEqual([path.join(projectRoot, "assets/icon.png")]);
 });
 
 test("collects font assets and builds dev-server URLs", async () => {

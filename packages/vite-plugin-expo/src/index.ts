@@ -1024,6 +1024,7 @@ async function collectEmittedExpoAssets(options: {
     const descriptor = await collectAssetGroup({
       filePath: emittedAssetPath,
       projectRoot: options.absoluteOutDir,
+      onWarning: warnDuplicateAssetScale,
     });
     const assetKey = `${descriptor.httpServerLocation}/${descriptor.name}.${descriptor.type}`;
     if (seenAssetKeys.has(assetKey)) {
@@ -1099,6 +1100,15 @@ async function createExpoBuildInputEntry(projectRoot: string, outDir: string, en
 function warnUserViteConfigDiagnostic(diagnostic: VifxDiagnosticData): void {
   const hint = diagnostic.hint ? ` ${diagnostic.hint}` : "";
   console.warn(`[vifx] ${diagnostic.message}${hint}`);
+}
+
+/**
+ * Surfaces an asset-group duplicate-scale conflict as a warning on stderr.
+ * Mirrors Metro, which keeps one variant per scale and continues rather than
+ * aborting the build. Wired into `collectAssetGroup` so the dedupe is visible.
+ */
+function warnDuplicateAssetScale(warning: { message: string }): void {
+  console.warn(`[vifx] ${warning.message}`);
 }
 
 export async function buildExpoBundle(

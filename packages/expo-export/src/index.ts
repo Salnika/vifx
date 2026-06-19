@@ -305,6 +305,8 @@ export async function inspectExpoExport(
     })),
   );
 
+  const warnings: string[] = [];
+
   const assetSourcePaths = files.filter(
     (filePath) => isSupportedAssetFile(filePath) && !filePath.endsWith(".json"),
   );
@@ -313,6 +315,9 @@ export async function inspectExpoExport(
       const descriptor = await collectAssetGroup({
         filePath: assetPath,
         projectRoot,
+        // Match Metro: tolerate duplicate-scale variants by de-duping and
+        // surfacing a warning rather than aborting the export.
+        onWarning: ({ message }) => warnings.push(message),
       });
       const assetStats = await stat(assetPath);
 
@@ -331,7 +336,6 @@ export async function inspectExpoExport(
     }),
   );
 
-  const warnings: string[] = [];
   if (bundles.length === 0) {
     warnings.push(
       `No Expo export bundles were found under "${relativeFrom(projectRoot, exportRoot)}".`,

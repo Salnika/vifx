@@ -12,10 +12,26 @@ export interface AssetVariantDescriptor {
   size: number;
 }
 
+export interface AssetScaleConflict {
+  /** Path of the variant that was kept for this scale (deterministic: first by sorted path). */
+  keptFilePath: string;
+  /** Paths of the later same-scale variants that were dropped. */
+  droppedFilePaths: readonly string[];
+  scale: number;
+}
+
 export interface CollectAssetGroupOptions {
   filePath: string;
   projectRoot: string;
   supportedExtensions?: readonly string[];
+  /**
+   * Invoked when two or more files in a group resolve to the same scale.
+   * Matching Metro, vifx tolerates the duplicate: it keeps one deterministic
+   * variant per scale and reports the rest through this callback instead of
+   * aborting the build. Callers with a logger should surface the message as a
+   * warning.
+   */
+  onWarning?: (warning: { conflict: AssetScaleConflict; message: string }) => void;
 }
 
 export interface NormalizedAssetDescriptor {
@@ -121,9 +137,10 @@ export async function collectAssetGroup(
   variants.sort(
     (left, right) => left.scale - right.scale || left.filePath.localeCompare(right.filePath),
   );
-  assertUniqueAssetScales(variants, filePath);
+  const dedupedVariants = dedupeAssetScales(variants, filePath, options.onWarning);
 
-  const canonicalVariant = variants.find((variant) => variant.scale === 1) ?? variants[0];
+  const canonicalVariant =
+    dedupedVariants.find((variant) => variant.scale === 1) ?? dedupedVariants[0];
 
   if (!canonicalVariant) {
     throw new VifxError({
@@ -143,14 +160,14 @@ export async function collectAssetGroup(
   return {
     canonicalFilePath: canonicalVariant.filePath,
     filePath: canonicalVariant.filePath,
-    filePaths: variants.map((variant) => variant.filePath),
-    files: variants,
-    hash: createAssetGroupHash(variants, projectRoot),
+    filePaths: dedupedVariants.map((variant) => variant.filePath),
+    files: dedupedVariants,
+    hash: createAssetGroupHash(dedupedVariants, projectRoot),
     httpServerLocation: createHttpServerLocation(projectRoot, directory),
     name: parsedInput.name,
-    scales: variants.map((variant) => variant.scale),
+    scales: dedupedVariants.map((variant) => variant.scale),
     type: parsedInput.type,
-    variants,
+    variants: dedupedVariants,
     ...dimensions,
   };
 }
@@ -244,27 +261,49 @@ function createAssetGroupHash(
   return hash.digest("hex").slice(0, 16);
 }
 
-function assertUniqueAssetScales(variants: readonly AssetVariantDescriptor[], filePath: string) {
-  const seenScales = new Map<number, string>();
+/**
+ * De-duplicates same-scale variants instead of aborting the build. Metro
+ * tolerates an asset group declaring the same scale more than once (e.g. a
+ * suffix-less `icon.png` next to an explicit `icon@1x.png`), so vifx does too:
+ * the first variant per scale wins and the rest are dropped. The input is
+ * pre-sorted by scale then path, so "first" is deterministic and the resulting
+ * bundle stays byte-stable. Each dropped scale is reported through `onWarning`
+ * for callers that wire a logger; with no callback the de-dup is silent.
+ */
+function dedupeAssetScales(
+  variants: readonly AssetVariantDescriptor[],
+  filePath: string,
+  onWarning: CollectAssetGroupOptions["onWarning"],
+): AssetVariantDescriptor[] {
+  const keptByScale = new Map<number, AssetVariantDescriptor>();
+  const droppedByScale = new Map<number, string[]>();
 
   for (const variant of variants) {
-    const existingFilePath = seenScales.get(variant.scale);
-    if (!existingFilePath) {
-      seenScales.set(variant.scale, variant.filePath);
+    if (keptByScale.has(variant.scale)) {
+      const dropped = droppedByScale.get(variant.scale) ?? [];
+      dropped.push(variant.filePath);
+      droppedByScale.set(variant.scale, dropped);
       continue;
     }
 
-    throw new VifxError({
-      code: "VIFX_ASSET_INVALID_SCALE",
-      details: {
-        duplicateScale: variant.scale,
-        filePath,
-        filePaths: [existingFilePath, variant.filePath],
-      },
-      hint: `Keep only one asset variant for scale ${String(variant.scale)}x.`,
-      message: `Multiple asset variants declare scale ${String(variant.scale)}x for "${filePath}".`,
-    });
+    keptByScale.set(variant.scale, variant);
   }
+
+  if (onWarning && droppedByScale.size > 0) {
+    for (const [scale, droppedFilePaths] of droppedByScale) {
+      const keptFilePath = keptByScale.get(scale)!.filePath;
+      onWarning({
+        conflict: { droppedFilePaths, keptFilePath, scale },
+        message:
+          `Multiple asset variants declare scale ${String(scale)}x for "${filePath}". ` +
+          `Keeping "${keptFilePath}" and ignoring ${droppedFilePaths
+            .map((dropped) => `"${dropped}"`)
+            .join(", ")}.`,
+      });
+    }
+  }
+
+  return [...keptByScale.values()];
 }
 
 function assertValidAssetScale(scale: number, filePath: string) {
