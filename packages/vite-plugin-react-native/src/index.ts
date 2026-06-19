@@ -175,7 +175,7 @@ const GENERATED_MODULE_SPECIFIER_PATTERNS: readonly RegExp[] = [
  * over a hard build abort, matching how Metro keeps building past a catalog the
  * install step never generated.
  */
-function looksLikeGeneratedModule(specifier: string): boolean {
+export function looksLikeGeneratedModule(specifier: string): boolean {
   const normalized = toPosixPath(specifier);
   return GENERATED_MODULE_SPECIFIER_PATTERNS.some((pattern) => pattern.test(normalized));
 }
@@ -192,7 +192,7 @@ function createUnresolvedGeneratedId(specifier: string): string {
  * the module factory still loads). Mirrors `createUnresolvedStubChunk` in
  * serializer.ts for unresolved optional bare requires.
  */
-function renderUnresolvedGeneratedStub(specifier: string): string {
+export function renderUnresolvedGeneratedStub(specifier: string): string {
   const message =
     `Vifx could not resolve "${specifier}". ` +
     "This looks like a code-generated module that a project build step produces " +
