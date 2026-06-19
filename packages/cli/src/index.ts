@@ -223,3 +223,25 @@ export async function executeCli(
 }
 
 export * from "./types.ts";
+
+// Re-export the config authoring surface so a generated `vifx.config.ts` can
+// `import { defineVifxConfig } from "@vifx/cli"` and resolve it from the one
+// package a user actually installs (the one that ships the `vifx` bin). The
+// underlying `@vifx/config` is a workspace package that is NOT resolvable from a
+// fresh app's node_modules, so importing it directly fails with
+// VIFX_CONFIG_LOAD_FAILED in every external project.
+export {
+  defineVifxConfig,
+  findVifxConfig,
+  loadVifxConfig,
+  normalizeVifxConfig,
+  validateVifxConfig,
+} from "@vifx/config";
+export type { LoadVifxConfigOptions, LoadVifxConfigResult } from "@vifx/config";
+export type {
+  VifxConfig,
+  VifxConfigInput,
+  VifxExpoOptions,
+  VifxResolverConfig,
+  VifxViteConfig,
+} from "@vifx/types";
