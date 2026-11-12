@@ -159,9 +159,9 @@ test("resolveOutputOptions emits a single IIFE script for hoisted native bundles
   for (const mode of ["development", "production"] as const) {
     for (const platform of ["ios", "android"] as const) {
       expect(resolveOutputOptions({ mode, moduleFormat: "hoisted", platform })).toEqual({
+        codeSplitting: false,
         entryFileNames: "index.bundle",
         format: "iife",
-        inlineDynamicImports: true,
         name: "__vifx",
       });
     }

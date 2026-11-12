@@ -58,8 +58,9 @@ export interface VifxResolveOutputOptionsOptions {
 
 export interface VifxResolvedOutputOptions {
   entryFileNames?: string;
+  /** Single-file output: Rolldown's replacement for `inlineDynamicImports`. */
+  codeSplitting?: false;
   format: "es" | "iife";
-  inlineDynamicImports?: boolean;
   name?: string;
 }
 
@@ -174,9 +175,9 @@ export function resolveOutputOptions(
   }
 
   return {
+    codeSplitting: false,
     entryFileNames: "index.bundle",
     format: "iife",
-    inlineDynamicImports: true,
     name: "__vifx",
   };
 }

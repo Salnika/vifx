@@ -21,6 +21,7 @@
     "@react-native/dev-middleware": "catalog:",
     "@vifx/asset-registry": "workspace:*",
     "@vifx/errors": "workspace:*",
+    "@vifx/platform-resolver": "workspace:*",
     "@vifx/source-map-tools": "workspace:*",
     "@vifx/types": "workspace:*",
     "@vifx/vite-config-bridge": "workspace:*",

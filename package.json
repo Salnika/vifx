@@ -21,17 +21,18 @@
     "playground:validate": "pnpm playground:rn-bare && pnpm playground:expo && pnpm playground:universal",
     "prepare": "vp config",
     "ready": "pnpm check && pnpm test && pnpm build && pnpm playground:validate",
-    "typecheck": "pnpm -r exec tsc --noEmit",
+    "typecheck": "pnpm -r exec tsrs --noEmit",
     "test": "pnpm --filter @vifx/types run test && pnpm --filter @vifx/errors run test && pnpm --filter @vifx/logger run test && pnpm --filter @vifx/transform-cache run test && pnpm --filter @vifx/config run test && pnpm --filter @vifx/platform-resolver run test && pnpm --filter @vifx/asset-registry run test && pnpm --filter @vifx/core run test && pnpm --filter @vifx/compat run test && pnpm --filter @vifx/source-map-tools run test && pnpm --filter @vifx/hermes-tools run test && pnpm --filter @vifx/metro-inspect run test && pnpm --filter @vifx/compat-runner run test && pnpm --filter @vifx/codemods run test && pnpm --filter @vifx/expo-config-plugin run test && pnpm --filter @vifx/cli run test && pnpm --filter @vifx/expo-export run test && pnpm --filter @vifx/vite-plugin-react-native run test && pnpm --filter @vifx/vite-plugin-expo run test",
     "vifx": "pnpm --filter @vifx/cli vifx"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "tsrs": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
   },
-  "packageManager": "pnpm@11.1.2"
+  "packageManager": "pnpm@12.18.0"
 }

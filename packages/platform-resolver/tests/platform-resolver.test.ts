@@ -1,9 +1,14 @@
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
 
-import { resolveReactNativeModule } from "../src/index.ts";
+import {
+  clearProjectRequireChainCache,
+  resolveFromProject,
+  resolveProjectImportSpecifier,
+  resolveReactNativeModule,
+} from "../src/index.ts";
 
 const temporaryDirectories: string[] = [];
 
@@ -288,6 +293,170 @@ test("resolves workspace packages without a node_modules install", async () => {
       }),
     ]),
   );
+});
+
+/**
+ * Lays out an isolated (pnpm-style) install: `node_modules/<name>` is a symlink
+ * into a virtual store where each package sits next to its own dependencies.
+ */
+async function linkStorePackage(projectRoot: string, storeEntry: string, packageName: string) {
+  const linkPath = path.join(projectRoot, "node_modules", packageName);
+  await ensureParentDirectory(linkPath);
+  await symlink(
+    path.join(projectRoot, "node_modules/.store", storeEntry, "node_modules", packageName),
+    linkPath,
+    "dir",
+  );
+}
+
+test("resolves a symlinked package's dependencies from its real location", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "index.js": "export {};",
+    // `host` and its dependency live side by side in the virtual store...
+    "node_modules/.store/host@1/node_modules/host/package.json":
+      '{"name":"host","main":"index.js"}',
+    "node_modules/.store/host@1/node_modules/host/index.js": "export {};",
+    "node_modules/.store/host@1/node_modules/dep/package.json": '{"name":"dep","main":"v1.js"}',
+    "node_modules/.store/host@1/node_modules/dep/v1.js": "export const version = 1;",
+    "node_modules/.store/host@1/node_modules/inner/package.json":
+      '{"name":"inner","main":"index.js"}',
+    "node_modules/.store/host@1/node_modules/inner/index.js": "export {};",
+    // ...while the project root carries a DIFFERENT version of `dep`.
+    "node_modules/dep/package.json": '{"name":"dep","main":"v2.js"}',
+    "node_modules/dep/v2.js": "export const version = 2;",
+  });
+  await linkStorePackage(projectRoot, "host@1", "host");
+
+  const hostEntry = path.join(projectRoot, "node_modules/host/index.js");
+  const storeModules = path.join(projectRoot, "node_modules/.store/host@1/node_modules");
+
+  // Only reachable next to the real directory: not at the project root.
+  const inner = await resolveReactNativeModule({
+    fromFile: hostEntry,
+    platform: "ios",
+    projectRoot,
+    specifier: "inner",
+  });
+  expect(inner.filePath).toBe(path.join(storeModules, "inner/index.js"));
+
+  // The sibling wins over the same-named package at the project root.
+  const dep = await resolveReactNativeModule({
+    fromFile: hostEntry,
+    platform: "ios",
+    projectRoot,
+    specifier: "dep",
+  });
+  expect(dep.filePath).toBe(path.join(storeModules, "dep/v1.js"));
+
+  // The project itself still gets its own version.
+  const rootDep = await resolveReactNativeModule({
+    fromFile: path.join(projectRoot, "index.js"),
+    platform: "ios",
+    projectRoot,
+    specifier: "dep",
+  });
+  expect(rootDep.filePath).toBe(path.join(projectRoot, "node_modules/dep/v2.js"));
+});
+
+test("resolves an exports target whose extension is outside the configured list", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "index.js": "export {};",
+    "node_modules/dual/package.json": JSON.stringify({
+      exports: { ".": { default: "./lib/index.js", import: "./esm.mjs" } },
+      main: "./lib/index.js",
+      name: "dual",
+    }),
+    "node_modules/dual/esm.mjs": "export default 1;",
+    "node_modules/dual/lib/index.js": "module.exports = 1;",
+  });
+
+  const result = await resolveReactNativeModule({
+    conditions: ["react-native", "import", "default"],
+    fromFile: path.join(projectRoot, "index.js"),
+    platform: "ios",
+    projectRoot,
+    specifier: "dual",
+  });
+
+  // `.mjs` is not a configured source extension, but the target names a real file.
+  expect(result.filePath).toBe(path.join(projectRoot, "node_modules/dual/esm.mjs"));
+});
+
+test("resolves a subpath directory through its own package.json", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "index.js": "export {};",
+    "node_modules/counter/package.json": '{"name":"counter","main":"lib/cjs/index.js"}',
+    "node_modules/counter/lib/cjs/index.js": "module.exports = {};",
+    "node_modules/counter/lib/cjs/presets/decimal.js": "module.exports = 'cjs';",
+    "node_modules/counter/lib/es/presets/decimal.js": "export default 'es';",
+    // No `exports` map: the subpath is a directory that declares its own entry.
+    "node_modules/counter/presets/decimal/package.json": JSON.stringify({
+      main: "../../lib/cjs/presets/decimal.js",
+      "react-native": "../../lib/es/presets/decimal.js",
+    }),
+  });
+
+  const resolve = (mainFields: string[]) =>
+    resolveReactNativeModule({
+      fromFile: path.join(projectRoot, "index.js"),
+      mainFields,
+      platform: "ios",
+      projectRoot,
+      specifier: "counter/presets/decimal",
+    });
+
+  // The nested package.json is read with the same main-field order as a package root.
+  expect((await resolve(["react-native", "main"])).filePath).toBe(
+    path.join(projectRoot, "node_modules/counter/lib/es/presets/decimal.js"),
+  );
+  expect((await resolve(["main"])).filePath).toBe(
+    path.join(projectRoot, "node_modules/counter/lib/cjs/presets/decimal.js"),
+  );
+});
+
+test("finds framework internals through their host package on isolated installs", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "package.json": '{"name":"app"}',
+    "node_modules/.store/react-native@1/node_modules/react-native/package.json":
+      '{"name":"react-native","main":"index.js"}',
+    "node_modules/.store/react-native@1/node_modules/react-native/index.js": "module.exports = {};",
+    "node_modules/.store/react-native@1/node_modules/@react-native/js-polyfills/package.json":
+      '{"name":"@react-native/js-polyfills"}',
+    "node_modules/.store/react-native@1/node_modules/@react-native/js-polyfills/error-guard.js":
+      "module.exports = {};",
+    "node_modules/direct/package.json": '{"name":"direct","main":"index.js"}',
+    "node_modules/direct/index.js": "module.exports = {};",
+  });
+  await linkStorePackage(projectRoot, "react-native@1", "react-native");
+  clearProjectRequireChainCache();
+
+  const polyfill = "@react-native/js-polyfills/error-guard";
+  const realPolyfillPath = await realpath(
+    path.join(
+      projectRoot,
+      "node_modules/.store/react-native@1/node_modules/@react-native/js-polyfills/error-guard.js",
+    ),
+  );
+
+  // Not a dependency of the project, but of react-native: found through it and
+  // imported by absolute path, since a generated module has no location.
+  expect(resolveFromProject(projectRoot, polyfill)).toBe(realPolyfillPath);
+  expect(resolveProjectImportSpecifier(projectRoot, polyfill)).toBe(
+    realPolyfillPath.split(path.sep).join("/"),
+  );
+
+  // Resolvable from the project root: the bare specifier is kept as written.
+  expect(resolveProjectImportSpecifier(projectRoot, "direct")).toBe("direct");
+  expect(resolveProjectImportSpecifier(projectRoot, "not-installed")).toBeNull();
+  expect(resolveFromProject(projectRoot, "not-installed")).toBeNull();
 });
 
 async function createTempProject(): Promise<string> {

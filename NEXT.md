@@ -36,11 +36,35 @@ The decisions behind the work are recorded in ADR-001…005. Units, briefly:
 (Units 01, 02, 03 are the Phase-0 cleanup; unit 03 is this governance/docs
 refresh.)
 
+## What shipped: November 2026 resume
+
+Toolchain moved to current majors (Vite+ 1.6 / Vite 8.3 / Vitest 5, pnpm 12,
+TypeScript 7 + `tsrs` for type checking, dev-middleware 0.88), and the Expo
+parity gaps found by re-running the acceptance app on a fresh pnpm-isolated
+install were closed:
+
+| Area           | Change                                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------- |
+| Resolution     | Package lookup from the importer's real path (Node/Metro semantics) — isolated installs now bundle        |
+| Resolution     | Exact-file `exports` targets (`./esm.mjs`), subpath-directory `package.json` entries                      |
+| Resolution     | Fallback through `expo` / `react-native` for tooling-injected imports (`@babel/runtime`, asset registry…) |
+| Transforms     | `@babel/core` + `babel-preset-expo` found through `expo` when the project does not declare them           |
+| Expo semantics | `.env` / `.env.local` / `.env.<mode>` loading with Expo CLI precedence and `${VAR}` expansion             |
+| Expo semantics | Dynamic `app.config.js` / `.ts` resolved through the project's own `@expo/config`                         |
+| SDK matrix     | SDK 57 (RN 0.86) and 58 (RN 0.88) added as experimental tiers; SDK 56 corrected to RN 0.85                |
+| Regressions    | B3 no longer rejects `./global.css` or Vite's `/@fs/` URLs; CLI launcher runs on Node 26                  |
+
+Evidence and the remaining gap list are in `STATUS.md`.
+
 ## Next
 
 With the batch landed, ongoing work is the durable cadence from `PLAN.md`
 §4 Phases 6–7:
 
+0. **Bundle a real SDK 58 app** — the acceptance app is on SDK 54; nothing on
+   SDK 55+ has been bundled or run yet. Then the Expo CLI gaps listed in
+   `STATUS.md` (one dev server for both platforms, `/symbolicate` code frames,
+   manifest `*Url` asset fields, `runtimeVersion` policies, `expo export` layout).
 1. **SDK cadence** — promote SDK 55 toward validated and keep SDK 56 (Hermes V1)
    tracking, with per-SDK fixtures and CI matrix (ADR-004).
 2. **Library long tail** — grow the compat matrix with evidence per library;

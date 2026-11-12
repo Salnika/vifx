@@ -6,7 +6,6 @@ import {
   type Server as HttpServer,
   type ServerResponse,
 } from "node:http";
-import { createRequire } from "node:module";
 import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
@@ -23,6 +22,7 @@ import {
   isSupportedAssetFile,
 } from "@vifx/asset-registry";
 import { VifxError } from "@vifx/errors";
+import { resolveProjectImportSpecifier } from "@vifx/platform-resolver";
 import { symbolicateStackFrame } from "@vifx/source-map-tools";
 import {
   extractMetroStagingUserSlices,
@@ -59,6 +59,7 @@ import {
   negotiateManifestResponse,
   resolveDevClientScheme,
 } from "./dev-client.ts";
+import { resolveExpoAppConfig } from "./app-config.ts";
 import { createDevtools, type VifxExpoDevtools } from "./devtools.ts";
 import { createHotChannel, createHotErrorPayload } from "./hot.ts";
 import { createBundleWatcher } from "./watch.ts";
@@ -70,13 +71,22 @@ export {
   resolveDevClientScheme,
 } from "./dev-client.ts";
 export type { ManifestNegotiationRequest, NegotiatedManifestResponse } from "./dev-client.ts";
+export {
+  EXPO_DYNAMIC_CONFIG_NAMES,
+  EXPO_STATIC_CONFIG_NAMES,
+  resolveExpoAppConfig,
+  type ResolveExpoAppConfigOptions,
+  type ResolvedExpoAppConfig,
+} from "./app-config.ts";
 
 const EXPO_APP_CONFIG_NAMES = [
   "app.json",
+  "app.config.json",
   "app.config.ts",
   "app.config.mts",
   "app.config.js",
   "app.config.mjs",
+  "app.config.cjs",
 ] as const;
 const EXPO_DEV_CLIENT_ID = "\0vifx:expo-dev-client";
 const EXPO_DEV_CLIENT_PUBLIC_ID = "/@vifx/expo-dev-client";
@@ -209,11 +219,6 @@ async function readJsonFileIfExists(filePath: string) {
   return JSON.parse(await readFile(filePath, "utf8")) as VifxJsonValue;
 }
 
-async function readPackageJson(projectRoot: string) {
-  const packageJson = await readJsonFileIfExists(path.join(projectRoot, "package.json"));
-  return isJsonObject(packageJson) ? packageJson : {};
-}
-
 function readStringRecordValue(record: VifxJsonObject, key: string) {
   const value = record[key];
   return typeof value === "string" ? value : null;
@@ -266,37 +271,10 @@ function resolveRuntimeVersion(exp: VifxJsonObject, packageJson: VifxJsonObject)
 }
 
 async function readExpoAppManifest(projectRoot: string, appConfigPath?: string) {
-  const packageJson = await readPackageJson(projectRoot);
-  const packageName = readStringRecordValue(packageJson, "name") ?? "vifx-expo-app";
-  const fallback = {
-    name: packageName,
-    slug: packageName,
-  } satisfies VifxJsonObject;
-
-  const configPath = await findExpoAppConfig(projectRoot, appConfigPath).catch(() => null);
-  if (!configPath || path.basename(configPath) !== "app.json") {
-    return {
-      exp: fallback,
-      packageJson,
-    };
-  }
-
-  const appJson = await readJsonFileIfExists(configPath);
-  if (!isJsonObject(appJson)) {
-    return {
-      exp: fallback,
-      packageJson,
-    };
-  }
-
-  const expoConfig = appJson.expo;
-  return {
-    exp: {
-      ...fallback,
-      ...(isJsonObject(expoConfig) ? expoConfig : appJson),
-    },
-    packageJson,
-  };
+  // Static AND dynamic configs (`app.config.js` / `.ts`), resolved the way Expo
+  // CLI resolves them; see app-config.ts.
+  const { exp, packageJson } = await resolveExpoAppConfig({ appConfigPath, projectRoot });
+  return { exp, packageJson };
 }
 
 function stripKnownEntryExtension(entry: string) {
@@ -1056,17 +1034,16 @@ async function collectEmittedExpoAssets(options: {
   return assets.sort((left, right) => left.emittedPath.localeCompare(right.emittedPath));
 }
 
+/**
+ * Import specifiers for the framework modules the generated entry needs. The
+ * entry is a generated file outside any package, so a module that is only a
+ * dependency of `react-native` / `expo` (isolated installs, e.g. pnpm) is
+ * imported by absolute path; hoisted installs keep the bare specifier.
+ */
 function resolveProjectImportSpecifiers(projectRoot: string, specifiers: string[]) {
-  const requireFromProject = createRequire(path.join(projectRoot, "package.json"));
-
-  return specifiers.filter((specifier) => {
-    try {
-      requireFromProject.resolve(specifier);
-      return true;
-    } catch {
-      return false;
-    }
-  });
+  return specifiers
+    .map((specifier) => resolveProjectImportSpecifier(projectRoot, specifier))
+    .filter((specifier): specifier is string => specifier !== null);
 }
 
 async function createExpoBuildInputEntry(projectRoot: string, outDir: string, entry: string) {

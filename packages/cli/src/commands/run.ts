@@ -6,6 +6,7 @@ import { VifxError } from "@vifx/errors";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 import type { VifxBundleTargetConfig } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
+import { loadProjectEnvIntoProcess } from "../lib/env.ts";
 import type { CliResult } from "../types.ts";
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -321,6 +322,7 @@ export async function runRunCommand(argv: string[], cwd: string): Promise<CliRes
 
   let runtimeHtmlPath = path.join(outDir, RUNTIME_HTML_FILE);
   if (!shouldReuseBuild) {
+    await loadProjectEnvIntoProcess(loaded.config.projectRoot, target.mode);
     const buildResult = await buildReactNativeBundle({
       aliases: target.aliases,
       babelInPackages: target.babelInPackages,

@@ -165,6 +165,42 @@ Set the prefix in config:
 }
 ```
 
+### `.env` files
+
+Every bundling command (`build`, `expo dev`, `expo export`, `expo smoke`, `export:embed`, `start`, `run`) loads the project's dotenv files before bundling, with the semantics of Expo CLI:
+
+| Priority | File                | Notes                                     |
+| -------- | ------------------- | ----------------------------------------- |
+| 1        | `.env.<mode>.local` | `<mode>` is `development` or `production` |
+| 2        | `.env.local`        | Skipped in `test` mode                    |
+| 3        | `.env.<mode>`       |                                           |
+| 4        | `.env`              |                                           |
+
+- The first file to define a key wins; a variable already set in the shell is never overridden.
+- `$VAR`, `${VAR}` and `${VAR:-default}` references are expanded; `\$` is a literal dollar sign.
+- The mode is `production` for `export:embed --dev false` and `build --mode production`, otherwise the target's mode (`development` by default).
+- `EXPO_NO_DOTENV=1` disables loading entirely.
+- The variables land in `process.env`, so a dynamic `app.config.js` sees them too. Only keys carrying the public prefix are inlined into the bundle.
+
+## Expo app config
+
+The Expo Go manifest and the export manifest are built from the resolved Expo config — static **and** dynamic:
+
+- `app.json` / `app.config.json` (the `expo` key, or the whole file when there is none).
+- `app.config.ts`, `.mts`, `.js`, `.mjs`, `.cjs`: an exported function receives `{ config }` (the static config) and returns the final config; an exported object replaces the static config.
+
+When the project has `@expo/config` installed (every real Expo app does, through `expo`), Vifx calls its `getConfig` — the same call Expo CLI makes — so config plugins, SDK defaults and TypeScript configs behave identically. A config plugin that fails to load is retried without plugins rather than failing the manifest. Without `@expo/config`, a built-in evaluator applies the same static/dynamic rules. An explicit `expoOptions.appConfigPath` pins the file and always uses the built-in evaluator. A dynamic config that throws surfaces `VIFX_EXPO_CONFIG_INVALID`.
+
+## Isolated installs (pnpm)
+
+Vifx resolves packages from the **real** location of the importing file, as Node and Metro do, so pnpm's default isolated `node_modules` layout works without `node-linker=hoisted`:
+
+- a package reached through its `node_modules/<name>` symlink finds its own dependencies in the virtual store, and its copy wins over a same-named package at the project root;
+- an `exports` / `main` target that names an existing file (`./esm.mjs`) is that file, whatever its extension;
+- a subpath directory carrying its own `package.json` (`pkg/presets/decimal/package.json`) is resolved through its main fields;
+- imports written by tooling rather than by the importing file — `@babel/runtime` helpers, `@react-native/assets-registry`, `@react-native/js-polyfills`, `@expo/metro-runtime` — fall back to the dependency trees of `expo` / `react-native`, the fallback Expo's own Metro resolver applies;
+- `@babel/core` and `babel-preset-expo` are found through `expo` when the project does not declare them.
+
 ## Native ↔ web platform resolution
 
 A single resolver handles platform-extension variants (`.ios`, `.android`, `.native`, `.web`) and package conditions. On native the resolution priorities are `{ android: ["android", "native"], ios: ["ios", "native"], native: ["native"] }`; on web they are `["web", "native"]`. Resolver conditions are `[react-native, <platform>, …extra, import, default]` on native and `[browser, web, …extra, import, default]` on web. Default main fields are `[react-native, main, module]` on native and `[react-native, module, main]` on web.

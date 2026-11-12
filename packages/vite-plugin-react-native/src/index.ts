@@ -17,7 +17,11 @@ import {
 } from "@vifx/asset-registry";
 import { VifxError } from "@vifx/errors";
 import { compileHermesBytecode } from "@vifx/hermes-tools";
-import { resolveReactNativeModule } from "@vifx/platform-resolver";
+import {
+  listFrameworkHostManifests,
+  resolveFromProject,
+  resolveReactNativeModule,
+} from "@vifx/platform-resolver";
 import { validateSourceMap } from "@vifx/source-map-tools";
 import {
   createTransformCache,
@@ -130,6 +134,7 @@ const REANIMATED_VALIDATE_WORKLETS_VERSION_ID =
   "react-native-reanimated/scripts/validate-worklets-version";
 const REACT_NATIVE_WORKLETS_BUNDLE_UNPACKER_ID = "react-native-worklets/src/bundleUnpacker";
 const REACT_NATIVE_WORKLETS_RUNTIME_ENTRY_ID = "react-native-worklets/src/workletRuntimeEntry";
+const NATIVE_ASSET_REGISTRY_SPECIFIER = "@react-native/assets-registry/registry";
 const NATIVE_SINGLETON_PACKAGES = ["react", "react-native"] as const;
 const NATIVE_SINGLETON_PACKAGE_SET = new Set<string>(NATIVE_SINGLETON_PACKAGES);
 const SHIM_PREFIX = "\0vifx:shim:";
@@ -255,7 +260,15 @@ interface ReactNativePluginState {
   aliases: Record<string, string>;
   assetExtensions: string[];
   assetFiles: Set<string>;
-  assetRegistryAvailable?: boolean;
+  /** `undefined` until probed; `null` when the native asset registry is not installed. */
+  assetRegistryImport?: string | null;
+  /**
+   * Real file each `\0vifx:compat:` module stands in for. Imports written by a
+   * compat module resolve from that file, exactly like the imports of the file
+   * it replaces (matters on isolated installs, where e.g. `@expo/metro-runtime`
+   * is a dependency of `expo-router`, not of the project).
+   */
+  compatOrigins: Map<string, string>;
   babelInPackages: string[];
   emittedAssetFileNames: Set<string>;
   compatPreview: boolean;
@@ -518,7 +531,7 @@ function createAssetId(filePath: string) {
 async function isNativeAssetRegistryAvailable(
   state: Pick<
     ReactNativePluginState,
-    | "assetRegistryAvailable"
+    | "assetRegistryImport"
     | "conditions"
     | "extensions"
     | "mainFields"
@@ -526,8 +539,30 @@ async function isNativeAssetRegistryAvailable(
     | "resolvePlatform"
   >,
 ): Promise<boolean> {
-  if (state.assetRegistryAvailable !== undefined) {
-    return state.assetRegistryAvailable;
+  return (await resolveNativeAssetRegistryImport(state)) !== null;
+}
+
+/**
+ * The specifier asset modules import the registry through, or `null` when the
+ * registry is not installed. Asset modules are virtual, so on an isolated
+ * install (pnpm) — where the registry is a dependency of `react-native`, not of
+ * the project — the bare specifier cannot resolve and the absolute path found
+ * through `react-native` is used instead. Without this fallback every image
+ * would silently degrade to a URL string. Cached on the plugin state.
+ */
+async function resolveNativeAssetRegistryImport(
+  state: Pick<
+    ReactNativePluginState,
+    | "assetRegistryImport"
+    | "conditions"
+    | "extensions"
+    | "mainFields"
+    | "projectRoot"
+    | "resolvePlatform"
+  >,
+): Promise<string | null> {
+  if (state.assetRegistryImport !== undefined) {
+    return state.assetRegistryImport;
   }
 
   try {
@@ -538,14 +573,15 @@ async function isNativeAssetRegistryAvailable(
       mainFields: state.mainFields,
       platform: state.resolvePlatform,
       projectRoot: state.projectRoot,
-      specifier: "@react-native/assets-registry/registry",
+      specifier: NATIVE_ASSET_REGISTRY_SPECIFIER,
     });
-    state.assetRegistryAvailable = true;
+    state.assetRegistryImport = NATIVE_ASSET_REGISTRY_SPECIFIER;
   } catch {
-    state.assetRegistryAvailable = false;
+    const resolved = resolveFromProject(state.projectRoot, NATIVE_ASSET_REGISTRY_SPECIFIER);
+    state.assetRegistryImport = resolved === null ? null : toPosixPath(resolved);
   }
 
-  return state.assetRegistryAvailable;
+  return state.assetRegistryImport;
 }
 
 /**
@@ -565,6 +601,8 @@ async function renderNativeAssetModule(options: {
   emittedFileNames: Set<string>;
   filePath: string;
   projectRoot: string;
+  /** Specifier the registry is imported through (see resolveNativeAssetRegistryImport). */
+  registryImport: string;
 }) {
   const group = await collectAssetGroup({
     filePath: options.filePath,
@@ -601,7 +639,7 @@ async function renderNativeAssetModule(options: {
   };
 
   return [
-    'import { registerAsset } from "@react-native/assets-registry/registry";',
+    `import { registerAsset } from ${JSON.stringify(options.registryImport)};`,
     `export default registerAsset(${JSON.stringify(descriptor)});`,
     "",
   ].join("\n");
@@ -2263,6 +2301,23 @@ function readBareSpecifierPackageName(specifier: string) {
   return segments[0] ?? null;
 }
 
+/**
+ * Packages whose imports are written by tooling rather than by the author of
+ * the importing file: Babel's runtime helpers, the asset registry behind
+ * `require("./image.png")`, React Native's polyfills, Expo's Metro runtime.
+ */
+const TOOLING_INJECTED_PACKAGES = new Set([
+  "@babel/runtime",
+  "@expo/metro-runtime",
+  "@react-native/assets-registry",
+  "@react-native/js-polyfills",
+]);
+
+function isToolingInjectedSpecifier(specifier: string) {
+  const packageName = readBareSpecifierPackageName(specifier);
+  return packageName ? TOOLING_INJECTED_PACKAGES.has(packageName) : false;
+}
+
 function shouldResolveFromProjectRoot(specifier: string) {
   const packageName = readBareSpecifierPackageName(specifier);
   return packageName ? NATIVE_SINGLETON_PACKAGE_SET.has(packageName) : false;
@@ -2571,6 +2626,21 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     return transformed satisfies TransformResult;
   };
 
+  /** First successful resolution with a framework host package as importer. */
+  const resolveThroughFrameworkHosts = async <Result>(
+    resolveFrom: (fromFile: string) => Promise<Result>,
+  ): Promise<Result | null> => {
+    for (const hostManifestPath of listFrameworkHostManifests(state.projectRoot)) {
+      try {
+        return await resolveFrom(hostManifestPath);
+      } catch {
+        // Not a dependency of this host; try the next one.
+      }
+    }
+
+    return null;
+  };
+
   /**
    * vifx's default resolver, shaped as a Metro `resolveRequest`. Runs
    * `resolveReactNativeModule` and classifies the hit as a `sourceFile` or
@@ -2587,15 +2657,34 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     // `extraNodeModules` the same way), so a delegating hook sees aliased specs.
     const aliasedSource = applyAliases(moduleName, state.aliases, state.projectRoot);
     const specifier = aliasedSource && aliasedSource !== moduleName ? aliasedSource : moduleName;
-    const resolved = await resolveReactNativeModule({
-      conditions: state.conditions,
-      extensions: [...state.extensions, ...state.assetExtensions],
-      fromFile: context.originModulePath,
-      mainFields: state.mainFields,
-      platform: (platform ?? state.resolvePlatform) as VifxPlatform,
-      projectRoot: state.projectRoot,
-      specifier,
-    });
+    const resolveFrom = (fromFile: string) =>
+      resolveReactNativeModule({
+        conditions: state.conditions,
+        extensions: [...state.extensions, ...state.assetExtensions],
+        fromFile,
+        mainFields: state.mainFields,
+        platform: (platform ?? state.resolvePlatform) as VifxPlatform,
+        projectRoot: state.projectRoot,
+        specifier,
+      });
+
+    let resolved: Awaited<ReturnType<typeof resolveFrom>>;
+    try {
+      resolved = await resolveFrom(context.originModulePath);
+    } catch (error) {
+      // Tooling writes these imports into files that never declared them
+      // (Babel helpers into app code, the Metro runtime into the router entry).
+      // On an isolated install (pnpm) they are dependencies of `expo` /
+      // `react-native` only, so retry from there — the fallback Expo's own
+      // Metro resolver applies. Anything else stays a genuine miss.
+      const fallback = isToolingInjectedSpecifier(specifier)
+        ? await resolveThroughFrameworkHosts(resolveFrom)
+        : null;
+      if (fallback === null) {
+        throw error;
+      }
+      resolved = fallback;
+    }
     const resolvedPath = stripQuery(resolved.filePath);
 
     if (isSupportedAssetFile(resolvedPath, state.assetExtensions)) {
@@ -2665,6 +2754,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
 
     const compatPathId = resolveCompatPath(resolvedPath, state.resolvePlatform);
     if (compatPathId) {
+      state.compatOrigins.set(compatPathId, resolvedPath);
       return compatPathId;
     }
 
@@ -2676,6 +2766,39 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     }
 
     return resolvedPath;
+  };
+
+  /**
+   * The file a compat module's own imports resolve from: the real file it
+   * replaced when it was reached through one, else the module its name points
+   * at, else the project root. Never the virtual id itself — that would resolve
+   * relative to the process working directory.
+   */
+  const resolveCompatOrigin = async (compatId: string): Promise<string> => {
+    const known = state.compatOrigins.get(compatId);
+    if (known) {
+      return known;
+    }
+
+    const projectAnchor = path.join(state.projectRoot, "package.json");
+    let origin = projectAnchor;
+    try {
+      const resolved = await resolveReactNativeModule({
+        conditions: state.conditions,
+        extensions: state.extensions,
+        fromFile: projectAnchor,
+        mainFields: state.mainFields,
+        platform: state.resolvePlatform,
+        projectRoot: state.projectRoot,
+        specifier: compatId.slice(COMPAT_PREFIX.length),
+      });
+      origin = stripQuery(resolved.filePath);
+    } catch {
+      // The compat name is not an installed module; resolve from the project.
+    }
+
+    state.compatOrigins.set(compatId, origin);
+    return origin;
   };
 
   return {
@@ -2718,6 +2841,10 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
           emittedFileNames: state.emittedAssetFileNames,
           filePath: id.slice(ASSET_PREFIX.length),
           projectRoot: state.projectRoot,
+          // Asset ids are only created once the registry resolved, so the
+          // fallback is never emitted; it keeps the type total.
+          registryImport:
+            (await resolveNativeAssetRegistryImport(state)) ?? NATIVE_ASSET_REGISTRY_SPECIFIER,
         });
       }
 
@@ -2912,7 +3039,9 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       const fromFile = importer
         ? importer.startsWith(TRANSFORM_PREFIX)
           ? stripQuery(importer.slice(TRANSFORM_PREFIX.length))
-          : stripQuery(importer)
+          : importer.startsWith(COMPAT_PREFIX)
+            ? await resolveCompatOrigin(importer)
+            : stripQuery(importer)
         : path.resolve(state.projectRoot, state.entry);
 
       // The user `resolveRequest` runs ABOVE vifx's alias/compat pre-filter, so
@@ -2968,11 +3097,24 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         // cannot resolve it, nothing downstream will either, and Rolldown would
         // otherwise abort the whole build with a raw "Could not resolve". Turn
         // that into actionable behavior instead.
-        if (!isPathLikeSpecifier(source)) {
+        // Root-anchored specifiers are Vite's, not vifx's: dev-server URLs
+        // (`/@fs/...`, `/@id/...`) and root-relative paths resolve against the
+        // Vite root, so they keep the fall-through too.
+        if (!isPathLikeSpecifier(source) || source.startsWith("/")) {
           return null;
         }
 
         const importerPath = relativeFrom(state.projectRoot, fromFile);
+
+        // The file exists on disk but its extension is outside vifx's source and
+        // asset extensions (e.g. NativeWind's `./global.css`). It is not missing:
+        // hand it to Vite / downstream plugins, which own those file types.
+        const explicitStats = await stat(
+          stripQuery(path.resolve(path.dirname(fromFile), source)),
+        ).catch(() => null);
+        if (explicitStats?.isFile()) {
+          return null;
+        }
 
         // Looks like a code-generated module (e.g. a Lingui catalog produced by
         // `lingui compile`, which a plain install skips): degrade gracefully to
@@ -3109,6 +3251,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
       transformCacheInstance: options.transformCacheInstance,
     }),
     userResolveRequest: options.userResolveRequest ?? null,
+    compatOrigins: new Map<string, string>(),
     warnedGeneratedModules: new Set<string>(),
   };
 
@@ -3196,6 +3339,7 @@ export async function buildReactNativeBundle(
     shimReactNative: options.shimReactNative ?? true,
     transformCache,
     userResolveRequest: options.userResolveRequest ?? null,
+    compatOrigins: new Map<string, string>(),
     warnedGeneratedModules: new Set<string>(),
   };
 

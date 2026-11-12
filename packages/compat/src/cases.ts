@@ -80,11 +80,49 @@ export const compatCases: CompatCase[] = [
       projectType: "expo",
       packageManager: "pnpm",
       expoVersion: "~56.0.0",
-      reactNativeVersion: "0.84.0",
+      reactNativeVersion: "0.85.3",
     },
     docsPath: "/compat/doctor#project-detection",
     notes: [
       "Expo SDK 56 support is experimental: static analysis and fixtures only, not device-validated.",
+    ],
+  },
+  {
+    id: "doctor.project-detection.expo-sdk57-basic",
+    title: "Expo SDK 57 projects are detected on the experimental support tier",
+    category: "doctor.projectDetection",
+    fixtureId: "expo-sdk57-basic",
+    operation: {
+      kind: "project-info",
+    },
+    expected: {
+      projectType: "expo",
+      packageManager: "pnpm",
+      expoVersion: "~57.0.0",
+      reactNativeVersion: "0.86.3",
+    },
+    docsPath: "/compat/doctor#project-detection",
+    notes: [
+      "Expo SDK 57 support is experimental: static analysis and fixtures only, not device-validated.",
+    ],
+  },
+  {
+    id: "doctor.project-detection.expo-sdk58-basic",
+    title: "Expo SDK 58 projects are detected on the experimental support tier",
+    category: "doctor.projectDetection",
+    fixtureId: "expo-sdk58-basic",
+    operation: {
+      kind: "project-info",
+    },
+    expected: {
+      projectType: "expo",
+      packageManager: "pnpm",
+      expoVersion: "~58.0.0",
+      reactNativeVersion: "0.88.1",
+    },
+    docsPath: "/compat/doctor#project-detection",
+    notes: [
+      "Expo SDK 58 support is experimental: static analysis and fixtures only, not device-validated.",
     ],
   },
   {

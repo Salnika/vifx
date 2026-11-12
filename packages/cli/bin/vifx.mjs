@@ -8,7 +8,9 @@ const result = spawnSync(
   process.execPath,
   [
     "--disable-warning=ExperimentalWarning",
-    "--experimental-transform-types",
+    // Sources are erasable-syntax-only, so plain type stripping is enough.
+    // `--experimental-transform-types` was removed in Node 26.
+    "--experimental-strip-types",
     entryPath,
     ...process.argv.slice(2),
   ],

@@ -52,7 +52,8 @@ export default defineConfig({
   // intentionally import uninstalled react/react-native and ship the publishing
   // quirks we are testing. They are fixtures, not source, so exclude them from
   // format, lint, and type checking.
-  fmt: { ignorePatterns: ["fixtures/libs/**"] },
+  // `.claude/` holds machine-local agent settings, not project source.
+  fmt: { ignorePatterns: ["fixtures/libs/**", ".claude/**"] },
   lint: {
     ignorePatterns: ["fixtures/libs/**"],
     options: { typeAware: true, typeCheck: true },

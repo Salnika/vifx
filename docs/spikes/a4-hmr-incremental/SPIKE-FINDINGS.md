@@ -193,19 +193,19 @@ installed `.d.mts`:
   single-leaf edits at `generate#3/#4` also stay pinned at `401`. No transform
   cache. (Wall-clock 47→13 ms is JIT warmup; the transform count is the evidence.)
 - **Method probe — reproduced.** `all handle methods: ["closed","generate",
-"write","close","watchFiles"]`; matches for `invalidate|rebuild|hot|update|patch`
+  "write","close","watchFiles"]`; matches for `invalidate|rebuild|hot|update|patch`
   = `[]`, identical with `experimental.incrementalBuild:true` (still re-transforms
   every module after a single-file edit).
 - **Re-read — reproduced.** Each of V0..V4 is reflected, so `generate()` genuinely
   re-reads disk and re-transforms each call (not stale output).
 - **Types — re-read from installed `rolldown@1.0.1`.**
   `RolldownBuild` (`dist/shared/define-config-*.d.mts`) = `{ closed, generate(),
-write(), close(), [Symbol.asyncDispose] }` + `get watchFiles()` marked
+  write(), close(), [Symbol.asyncDispose] }` + `get watchFiles()` marked
   `@hidden not ready for public usage yet` — no public `invalidate`/`rebuild`/
   `hotUpdate`. `DevEngine.invalidate(file, firstInvalidatedBy?)`
   (`dist/experimental-index.d.mts:75`) → `Promise<BindingClientHmrUpdate[]>`, with
   `BindingHmrUpdate = {type:'Patch', code, filename, sourcemap?, hmrBoundaries} |
-{type:'FullReload'} | {type:'Noop'}` — Vite module-runner format, never
+  {type:'FullReload'} | {type:'Noop'}` — Vite module-runner format, never
   `__d`/`__r`.
 - **Secondary (hbc) — reconfirmed in source.** `runExpoGoRebuild`
   (`vite-plugin-expo/src/index.ts:1347`) runs `buildExpoBundle → computeHmrUpdate`

@@ -5,6 +5,7 @@ import { VifxError } from "@vifx/errors";
 import type { VifxBundlePlatform, VifxBundleTargetConfig } from "@vifx/types";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 import { parseFlags } from "../lib/args.ts";
+import { loadProjectEnvIntoProcess } from "../lib/env.ts";
 import { startMetroDevServer, type VifxMetroDevServer } from "../lib/metro-server.ts";
 import type { CliResult } from "../types.ts";
 
@@ -172,6 +173,7 @@ export async function runDevCommand(argv: string[], cwd: string): Promise<CliRes
     optional: false,
   });
   const configFile = loaded.configFilePath ?? "inline config";
+  await loadProjectEnvIntoProcess(loaded.config.projectRoot, "development");
 
   if (loaded.config.vite.mode !== "react-native" || loaded.config.vite.targets.length === 0) {
     throw new VifxError({

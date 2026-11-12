@@ -7,6 +7,7 @@ import { VifxError } from "@vifx/errors";
 import type { VifxBundleArtifacts, VifxBundlePlatform, VifxBundleTargetConfig } from "@vifx/types";
 import { buildExpoBundle } from "@vifx/vite-plugin-expo";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
+import { loadProjectEnvIntoProcess } from "../lib/env.ts";
 import type { CliResult } from "../types.ts";
 
 const EXPORT_EMBED_HELP = `Usage: vifx export:embed [path] --bundle-output <path> [options]
@@ -481,6 +482,7 @@ export async function runExportEmbedCommand(argv: string[], cwd: string): Promis
   const entry = args.entryFile ?? target?.entry ?? "./index.js";
   const minify = args.minify ?? !args.dev;
   const mode = args.dev ? ("development" as const) : ("production" as const);
+  await loadProjectEnvIntoProcess(loaded.config.projectRoot, mode);
 
   const bundleOutput = path.resolve(cwd, args.bundleOutput);
   const sourcemapOutput =

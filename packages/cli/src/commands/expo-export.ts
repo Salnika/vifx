@@ -2,7 +2,9 @@ import path from "node:path";
 import { loadVifxConfig } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
 import { writeExpoExport } from "@vifx/expo-export";
+import { resolveExpoAppConfig } from "@vifx/vite-plugin-expo";
 import { parseFlags } from "../lib/args.ts";
+import { loadProjectEnvIntoProcess } from "../lib/env.ts";
 import type { CliResult } from "../types.ts";
 import {
   type ExpoBuildResult,
@@ -77,6 +79,8 @@ export async function runExpoExportCommand(argv: string[], cwd: string): Promise
     });
   }
 
+  await loadProjectEnvIntoProcess(loaded.config.projectRoot, targets[0]?.mode);
+
   const builds: ExpoBuildResult[] = [];
   for (const target of targets) {
     builds.push(
@@ -86,8 +90,15 @@ export async function runExpoExportCommand(argv: string[], cwd: string): Promise
 
   const exportRoot =
     typeof parsed.flags["out-dir"] === "string" ? parsed.flags["out-dir"] : undefined;
+  // The export manifest carries the fully resolved Expo config, dynamic
+  // `app.config.js` / `.ts` included — not just the static app.json.
+  const { exp } = await resolveExpoAppConfig({
+    appConfigPath: loaded.config.expoOptions.appConfigPath,
+    projectRoot: loaded.config.projectRoot,
+  });
   const exportResult = await writeExpoExport({
     bundles: builds.map((build) => build.result),
+    manifest: exp,
     projectRoot: loaded.config.projectRoot,
     ...(exportRoot === undefined ? {} : { exportRoot }),
   });

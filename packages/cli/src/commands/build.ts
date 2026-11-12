@@ -4,6 +4,7 @@ import { VifxError } from "@vifx/errors";
 import { buildReactNativeBundle, resolveBundleMode } from "@vifx/vite-plugin-react-native";
 import type { VifxBundleMode } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
+import { loadProjectEnvIntoProcess } from "../lib/env.ts";
 import { parseBundleModeFlag } from "../lib/mode.ts";
 import type { CliResult } from "../types.ts";
 
@@ -128,6 +129,8 @@ export async function runBuildCommand(argv: string[], cwd: string): Promise<CliR
       docsPath: "/reference/config#vite-targets",
     });
   }
+
+  await loadProjectEnvIntoProcess(loaded.config.projectRoot, requestedMode ?? targets[0]?.mode);
 
   const results: BuildResult[] = [];
   for (const target of targets) {

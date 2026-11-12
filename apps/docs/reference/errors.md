@@ -31,6 +31,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_DYNAMIC_CONTEXT_NOT_STATIC`                  | A `require.context` call used arguments that cannot be statically analyzed at build time.                                         |
 | `VIFX_DYNAMIC_IMPORT_NOT_STATIC`                   | A native bundle contains a dynamic `import()` whose specifier is not a string literal.                                            |
 | `VIFX_EXPERIMENTAL_EXPO`                           | Expo support falls outside the current supported corridor for the inspected workflow.                                             |
+| `VIFX_EXPO_CONFIG_INVALID`                         | A dynamic Expo app config (`app.config.js` / `app.config.ts`) threw or did not evaluate to a config object.                       |
 | `VIFX_EXPO_CONFIG_NOT_FOUND`                       | The Expo layer could not find or read app config metadata.                                                                        |
 | `VIFX_EXPO_DEV_CLIENT_SIGNING_UNSUPPORTED`         | A manifest request demanded a code-signed response, which the Vifx dev server does not support.                                   |
 | `VIFX_EXPO_DEV_INVALID_PLATFORM`                   | An Expo dev command received an unsupported platform value.                                                                       |

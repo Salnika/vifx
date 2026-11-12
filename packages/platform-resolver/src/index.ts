@@ -2,6 +2,16 @@ import { access, lstat, readFile, readdir, realpath, stat } from "node:fs/promis
 import path from "node:path";
 import { VifxError } from "@vifx/errors";
 
+export {
+  clearProjectRequireChainCache,
+  createProjectRequireChain,
+  listFrameworkHostManifests,
+  requireFromProject,
+  resolveFromProject,
+  resolveProjectImportSpecifier,
+  type ProjectRequire,
+} from "./project-require.ts";
+
 export type VifxPlatform = "android" | "ios" | "native" | "web" | (string & {});
 
 export interface ResolveReactNativeModuleOptions {
@@ -86,6 +96,7 @@ export async function resolveReactNativeModule(
   const extensionOrder = normalizeExtensions(options.extensions);
   const platformPriority = normalizePlatformPriority(options.platform, options.platformPriority);
   const preserveSymlinks = options.preserveSymlinks ?? true;
+  const mainFields = normalizeMainFields(options.mainFields);
 
   if (isPathLikeSpecifier(options.specifier)) {
     const basePath = path.isAbsolute(options.specifier)
@@ -94,6 +105,7 @@ export async function resolveReactNativeModule(
     const filePath = await resolveCandidateBasePath({
       basePath,
       extensionOrder,
+      mainFields,
       platformPriority,
       preserveSymlinks,
       trace,
@@ -140,7 +152,7 @@ export async function resolveReactNativeModule(
     packageJson,
     packageImport.subpath,
     buildResolutionConditions(options.platform, options.conditions),
-    normalizeMainFields(options.mainFields),
+    mainFields,
     trace,
   );
   const fallbackBasePath = packageTarget
@@ -165,6 +177,7 @@ export async function resolveReactNativeModule(
   const filePath = await resolveCandidateBasePath({
     basePath: fallbackBasePath,
     extensionOrder,
+    mainFields,
     platformPriority,
     preserveSymlinks,
     trace,
@@ -252,6 +265,7 @@ async function findPackageLocation(options: {
   trace: ResolutionTraceEntry[];
 }): Promise<{ root: string } | undefined> {
   const candidateDirectories = dedupe([
+    ...(await iterateRealAncestorDirectories(options.startDir, options.projectRoot)),
     ...iterateAncestorDirectories(options.startDir),
     ...iterateAncestorDirectories(options.projectRoot),
   ]);
@@ -424,6 +438,61 @@ function iterateAncestorDirectories(startDirectory: string): string[] {
 
     currentDirectory = parentDirectory;
   }
+}
+
+const realDirectoryCache = new Map<string, Promise<string>>();
+
+function realDirectory(directory: string): Promise<string> {
+  const cached = realDirectoryCache.get(directory);
+  if (cached) {
+    return cached;
+  }
+
+  const resolved = realpath(directory).catch(() => directory);
+  realDirectoryCache.set(directory, resolved);
+  return resolved;
+}
+
+/**
+ * Ancestors of the importer's REAL directory, searched before its logical ones.
+ *
+ * Node and Metro look packages up from the real location of the importing
+ * file. That is what makes isolated installs (pnpm's default) work: a package
+ * reached through the `node_modules/<name>` symlink keeps its dependencies next
+ * to its real directory in the virtual store, not next to the symlink — and a
+ * same-named package at the project root may be a different version.
+ *
+ * Real paths under the project are mapped back onto the project root as it was
+ * given, so a project that itself lives behind a symlink (`/tmp` on macOS)
+ * keeps one consistent path prefix. Empty when the importer is not behind a
+ * symlink, which leaves hoisted installs resolving exactly as before.
+ */
+async function iterateRealAncestorDirectories(
+  startDirectory: string,
+  projectRoot: string,
+): Promise<string[]> {
+  const logicalStart = path.resolve(startDirectory);
+  const realStart = await realDirectory(logicalStart);
+  if (realStart === logicalStart) {
+    return [];
+  }
+
+  const logicalRoot = path.resolve(projectRoot);
+  const realRoot = await realDirectory(logicalRoot);
+
+  return iterateAncestorDirectories(realStart).map((directory) => {
+    if (realRoot === logicalRoot) {
+      return directory;
+    }
+
+    if (directory === realRoot) {
+      return logicalRoot;
+    }
+
+    return directory.startsWith(`${realRoot}${path.sep}`)
+      ? path.join(logicalRoot, directory.slice(realRoot.length + 1))
+      : directory;
+  });
 }
 
 function normalizeExtensions(extensions: readonly string[] | undefined): string[] {
@@ -684,13 +753,67 @@ function readWorkspacePatterns(packageJson: PackageJsonShape): string[] | undefi
   return undefined;
 }
 
-async function resolveCandidateBasePath(options: {
+interface ResolveCandidateBasePathOptions {
   basePath: string;
   extensionOrder: readonly string[];
+  /** Main fields consulted when `basePath` is a directory with a package.json. */
+  mainFields: readonly string[];
   platformPriority: readonly string[];
   preserveSymlinks: boolean;
   trace: ResolutionTraceEntry[];
-}): Promise<string> {
+}
+
+/**
+ * Entry file declared by a package.json sitting directly in `basePath`, or
+ * `undefined` when there is none (or it points nowhere), in which case the
+ * caller falls back to `index.*`.
+ */
+async function resolveDirectoryPackageEntry(
+  options: ResolveCandidateBasePathOptions,
+): Promise<string | undefined> {
+  const packageJsonPath = path.join(options.basePath, "package.json");
+  if (!(await isFile(packageJsonPath))) {
+    return undefined;
+  }
+
+  const packageJson = await readPackageJson(packageJsonPath);
+  const entry = options.mainFields
+    .map((mainField) => packageJson[mainField as keyof PackageJsonShape])
+    .find((value): value is string => typeof value === "string" && value !== "");
+  if (!entry) {
+    return undefined;
+  }
+
+  const entryBasePath = path.resolve(options.basePath, entry);
+  // A package.json whose entry points back at its own directory would recurse.
+  if (entryBasePath === path.resolve(options.basePath)) {
+    return undefined;
+  }
+
+  pushTrace(options.trace, "package-json", `Matched a directory package.json entry "${entry}".`, {
+    candidate: packageJsonPath,
+    exists: true,
+  });
+
+  return resolveCandidateBasePath({ ...options, basePath: entryBasePath }).catch(() => undefined);
+}
+
+async function resolveCandidateBasePath(options: ResolveCandidateBasePathOptions): Promise<string> {
+  // A path that names an existing file is that file, whatever its extension:
+  // `exports` / `main` targets such as "./esm.mjs" are exact, and the
+  // configured extension list only drives the lookup of extension-less paths.
+  if (
+    path.extname(options.basePath) !== "" &&
+    !hasExplicitExtension(options.basePath, options.extensionOrder) &&
+    (await isFile(options.basePath))
+  ) {
+    pushTrace(options.trace, "resolved", `Resolved the exact file "${options.basePath}".`, {
+      candidate: options.basePath,
+      exists: true,
+    });
+    return normalizeExistingPath(options.basePath, options.preserveSymlinks);
+  }
+
   const directMatch = await findCandidateMatch({
     candidates: buildCandidatePaths(
       options.basePath,
@@ -715,6 +838,15 @@ async function resolveCandidateBasePath(options: {
       hint: "Verify that the explicit path exists or remove the extension so platform fallbacks can apply.",
       message: `Unable to resolve the explicit file "${options.basePath}".`,
     });
+  }
+
+  // A directory carrying its own package.json is a package entry point in its
+  // own right: `pkg/presets/decimal/package.json` -> { "react-native": "../.." }.
+  // Node (`main`) and Metro (the configured main fields) both honor it, and
+  // libraries rely on it to ship per-subpath entries without an `exports` map.
+  const nestedEntry = await resolveDirectoryPackageEntry(options);
+  if (nestedEntry) {
+    return nestedEntry;
   }
 
   const indexMatch = await findCandidateMatch({

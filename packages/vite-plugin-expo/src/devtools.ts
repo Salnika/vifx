@@ -31,12 +31,27 @@ export interface VifxDevtoolsWebSocketServer {
   ) => void;
 }
 
+/**
+ * Launches the React Native DevTools frontend on the host machine. Mirrors
+ * `@react-native/dev-middleware`'s (unstable) `DevToolLauncher`.
+ */
+export interface VifxDevtoolsToolLauncher {
+  launchDebuggerAppWindow: (url: string) => Promise<void>;
+  launchDebuggerShell?: (url: string, windowKey: string) => Promise<void>;
+  prepareDebuggerShell?: () => Promise<{ code: string }>;
+}
+
 export interface VifxCreateDevtoolsOptions {
   broadcast: (method: string, params?: VifxJsonValue) => void;
   logger?: VifxDevtoolsLogger;
   projectRoot: string;
   serverBaseUrl: string;
   symbolicate?: (stack: VifxJsonValue[]) => Promise<VifxJsonValue[]>;
+  /**
+   * Overrides how the DevTools frontend is opened. Defaults to
+   * dev-middleware's launcher (standalone DevTools shell, Chrome fallback).
+   */
+  toolLauncher?: VifxDevtoolsToolLauncher;
 }
 
 export interface VifxExpoDevtools {
@@ -161,12 +176,33 @@ function formatClientLogEntry(entry: VifxJsonValue): {
   return { level, message: `[expo-client] ${message}` };
 }
 
+/**
+ * dev-middleware prepares the standalone DevTools shell as soon as it is
+ * created, and its default launcher refuses to run under `NODE_ENV=test`. A
+ * test run that injects no launcher gets an inert one, so no test ever spawns
+ * or downloads the debugger shell.
+ */
+const INERT_TOOL_LAUNCHER: VifxDevtoolsToolLauncher = {
+  launchDebuggerAppWindow: async () => {},
+  prepareDebuggerShell: async () => ({ code: "not_implemented" }),
+};
+
+function resolveToolLauncher(toolLauncher: VifxDevtoolsToolLauncher | undefined) {
+  if (toolLauncher) {
+    return toolLauncher;
+  }
+
+  return process.env.NODE_ENV === "test" ? INERT_TOOL_LAUNCHER : undefined;
+}
+
 export function createDevtools(options: VifxCreateDevtoolsOptions): VifxExpoDevtools {
   const logger = options.logger ?? createConsoleDevtoolsLogger();
   const devMiddleware = createDevMiddleware({
     logger,
-    projectRoot: options.projectRoot,
     serverBaseUrl: options.serverBaseUrl,
+    unstable_toolLauncher: resolveToolLauncher(options.toolLauncher) as Parameters<
+      typeof createDevMiddleware
+    >[0]["unstable_toolLauncher"],
   });
   const middleware = devMiddleware.middleware as ConnectMiddleware;
   const websocketEndpoints = devMiddleware.websocketEndpoints as unknown as Record<

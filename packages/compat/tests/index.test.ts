@@ -8,7 +8,7 @@ import {
 } from "../src/index.ts";
 
 test("fixture manifests expose the compatibility fixtures", () => {
-  expect(getFixtureManifests()).toHaveLength(26);
+  expect(getFixtureManifests()).toHaveLength(28);
   expect(getFixtureManifest("expo-basic").projectType).toBe("expo");
   expect(getFixtureManifest("expo-router-basic").features).toContain("expo-router");
   expect(resolveFixturePath("expo-basic")).toContain("fixtures/expo-basic");
@@ -36,6 +36,8 @@ test("doctor project detection covers the experimental SDK fixtures", () => {
 
   expect(detectionFixtures).toContain("expo-sdk55-basic");
   expect(detectionFixtures).toContain("expo-sdk56-basic");
+  expect(detectionFixtures).toContain("expo-sdk57-basic");
+  expect(detectionFixtures).toContain("expo-sdk58-basic");
 });
 
 test("compat cases cover the NEXT minimum categories", () => {

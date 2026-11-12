@@ -4,7 +4,7 @@ The support matrix is product-facing. It distinguishes the no-Metro Vite bundlin
 
 ## Versions And Scope
 
-The current Expo work is device-validated against Expo SDK 54 and statically analyzed against SDK 55 and 56. See [Expo SDK Support](#expo-sdk-support) for the per-SDK tiers. `vifx doctor` warns when an Expo dependency falls outside the supported SDK majors, and reports the support tier for SDKs inside it.
+The current Expo work is device-validated against Expo SDK 54 and statically analyzed against SDK 55 through 58 (the current Expo SDK). See [Expo SDK Support](#expo-sdk-support) for the per-SDK tiers. `vifx doctor` warns when an Expo dependency falls outside the supported SDK majors, and reports the support tier for SDKs inside it.
 
 | Surface                                    | Supported now | Available for maintainers                         | Out of scope                                        | Notes                                                                                     |
 | ------------------------------------------ | ------------- | ------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -27,15 +27,18 @@ Vifx tracks Expo SDK majors with explicit support tiers. The tiers are deliberat
 | -------- | ------------ | ------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | 54       | 0.81         | validated    | Fixtures, audits, doctor detection, device-validated Expo Go dev-server corridor | EAS, Expo Updates runtime, native binaries (see Non-Goals)    |
 | 55       | 0.83         | experimental | Static analysis: fixtures, audits, doctor detection, compat cases                | Device validation; dev-server protocols on real devices       |
-| 56       | 0.84         | experimental | Static analysis: fixtures, audits, doctor detection, compat cases                | Device validation; Hermes V1 runtime behavior on real devices |
+| 56       | 0.85         | experimental | Static analysis: fixtures, audits, doctor detection, compat cases                | Device validation; Hermes V1 runtime behavior on real devices |
+| 57       | 0.86         | experimental | Static analysis: fixtures, audits, doctor detection, compat cases                | Device validation; dev-server protocols on real devices       |
+| 58       | 0.88         | experimental | Static analysis: fixtures, audits, doctor detection, compat cases                | Device validation; dev-server protocols on real devices       |
 
 SDK-specific notes:
 
 - **SDK 55** ships New Architecture only. The `expo-sdk55-basic` fixture sets `newArchEnabled: true` accordingly.
 - **SDK 56** defaults to the Hermes V1 engine. Vifx static analysis does not exercise Hermes V1 at runtime.
+- **SDK 58** is the current Expo SDK (React 19.3). The dev server mounts `@react-native/dev-middleware` 0.88, the version Expo CLI 58 ships.
 - Projects on SDK majors outside this table are reported as unsupported by `vifx doctor` and `vifx expo audit`.
 
-`vifx doctor` prints the detected SDK, its tier, and the tier notes for Expo projects, and `vifx doctor --json` exposes the same data under `expoSdkSupport`. `vifx expo audit` accepts SDK 54-56 by default and emits tier-appropriate warnings for the experimental SDKs instead of failing on the SDK version alone; an explicit `--supported-sdk` value overrides the support table and restores strict range reporting.
+`vifx doctor` prints the detected SDK, its tier, and the tier notes for Expo projects, and `vifx doctor --json` exposes the same data under `expoSdkSupport`. `vifx expo audit` accepts SDK 54-58 by default and emits tier-appropriate warnings for the experimental SDKs instead of failing on the SDK version alone; an explicit `--supported-sdk` value overrides the support table and restores strict range reporting.
 
 ## Non-Goals
 

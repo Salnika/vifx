@@ -176,7 +176,7 @@ pnpm vifx expo audit ./my-expo-app --json
 | Flag                    | Default | Effect                                               |
 | ----------------------- | ------- | ---------------------------------------------------- |
 | `--export-root <dir>`   | —       | Inspect an existing Expo export instead of building. |
-| `--supported-sdk <sdk>` | `54`    | Expo SDK major to evaluate against.                  |
+| `--supported-sdk <sdk>` | `54-58` | Expo SDK major to evaluate against.                  |
 
 ### `vifx expo smoke`
 

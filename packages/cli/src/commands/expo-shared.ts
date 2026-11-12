@@ -21,7 +21,7 @@ Audits and runs the Expo no-Metro Vite bundling corridor. The --expo-go dev mode
 
 Options:
   --export-root     Optional existing Expo export directory to inspect.
-  --supported-sdk   Fixture-backed Expo SDK range to report against. Default: 54.
+  --supported-sdk   Expo SDK range to report against. Default: the support table (54-58).
   --json            Output machine-readable JSON.
   --help            Show this message.
 `;

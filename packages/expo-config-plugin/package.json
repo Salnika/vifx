@@ -23,13 +23,13 @@
     "test": "vp test run"
   },
   "dependencies": {
-    "@expo/config-plugins": "^54.0.0"
+    "@expo/config-plugins": ">=54.0.0 <59.0.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "@vifx/errors": "workspace:*",
     "typescript": "catalog:",
     "vite-plus": "catalog:",
-    "xcode": "^3.0.1"
+    "xcode": "^4.0.0"
   }
 }

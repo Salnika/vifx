@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { VifxError } from "@vifx/errors";
+import { resolveProjectImportSpecifier } from "@vifx/platform-resolver";
 
 /**
  * Module ordering for the Metro-compatible module-registry bundle format.
@@ -91,16 +91,6 @@ function isPathLikeEntry(entry: string) {
   );
 }
 
-function canResolveFromProject(projectRoot: string, specifier: string) {
-  const requireFromProject = createRequire(path.join(projectRoot, "package.json"));
-  try {
-    requireFromProject.resolve(specifier);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Writes the generated wrapper entry for a `moduleFormat: "metro"` build. The
  * wrapper imports the resolvable polyfills, then InitializeCore when
@@ -118,13 +108,24 @@ export async function planMetroEntryModule(
     `${path.basename(options.absoluteOutDir)}-module-registry.js`,
   );
 
-  const polyfillSpecifiers = MODULE_REGISTRY_POLYFILL_SPECIFIERS.filter((specifier) =>
-    canResolveFromProject(options.projectRoot, specifier),
+  // The wrapper is a generated file outside any package, so each framework
+  // module is imported through the specifier that actually resolves for this
+  // project: the bare one on hoisted installs, an absolute path when it is only
+  // a dependency of `react-native` / `expo` (isolated installs, e.g. pnpm).
+  const importSpecifierFor = (specifier: string) =>
+    resolveProjectImportSpecifier(options.projectRoot, specifier);
+  const polyfillImports = MODULE_REGISTRY_POLYFILL_SPECIFIERS.map((specifier) => ({
+    importSpecifier: importSpecifierFor(specifier),
+    specifier,
+  })).filter(
+    (
+      polyfill,
+    ): polyfill is { importSpecifier: string; specifier: (typeof polyfill)["specifier"] } =>
+      polyfill.importSpecifier !== null,
   );
-  const includesInitializeCore = canResolveFromProject(
-    options.projectRoot,
-    INITIALIZE_CORE_SPECIFIER,
-  );
+  const polyfillSpecifiers = polyfillImports.map((polyfill) => polyfill.specifier);
+  const initializeCoreImport = importSpecifierFor(INITIALIZE_CORE_SPECIFIER);
+  const includesInitializeCore = initializeCoreImport !== null;
 
   if (!includesInitializeCore) {
     const warning =
@@ -137,10 +138,11 @@ export async function planMetroEntryModule(
   // Development bundles explicitly install React Refresh after InitializeCore so
   // global.__ReactRefresh exists for the HMR runtime, independent of RN's
   // internal dev-tools chain. A no-op (with a loud warning) when unresolvable.
-  const includesSetUpReactRefresh =
-    options.dev === true &&
-    includesInitializeCore &&
-    canResolveFromProject(options.projectRoot, SET_UP_REACT_REFRESH_SPECIFIER);
+  const setUpReactRefreshImport =
+    options.dev === true && includesInitializeCore
+      ? importSpecifierFor(SET_UP_REACT_REFRESH_SPECIFIER)
+      : null;
+  const includesSetUpReactRefresh = setUpReactRefreshImport !== null;
 
   if (options.dev === true && includesInitializeCore && !includesSetUpReactRefresh) {
     const warning =
@@ -160,11 +162,11 @@ export async function planMetroEntryModule(
     : options.entry;
 
   const importLines = [
-    ...polyfillSpecifiers.map((specifier) => `import ${JSON.stringify(specifier)};`),
-    ...(includesInitializeCore ? [`import ${JSON.stringify(INITIALIZE_CORE_SPECIFIER)};`] : []),
-    ...(includesSetUpReactRefresh
-      ? [`import ${JSON.stringify(SET_UP_REACT_REFRESH_SPECIFIER)};`]
-      : []),
+    ...polyfillImports.map((polyfill) => `import ${JSON.stringify(polyfill.importSpecifier)};`),
+    ...(initializeCoreImport === null ? [] : [`import ${JSON.stringify(initializeCoreImport)};`]),
+    ...(setUpReactRefreshImport === null
+      ? []
+      : [`import ${JSON.stringify(setUpReactRefreshImport)};`]),
     `import ${JSON.stringify(entrySpecifier)};`,
     "",
   ];

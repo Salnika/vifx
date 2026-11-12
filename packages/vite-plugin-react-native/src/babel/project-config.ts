@@ -1,6 +1,6 @@
-import { createRequire } from "node:module";
 import path from "node:path";
 import { VifxError } from "@vifx/errors";
+import { requireFromProject, resolveFromProject } from "@vifx/platform-resolver";
 import type { VifxPlatform } from "@vifx/types";
 
 /** Structural view of the project-resolved `@babel/core` transform result. */
@@ -103,25 +103,22 @@ export async function loadProjectBabelRuntime(
 
   const runtimePromise = (async () => {
     try {
-      const requireFromProject = createRequire(path.join(projectRoot, "package.json"));
-      const babel = requireFromProject("@babel/core") as {
+      // Resolved through the framework host packages too: under an isolated
+      // layout (pnpm) `@babel/core` and the preset are dependencies of `expo` /
+      // `react-native`, not of the project.
+      const babel = requireFromProject(projectRoot, "@babel/core") as {
         loadPartialConfigAsync?: NonNullable<ProjectBabelRuntime["loadPartialConfigAsync"]>;
         transformAsync?: ProjectBabelRuntime["transformAsync"];
-      };
+      } | null;
 
-      if (typeof babel.transformAsync !== "function") {
+      if (typeof babel?.transformAsync !== "function") {
         return null;
       }
 
-      let presetPath: string | null = null;
-      for (const presetRequest of ["babel-preset-expo", "@react-native/babel-preset"]) {
-        try {
-          presetPath = requireFromProject.resolve(presetRequest);
-          break;
-        } catch {
-          // Try the next preset; a project may rely solely on babel.config.js.
-        }
-      }
+      // A project may rely solely on babel.config.js, so no preset is fine.
+      const presetPath =
+        resolveFromProject(projectRoot, "babel-preset-expo") ??
+        resolveFromProject(projectRoot, "@react-native/babel-preset");
 
       return {
         loadPartialConfigAsync:

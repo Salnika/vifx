@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
+import { resolveFromProject } from "@vifx/platform-resolver";
 import type { ProjectBabelConfig, ProjectBabelConfigEntry } from "./project-config.ts";
 
 /**
@@ -143,18 +143,9 @@ function configReferences(
  * even though the partial config cannot expand presets.
  */
 function resolvesWorkletsPlugin(projectRoot: string): boolean {
-  const requireFromProject = createRequire(path.join(projectRoot, "package.json"));
-
-  for (const request of ["react-native-worklets/plugin", "react-native-reanimated/plugin"]) {
-    try {
-      requireFromProject.resolve(request);
-      return true;
-    } catch {
-      // Not installed; try the next candidate.
-    }
-  }
-
-  return false;
+  return ["react-native-worklets/plugin", "react-native-reanimated/plugin"].some(
+    (request) => resolveFromProject(projectRoot, request) !== null,
+  );
 }
 
 async function collectNativeSourceDependencies(projectRoot: string): Promise<string[]> {
@@ -196,13 +187,8 @@ async function readDependencyManifest(
     return directManifest;
   }
 
-  try {
-    const requireFromProject = createRequire(path.join(projectRoot, "package.json"));
-    const manifestPath = requireFromProject.resolve(`${dependencyName}/package.json`);
-    return await readJsonFile(manifestPath);
-  } catch {
-    return null;
-  }
+  const manifestPath = resolveFromProject(projectRoot, `${dependencyName}/package.json`);
+  return manifestPath === null ? null : await readJsonFile(manifestPath);
 }
 
 async function readJsonFile(filePath: string): Promise<Record<string, unknown> | null> {

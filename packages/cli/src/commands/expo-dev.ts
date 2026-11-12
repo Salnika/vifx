@@ -6,6 +6,7 @@ import { startExpoDevServer, startExpoGoDevServer } from "@vifx/vite-plugin-expo
 import type { VifxExpoGoDevServer } from "@vifx/vite-plugin-expo";
 import type { VifxRebuildReport } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
+import { loadProjectEnvIntoProcess } from "../lib/env.ts";
 import type { CliResult } from "../types.ts";
 import {
   DEFAULT_EXPO_DEV_HOST,
@@ -252,6 +253,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
   }
 
   const target = selectSingleExpoTarget(loaded.config.vite.targets, requestedPlatform);
+  await loadProjectEnvIntoProcess(loaded.config.projectRoot, "development");
   if (!parsed.flags["expo-go"] && target.reactNativeCompat !== "web") {
     throw new VifxError({
       code: "VIFX_EXPO_DEV_REQUIRES_WEB_COMPAT",

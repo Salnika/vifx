@@ -95,6 +95,9 @@ The repository has been recentered toward V2, but it is not complete yet.
 - `@vifx/expo-export` writes Vifx bundles, source maps, assets, `manifest.json`, and `metadata.json`, but not a live Expo Go manifest server.
 - `@vifx/metro-inspect` reads captured Metro artifacts only; it does not spawn Metro.
 
+- **2026-11-12 re-validation** on a fresh copy of HNewsPro installed with pnpm's default isolated layout: `vifx expo smoke` passes for iOS and Android (manifest 200, bundle 200 at 9.9 MB, 2,096 / 2,091 source-map sources, sampled assets 200, symbolication `sourceKnown: true`, WebSocket reload round-trip, `metro.spawnedByVifx: false`), and `vifx export:embed --platform ios --dev false` emits a 3.8 MB bundle that compiles to 5.6 MB of Hermes bytecode. Getting there required real-path package resolution and the other isolated-install fixes listed in `NEXT.md`. No device or simulator run was done in this pass.
+- The dev server and export now read `.env*` files and dynamic `app.config.js` / `.ts` with Expo CLI semantics.
+
 Remaining V2 gaps include manual Expo Go/device validation from the `exp://` URL, proving the app reaches the Expo Router root layout and navigable tabs/articles, native Expo Router runtime parity beyond bundle evaluation, runtime asset parity beyond sampled emitted assets, broader reload/device messaging beyond the tested protocol slice, and real Android device acceptance.
 
 ## Acceptance Gate
@@ -102,7 +105,7 @@ Remaining V2 gaps include manual Expo Go/device validation from the `exp://` URL
 Primary real-app gate:
 
 ```text
-/Users/alexis.salnikoff/workspace/perso/projects/software/HNewsPro
+/Users/alexis.salnikoff/dev/perso/projects/software/HNewsPro
 ```
 
 Observed project shape:

@@ -9,8 +9,8 @@
   },
   "dependencies": {
     "expo": "~56.0.0",
-    "react": "~19.2.0",
-    "react-native": "0.84.0"
+    "react": "19.2.3",
+    "react-native": "0.85.3"
   },
   "packageManager": "pnpm@11.1.2"
 }

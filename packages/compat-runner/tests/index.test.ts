@@ -11,7 +11,7 @@ test("runCompatSuite executes the vifx adapter against the compatibility cases",
   });
 
   expect(report.status).toBe("PASS");
-  expect(report.totalCases).toBe(33);
+  expect(report.totalCases).toBe(35);
   expect(report.failedCases).toBe(0);
 });
 
@@ -21,7 +21,7 @@ test("runCompatSuite executes the Metro reference adapter against the compatibil
   });
 
   expect(report.status).toBe("PASS");
-  expect(report.totalCases).toBe(33);
+  expect(report.totalCases).toBe(35);
   expect(report.failedCases).toBe(0);
 });
 

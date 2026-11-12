@@ -6,26 +6,24 @@ packages:
 catalogMode: prefer
 
 catalog:
-  "@types/node": ^24
-  cac: ^7.0.0
-  typescript: ^5
-  vite: npm:@voidzero-dev/vite-plus-core@latest
-  vitest: npm:@voidzero-dev/vite-plus-test@latest
-  vite-plus: latest
-  oxc-minify: ^0.130.0
-  ws: ^8.20.1
-  "@react-native/dev-middleware": ^0.81.6
-  "@types/ws": ^8.18.1
+  "@types/node": ^26
+  cac: ^7.1.0
+  typescript: ^7
+  # 0.25.0 is younger than pnpm's 24h minimumReleaseAge; bump once it clears.
+  tsrs: 0.24.0-ts7.1.0-beta
+  vite: npm:@voidzero-dev/vite-plus-core@1.6.0
+  vite-plus: 1.6.0
+  oxc-minify: ^0.158.0
+  ws: ^8.22.2
+  "@react-native/dev-middleware": ^0.88.1
+  "@types/ws": ^8.18.2
   react-refresh: ^0.14.2
 overrides:
-  vite: "catalog:"
-  vitest: "catalog:"
+  vite@*: "catalog:"
 peerDependencyRules:
   allowAny:
     - vite
-    - vitest
   allowedVersions:
     vite: "*"
-    vitest: "*"
 allowBuilds:
   esbuild: true

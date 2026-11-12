@@ -26,7 +26,21 @@ export const EXPO_SDK_SUPPORT: Record<string, VifxExpoSdkSupportEntry> = {
   },
   "56": {
     notes: [
-      "React Native 0.84. Hermes V1 is the default engine.",
+      "React Native 0.85. Hermes V1 is the default engine.",
+      "Experimental tier: static analysis and fixtures only; not device-validated.",
+    ],
+    tier: "experimental",
+  },
+  "57": {
+    notes: [
+      "React Native 0.86.",
+      "Experimental tier: static analysis and fixtures only; not device-validated.",
+    ],
+    tier: "experimental",
+  },
+  "58": {
+    notes: [
+      "React Native 0.88, React 19.3. Current Expo SDK.",
       "Experimental tier: static analysis and fixtures only; not device-validated.",
     ],
     tier: "experimental",

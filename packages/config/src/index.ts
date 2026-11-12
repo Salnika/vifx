@@ -20,6 +20,15 @@ import type {
   VifxVitePluginMode,
 } from "@vifx/types";
 
+export {
+  applyProjectEnv,
+  getProjectEnvFileNames,
+  loadProjectEnv,
+  type LoadProjectEnvOptions,
+  type LoadedProjectEnv,
+  type VifxEnvRecord,
+} from "./env.ts";
+
 export const VIFX_CONFIG_FILENAMES = [
   "vifx.config.ts",
   "vifx.config.mts",

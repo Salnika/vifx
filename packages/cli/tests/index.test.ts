@@ -237,7 +237,7 @@ test("expo audit --json returns the no-Metro contract matrix", async () => {
   expect(result.exitCode).toBe(0);
   expect(report.decision).toBe("partial");
   expect(report.expoVersion).toBe("~54.0.0");
-  expect(report.supportedExpoSdk).toBe("54, 55, 56");
+  expect(report.supportedExpoSdk).toBe("54, 55, 56, 57, 58");
   expect(report.workflows.map((workflow) => [workflow.id, workflow.status])).toEqual([
     ["config", "blocked"],
     ["vite-build", "blocked"],

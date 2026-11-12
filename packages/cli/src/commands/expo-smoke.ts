@@ -12,6 +12,7 @@ import type {
   VifxJsonValue,
 } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
+import { loadProjectEnvIntoProcess } from "../lib/env.ts";
 import type { CliResult } from "../types.ts";
 import {
   DEFAULT_EXPO_DEV_HOST,
@@ -469,6 +470,7 @@ async function runExpoGoSmoke(options: {
   }
 
   const target = selectSingleExpoTarget(loaded.config.vite.targets, options.platform);
+  await loadProjectEnvIntoProcess(loaded.config.projectRoot, "development");
   let server: VifxExpoGoDevServer;
 
   try {

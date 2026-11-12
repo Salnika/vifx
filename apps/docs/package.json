@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit && vitepress build",
-    "check": "vp check && tsc --noEmit",
+    "build": "tsrs --noEmit && vitepress build",
+    "check": "vp check && tsrs --noEmit",
     "dev": "vitepress dev",
     "preview": "vitepress preview"
   },
   "devDependencies": {
     "esbuild": "latest",
     "oxc-minify": "catalog:",
+    "tsrs": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",

@@ -46,7 +46,31 @@ const FIXTURE_MANIFESTS: FixtureManifest[] = [
     packageManager: "pnpm",
     features: ["expo-project", "sdk-matrix", "hermes-v1"],
     notes: [
-      "Expo SDK 56 (React Native 0.84, Hermes V1 default engine).",
+      "Expo SDK 56 (React Native 0.85, Hermes V1 default engine).",
+      "Experimental support tier: static analysis and fixtures only, not device-validated.",
+    ],
+  },
+  {
+    id: "expo-sdk57-basic",
+    title: "Expo SDK 57 Basic",
+    relativePath: "fixtures/expo-sdk57-basic",
+    projectType: "expo",
+    packageManager: "pnpm",
+    features: ["expo-project", "sdk-matrix", "hermes-v1"],
+    notes: [
+      "Expo SDK 57 (React Native 0.86).",
+      "Experimental support tier: static analysis and fixtures only, not device-validated.",
+    ],
+  },
+  {
+    id: "expo-sdk58-basic",
+    title: "Expo SDK 58 Basic",
+    relativePath: "fixtures/expo-sdk58-basic",
+    projectType: "expo",
+    packageManager: "pnpm",
+    features: ["expo-project", "sdk-matrix", "hermes-v1"],
+    notes: [
+      "Expo SDK 58 (React Native 0.88, React 19.3) — the current Expo SDK.",
       "Experimental support tier: static analysis and fixtures only, not device-validated.",
     ],
   },

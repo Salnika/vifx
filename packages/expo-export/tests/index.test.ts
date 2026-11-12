@@ -267,7 +267,9 @@ test("getSdkSupportTier classifies Expo SDK majors into honest support tiers", (
   expect(getSdkSupportTier("~54.0.0")).toMatchObject({ sdk: "54", tier: "validated" });
   expect(getSdkSupportTier("~55.0.0")).toMatchObject({ sdk: "55", tier: "experimental" });
   expect(getSdkSupportTier("~56.0.0")).toMatchObject({ sdk: "56", tier: "experimental" });
-  expect(getSdkSupportTier("~57.0.0")).toMatchObject({ sdk: "57", tier: "unsupported" });
+  expect(getSdkSupportTier("~57.0.0")).toMatchObject({ sdk: "57", tier: "experimental" });
+  expect(getSdkSupportTier("~58.0.25")).toMatchObject({ sdk: "58", tier: "experimental" });
+  expect(getSdkSupportTier("~59.0.0")).toMatchObject({ sdk: "59", tier: "unsupported" });
   expect(getSdkSupportTier(null)).toMatchObject({ sdk: null, tier: "unknown" });
 
   const experimentalNotes = getSdkSupportTier("~55.0.0").notes.join(" ");
@@ -296,6 +298,19 @@ test("evaluateExpoNoMetroContract reports SDK 56 on the experimental tier", asyn
   expect(result.sdkSupport.tier).toBe("experimental");
   expect(result.sdkSupport.sdk).toBe("56");
   expect(result.warnings.join(" ")).toContain("not device-validated");
+});
+
+test("evaluateExpoNoMetroContract reports the current Expo SDK (58) on the experimental tier", async () => {
+  const result = await evaluateExpoNoMetroContract({
+    projectRoot: path.join(FIXTURE_ROOT, "expo-sdk58-basic"),
+  });
+
+  expect(result.expoVersion).toBe("~58.0.0");
+  expect(result.reactNativeVersion).toBe("0.88.1");
+  expect(result.sdkSupport.tier).toBe("experimental");
+  expect(result.sdkSupport.sdk).toBe("58");
+  expect(result.warnings.join(" ")).toContain("not device-validated");
+  expect(result.warnings.join(" ")).not.toContain("outside");
 });
 
 test("evaluateExpoNoMetroContract keeps explicit supported SDK flag semantics", async () => {
