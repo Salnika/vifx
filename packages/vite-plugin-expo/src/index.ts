@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { access, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import {
   createServer as createHttpServer,
   type IncomingMessage,
@@ -22,7 +22,7 @@ import {
   isSupportedAssetFile,
 } from "@vifx/asset-registry";
 import { VifxError } from "@vifx/errors";
-import { resolveProjectImportSpecifier } from "@vifx/platform-resolver";
+import { invalidateResolverPath, resolveProjectImportSpecifier } from "@vifx/platform-resolver";
 import { symbolicateStackFrame } from "@vifx/source-map-tools";
 import {
   extractMetroStagingUserSlices,
@@ -38,6 +38,7 @@ import {
   resolveBuildMinify,
   resolveBundleMode,
   resolveOutputOptions,
+  VIFX_HMR_STATE_GLOBAL,
   VIFX_HMR_URL_GLOBAL,
 } from "@vifx/vite-plugin-react-native";
 import type { TransformCache } from "@vifx/vite-plugin-react-native";
@@ -50,6 +51,7 @@ import type {
   VifxExpoPluginOptions,
   VifxJsonObject,
   VifxJsonValue,
+  VifxPlatform,
   VifxRebuildPhaseTimings,
   VifxRebuildReport,
   VifxSerializedModule,
@@ -60,8 +62,10 @@ import {
   resolveDevClientScheme,
 } from "./dev-client.ts";
 import { resolveExpoAppConfig } from "./app-config.ts";
+import { summarizeBuildError } from "./build-error.ts";
+import { DEV_BUNDLE_SCOPE, startExpoDevEngine, type ExpoDevEngine } from "./dev-engine.ts";
 import { createDevtools, type VifxExpoDevtools } from "./devtools.ts";
-import { createHotChannel, createHotErrorPayload } from "./hot.ts";
+import { createHotChannel, createHotErrorPayload, type VifxHotClient } from "./hot.ts";
 import { createBundleWatcher } from "./watch.ts";
 import { createExpoGoMessageChannel } from "./websocket.ts";
 
@@ -114,10 +118,30 @@ export interface StartExpoDevServerOptions extends Omit<VifxExpoPluginOptions, "
    * from {@link VifxExpoPluginOptions}.)
    */
   onRebuild?: (report: VifxRebuildReport) => void;
+  /**
+   * A `console.*` call made by a connected app, forwarded over `/hot` (what
+   * Metro prints as `LOG` / `WARN` / `ERROR` lines). Each argument arrives
+   * already formatted as a string.
+   */
+  onClientLog?: (log: { data: string[]; level: string }) => void;
   /** User Vite/Rollup plugins to append. Reserved for the plugin workstream. */
   userPlugins?: import("vite").Plugin[];
   /** Use the incremental rebuild path. Reserved for the HMR PoC workstream. */
   incremental?: boolean;
+  /**
+   * Development, default (`hoisted`) format: serve through Rolldown's
+   * incremental dev engine — a save is compiled into a Fast Refresh patch
+   * instead of a full rebuild. On by default; `false` (or `VIFX_DEV_ENGINE=0`)
+   * keeps the rebuild-and-reload loop. The server also falls back to that loop
+   * by itself if the engine cannot start.
+   */
+  devEngine?: boolean;
+  /**
+   * Resolve as soon as the server listens, building the first bundle in the
+   * background (requests wait for it), like `expo start`. Off by default: the
+   * start then resolves once the first bundle is built and rejects if it fails.
+   */
+  lazyStart?: boolean;
 }
 
 /**
@@ -1051,7 +1075,12 @@ async function createExpoBuildInputEntry(projectRoot: string, outDir: string, en
   const importSpecifier = isPathLikeSpecifier(entry)
     ? `./${relativeFrom(path.dirname(inputPath), path.resolve(projectRoot, entry))}`
     : entry;
+  // React Native's own polyfill list (`@react-native/js-polyfills`), in its
+  // order. `console` routes console.* to the native log (Xcode, logcat) and
+  // marks it as polyfilled, which is what makes React Native forward logs to
+  // the dev server; without it they only reach an attached debugger.
   const preludeSpecifiers = resolveProjectImportSpecifiers(projectRoot, [
+    "@react-native/js-polyfills/console",
     "@react-native/js-polyfills/error-guard",
   ]);
 
@@ -1225,6 +1254,106 @@ export async function buildExpoBundle(
     };
   }
 
+  await build(
+    await createHoistedExpoViteConfig({
+      absoluteOutDir,
+      entry,
+      options,
+      outDir,
+      projectRoot,
+      resolvePlatform,
+      userResolveRequest,
+      userResult,
+    }),
+  );
+
+  const bundlePath = path.join(absoluteOutDir, "index.bundle");
+  const sourceMapPath = `${bundlePath}.map`;
+  const appConfigPath = await findExpoAppConfig(projectRoot, options.appConfigPath).catch(
+    () => undefined,
+  );
+  const bundleStats = await stat(bundlePath);
+  const assets = await collectEmittedExpoAssets({
+    absoluteOutDir,
+    projectRoot,
+  });
+
+  return {
+    appConfigPath: appConfigPath ? relativeFrom(projectRoot, appConfigPath) : undefined,
+    assets,
+    bundle: {
+      path: relativeFrom(projectRoot, bundlePath),
+      sizeBytes: bundleStats.size,
+    },
+    entry,
+    mode: "expo",
+    platform: options.platform,
+    projectRoot,
+    runtime: null,
+    sourceMap: await readSourceMapArtifact(projectRoot, sourceMapPath),
+  };
+}
+
+/**
+ * Resolves the scope-hoisted build's Vite config from plugin options alone
+ * (user config loading included), for the dev engine.
+ */
+async function resolveHoistedExpoViteConfig(
+  options: VifxExpoPluginOptions,
+): Promise<{ absoluteOutDir: string; viteConfig: InlineConfig }> {
+  const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
+  const entry = options.entry ?? "./index.js";
+  const outDir = options.outDir ?? `.vifx/expo/${options.platform}`;
+  const absoluteOutDir = path.resolve(projectRoot, outDir);
+  const resolvePlatform = options.resolvePlatform ?? options.platform;
+  const {
+    userResult,
+    diagnostics,
+    resolveRequest: configResolveRequest,
+  } = await prepareUserViteConfig({
+    projectRoot,
+    configFile: options.userViteConfig,
+    command: "build",
+    mode: resolveBundleMode(options),
+    resolvePlatform,
+  });
+  for (const diagnostic of diagnostics) {
+    warnUserViteConfigDiagnostic(diagnostic);
+  }
+
+  return {
+    absoluteOutDir,
+    viteConfig: await createHoistedExpoViteConfig({
+      absoluteOutDir,
+      entry,
+      options,
+      outDir,
+      projectRoot,
+      resolvePlatform,
+      userResolveRequest: options.userResolveRequest ?? configResolveRequest ?? undefined,
+      userResult,
+    }),
+  };
+}
+
+/**
+ * The Vite config of the scope-hoisted Expo native bundle (the default
+ * format), with the user's `vite.config.vifx.*` merged in. Shared by the
+ * one-shot build and by the dev engine, so both bundle through the very same
+ * plugins and options.
+ */
+async function createHoistedExpoViteConfig(input: {
+  absoluteOutDir: string;
+  entry: string;
+  options: VifxExpoPluginOptions;
+  outDir: string;
+  projectRoot: string;
+  resolvePlatform: VifxPlatform;
+  userResolveRequest: VifxExpoPluginOptions["userResolveRequest"];
+  userResult: Awaited<ReturnType<typeof prepareUserViteConfig>>["userResult"];
+}): Promise<InlineConfig> {
+  const { absoluteOutDir, entry, options, outDir, projectRoot, resolvePlatform } = input;
+  const { userResolveRequest, userResult } = input;
   const inputEntry = await createExpoBuildInputEntry(projectRoot, absoluteOutDir, entry);
 
   // Production parity for the Expo native bundle path. Development keeps the
@@ -1240,7 +1369,7 @@ export async function buildExpoBundle(
           moduleFormat: "hoisted",
           platform: options.platform,
         })
-      : { entryFileNames: "index.bundle", format: "es" as const };
+      : { entryFileNames: "index.bundle", format: "es" as const, ...DEV_BUNDLE_SCOPE };
 
   const hoistedConfig: InlineConfig = {
     appType: "custom",
@@ -1285,38 +1414,10 @@ export async function buildExpoBundle(
     root: projectRoot,
   };
 
-  await build(
-    mergeWithVifx(userResult, hoistedConfig, {
-      resolvePlatform,
-      warn: warnUserViteConfigDiagnostic,
-    }),
-  );
-
-  const bundlePath = path.join(absoluteOutDir, "index.bundle");
-  const sourceMapPath = `${bundlePath}.map`;
-  const appConfigPath = await findExpoAppConfig(projectRoot, options.appConfigPath).catch(
-    () => undefined,
-  );
-  const bundleStats = await stat(bundlePath);
-  const assets = await collectEmittedExpoAssets({
-    absoluteOutDir,
-    projectRoot,
+  return mergeWithVifx(userResult, hoistedConfig, {
+    resolvePlatform,
+    warn: warnUserViteConfigDiagnostic,
   });
-
-  return {
-    appConfigPath: appConfigPath ? relativeFrom(projectRoot, appConfigPath) : undefined,
-    assets,
-    bundle: {
-      path: relativeFrom(projectRoot, bundlePath),
-      sizeBytes: bundleStats.size,
-    },
-    entry,
-    mode: "expo",
-    platform: options.platform,
-    projectRoot,
-    runtime: null,
-    sourceMap: await readSourceMapArtifact(projectRoot, sourceMapPath),
-  };
 }
 
 /**
@@ -1428,6 +1529,9 @@ async function listen(server: HttpServer, host: string, port: number) {
   });
 }
 
+/** AppRegistry's `Running "main" with {...}` line (both wordings RN has used). */
+const APP_REGISTRY_STARTUP_LOG = /^Running (?:application )?"[^"]*" with /u;
+
 export async function startExpoGoDevServer(
   options: StartExpoDevServerOptions,
 ): Promise<VifxExpoGoDevServer> {
@@ -1447,7 +1551,14 @@ export async function startExpoGoDevServer(
     options.transformCache === false
       ? undefined
       : ((options.transformCacheInstance as TransformCache | undefined) ??
-        createReactNativeTransformCache(projectRoot));
+        createReactNativeTransformCache(projectRoot, {
+          // The rebuild-everything loop asks for every module on each save;
+          // the dev engine only ever re-transforms what changed.
+          memory:
+            (options.moduleFormat ?? "hoisted") !== "hoisted" ||
+            options.devEngine === false ||
+            process.env.VIFX_DEV_ENGINE === "0",
+        }));
   const bundleOptions: VifxExpoPluginOptions = {
     ...options,
     entry,
@@ -1461,18 +1572,358 @@ export async function startExpoGoDevServer(
     shimReactNative: options.shimReactNative ?? false,
     transformCacheInstance,
   };
-  const bundle = await buildExpoBundle(bundleOptions);
-  let servedBundle = await loadExpoGoServedBundle(projectRoot, bundle);
-  // Fast Refresh is opt-in: it engages only for a development metro-format bundle
-  // (bundle.moduleGraph is populated). The default hoisted path leaves this off
-  // and keeps its full-reload-on-save behavior byte-for-byte.
-  const fastRefreshMode =
-    (bundleOptions.moduleFormat ?? "hoisted") === "metro" &&
-    resolveBundleMode(bundleOptions) !== "production";
-  let prevModuleIds = bundle.moduleGraph?.moduleIds;
-  let prevModules: readonly VifxSerializedModule[] = bundle.moduleGraph?.modules ?? [];
-  let hmrRevision = 0;
+  const absoluteOutDir = path.resolve(projectRoot, outDir);
+  const isDevelopment = resolveBundleMode(bundleOptions) !== "production";
+  const isHoistedFormat = (bundleOptions.moduleFormat ?? "hoisted") === "hoisted";
+  const messageChannel = createExpoGoMessageChannel();
   let rebuildCycle = 0;
+  // When the project watcher last saw a file change; lets the dev engine's
+  // update report say how long the save took to reach the app.
+  let lastChangeSeenAt = 0;
+
+  // Dev engine (development, default format): each app introduces itself on
+  // `/hot`, receives the patches compiled for it and acknowledges them.
+  let engine: ExpoDevEngine | null = null;
+  const engineClientIds = new Map<VifxHotClient, string>();
+  const engineClients = new Map<string, VifxHotClient>();
+  const hotChannel = createHotChannel({
+    onDisconnect(client) {
+      const clientId = engineClientIds.get(client);
+      if (clientId !== undefined) {
+        engineClientIds.delete(client);
+        engineClients.delete(clientId);
+        engine?.removeClient(clientId);
+      }
+    },
+    onMessage(client, message) {
+      if (typeof message !== "object" || message === null) {
+        return;
+      }
+      const {
+        clientId,
+        data,
+        filename,
+        level,
+        message: failure,
+        reason,
+        rerun,
+        seq,
+        session,
+        type,
+      } = message as Record<string, unknown>;
+      if (type === "log" && typeof level === "string" && Array.isArray(data)) {
+        const items = data.map((item) => (typeof item === "string" ? item : String(item)));
+        // React Native announces every start with the whole launch payload
+        // (the manifest included): noise, which Expo CLI drops as well.
+        if (items.length === 1 && APP_REGISTRY_STARTUP_LOG.test(items[0] ?? "")) {
+          return;
+        }
+        options.onClientLog?.({ data: items, level });
+        return;
+      }
+      if (type === "vifx:hello" && typeof clientId === "string") {
+        // An app that was already running reconnects as soon as the server
+        // listens, which is before its first build is done: answer it then.
+        void firstBuild.attempt.then(
+          () => {
+            if (engine === null || !hotChannel.isConnected(client)) {
+              return;
+            }
+            // A patch is a delta from "every save so far". An app whose bundle
+            // came from another server process, or that missed a save while
+            // its socket was down, cannot be patched: it gets the current
+            // bundle.
+            const staleReason =
+              session !== engineSession.id
+                ? "The dev server restarted"
+                : seq !== engineSession.seq
+                  ? "The app missed an update while it was disconnected"
+                  : null;
+            if (staleReason !== null) {
+              hotChannel.sendTo(client, { body: { reason: staleReason }, type: "vifx:reload" });
+              return;
+            }
+            engineClientIds.set(client, clientId);
+            engineClients.set(clientId, client);
+            engine.registerClient(clientId);
+          },
+          () => undefined,
+        );
+        return;
+      }
+      if (engine === null) {
+        return;
+      }
+      if (type === "vifx:delivered" && typeof filename === "string") {
+        engine.notifyPatchDelivered(filename);
+        settleEngineUpdate({
+          hmr: "fast-refresh",
+          ...(typeof rerun === "number" ? { moduleCount: rerun } : {}),
+        });
+      } else if (type === "vifx:reload" && typeof reason === "string") {
+        // The app could not apply its patch in place and is reloading itself.
+        if (!settleEngineUpdate({ hmr: "reload", reason })) {
+          reportEngineUpdate({ hmr: "reload", reason });
+        }
+      } else if (type === "vifx:failed" && typeof failure === "string") {
+        settleEngineUpdate({ error: failure, hmr: "error" });
+      }
+    },
+  });
+
+  type EngineUpdateReport = Pick<
+    VifxRebuildReport,
+    "changedPaths" | "error" | "hmr" | "moduleCount" | "reason"
+  >;
+
+  // The save whose patch is on its way to the apps. It is reported once an app
+  // says what it did with it (applied, reloaded, failed), so the line shows
+  // the outcome and the time until the edit was on screen; an app that never
+  // answers must not hold the report back for long.
+  // Identifies this server process and counts the saves its engine processed:
+  // written into every served bundle, sent back by the app on `/hot`.
+  const engineSession = { id: randomUUID(), seq: 0 };
+  const ENGINE_UPDATE_ACK_TIMEOUT_MS = 1500;
+  // Set from an engine callback, read from the next one: hence a holder.
+  const engineReload: { reason: string | null } = { reason: null };
+  let pendingEngineUpdate: { changedPaths: string[]; timer: NodeJS.Timeout } | null = null;
+  const settleEngineUpdate = (report: EngineUpdateReport): boolean => {
+    if (pendingEngineUpdate === null) {
+      return false;
+    }
+    const { changedPaths, timer } = pendingEngineUpdate;
+    pendingEngineUpdate = null;
+    clearTimeout(timer);
+    reportEngineUpdate({ changedPaths, ...report });
+    return true;
+  };
+  const awaitEngineUpdateOutcome = (changedPaths: string[]) => {
+    settleEngineUpdate({ hmr: "fast-refresh" });
+    const timer = setTimeout(() => {
+      settleEngineUpdate({ hmr: "fast-refresh" });
+    }, ENGINE_UPDATE_ACK_TIMEOUT_MS);
+    timer.unref();
+    pendingEngineUpdate = { changedPaths, timer };
+  };
+
+  const reportEngineUpdate = (report: EngineUpdateReport) => {
+    rebuildCycle += 1;
+    const elapsedMs = performance.now() - lastChangeSeenAt;
+    // Only a save seen moments ago is attributed to this update.
+    const totalMs = lastChangeSeenAt > 0 && elapsedMs < 2000 ? elapsedMs : 0;
+    options.onRebuild?.({
+      cycle: rebuildCycle,
+      engine: true,
+      phases: { transformMs: totalMs, serializeMs: 0, writeMs: 0, totalMs },
+      ...report,
+    });
+  };
+
+  const devEngineWanted =
+    isDevelopment &&
+    isHoistedFormat &&
+    options.devEngine !== false &&
+    process.env.VIFX_DEV_ENGINE !== "0";
+
+  // State of the first build. The server listens before it exists (see the
+  // end of this function); requests wait on `readiness`.
+  let servedBundle!: ExpoGoServedBundle;
+  let servedEngineVersion = 0;
+  let servedEngineAssetsVersion = 0;
+  // The engine's assets live beside its output directory, not in it: Rolldown
+  // empties the output on every build (see StartExpoDevEngineOptions).
+  const engineAssetsRoot = `${absoluteOutDir}.assets`;
+  let prevModuleIds: ReadonlyMap<string, number> | undefined;
+  let prevModules: readonly VifxSerializedModule[] = [];
+  let ready = false;
+  let lastEngineError: string | null = null;
+  // The first build. Requests wait on `attempt`; a build that fails because
+  // the project does not compile yet is tried again on the next save (see the
+  // watcher), which is why the promise is replaceable.
+  const firstBuild: { attempt: Promise<void>; failed: boolean } = {
+    attempt: Promise.resolve(),
+    failed: false,
+  };
+  const reportFirstBuildFailure = (error: unknown): void => {
+    console.error(
+      `[vifx] The Expo Go bundle failed to build; it will be built again on the next save.\n${summarizeBuildError(error)}`,
+    );
+  };
+  const startFirstBuild = (): Promise<void> => {
+    firstBuild.failed = false;
+    const attempt = initialize();
+    firstBuild.attempt = attempt;
+    // Observed by each request; never an unhandled rejection on its own.
+    attempt.catch(() => {
+      firstBuild.failed = true;
+    });
+    return attempt;
+  };
+
+  const initialize = async (): Promise<void> => {
+    // Why the engine could not start, if it could not: only worth a warning
+    // once the classic build shows the project itself compiles.
+    let engineStartError: unknown = null;
+    if (devEngineWanted) {
+      try {
+        // The engine's watcher reports real paths. Module ids must be real
+        // paths too, or a project reached through a symlink (macOS's /tmp, a
+        // linked workspace) would never see its own edits.
+        const engineProjectRoot = await realpath(projectRoot).catch(() => projectRoot);
+        const engineBuild = await resolveHoistedExpoViteConfig({
+          ...bundleOptions,
+          fastRefresh: true,
+          projectRoot: engineProjectRoot,
+          reuseResolverCaches: true,
+        });
+        engine = await startExpoDevEngine({
+          assetsRoot: engineAssetsRoot,
+          bundleFileName: "index.bundle",
+          onChange: (changedFiles) => {
+            lastEngineError = null;
+            // The patches of this save (already sent, see onPatch) carry seq + 1.
+            engineSession.seq += 1;
+            const changedPaths = changedFiles.map((file) =>
+              toPosixPath(path.relative(engineProjectRoot, file)),
+            );
+            // Metro-shaped envelope around the change, for anything listening.
+            hotChannel.broadcastUpdateStart();
+            const reloadReason = engineReload.reason;
+            engineReload.reason = null;
+            if (reloadReason !== null) {
+              // The engine itself ruled the edit out of Fast Refresh and the
+              // apps were told to reload (see onReloadRequired).
+              reportEngineUpdate({ changedPaths, hmr: "reload", reason: reloadReason });
+              hotChannel.broadcastUpdateDone();
+              return;
+            }
+            if (engineClients.size > 0) {
+              // Each connected app has been sent its patch (see onPatch).
+              awaitEngineUpdateOutcome(changedPaths);
+              hotChannel.broadcastUpdateDone();
+              return;
+            }
+            // No app introduced itself to the engine (one that runs an older
+            // bundle, or cannot apply patches): it can only be brought up to
+            // date by reloading, once the bundle includes the change.
+            void refreshEngineBundle().then(() => {
+              messageChannel.broadcast("reload");
+              reportEngineUpdate({
+                changedPaths,
+                hmr: "reload",
+                reason: "No app is connected for Fast Refresh",
+              });
+              hotChannel.broadcastUpdateDone();
+            });
+          },
+          onError: (error) => {
+            // The patch and the bundle rebuild both trip over the same broken
+            // module: report it once.
+            if (error.message === lastEngineError) {
+              return;
+            }
+            lastEngineError = error.message;
+            hotChannel.broadcastError(createHotErrorPayload(error));
+            // Once, where the caller wants it: its report, else the console.
+            const summary = summarizeBuildError(error);
+            if (options.onRebuild) {
+              reportEngineUpdate({ error: summary, hmr: "error" });
+            } else {
+              console.error(
+                `[vifx] Expo Go update failed; still serving the last good bundle.\n${summary}`,
+              );
+            }
+          },
+          onPatch: (patch) => {
+            const client = engineClients.get(patch.clientId);
+            if (client) {
+              hotChannel.sendTo(client, {
+                body: {
+                  changedIds: patch.changedIds,
+                  code: patch.code,
+                  filename: patch.filename,
+                  // The save count the app is at once it has applied this.
+                  seq: engineSession.seq + 1,
+                  sourceURL: patch.filename,
+                },
+                type: "vifx:patch",
+              });
+            }
+          },
+          onReloadRequired: (_clientId, reason) => {
+            // Reported with the save it belongs to (onChange runs right after).
+            engineReload.reason = reason;
+            messageChannel.broadcast("reload");
+          },
+          outputDir: engineBuild.absoluteOutDir,
+          projectRoot: engineProjectRoot,
+          viteConfig: engineBuild.viteConfig,
+        });
+      } catch (error) {
+        // Never fatal: the classic build below either works (the engine is
+        // what failed) or fails on the project's own error, reported once.
+        engineStartError = error;
+        engine = null;
+      }
+    }
+
+    if (engine) {
+      const first = await engine.getBundle();
+      servedEngineVersion = first.version;
+      servedEngineAssetsVersion = first.assetsVersion;
+      servedBundle = {
+        assets: await collectEmittedExpoAssets({ absoluteOutDir: engineAssetsRoot, projectRoot }),
+        bundleSource: first.code,
+        sourceMapPath: relativeFrom(projectRoot, path.join(absoluteOutDir, "index.bundle.map")),
+        // Read from disk on demand: the engine rewrites it with every build.
+        sourceMapText: null,
+      };
+    } else {
+      const bundle = await buildExpoBundle(bundleOptions);
+      if (engineStartError !== null) {
+        console.warn(
+          `[vifx] The incremental dev engine could not start; using full rebuilds instead.\n${summarizeBuildError(engineStartError)}`,
+        );
+      }
+      servedBundle = await loadExpoGoServedBundle(projectRoot, bundle);
+      prevModuleIds = bundle.moduleGraph?.moduleIds;
+      prevModules = bundle.moduleGraph?.modules ?? [];
+    }
+    ready = true;
+  };
+
+  /** Engine mode: adopts the engine's latest bundle (rebuilding it if stale). */
+  const refreshEngineBundle = async (): Promise<void> => {
+    if (!engine) {
+      return;
+    }
+    try {
+      const latest = await engine.getBundle();
+      if (latest.version === servedEngineVersion) {
+        return;
+      }
+      servedBundle = {
+        ...servedBundle,
+        assets:
+          latest.assetsVersion === servedEngineAssetsVersion
+            ? servedBundle.assets
+            : await collectEmittedExpoAssets({ absoluteOutDir: engineAssetsRoot, projectRoot }),
+        bundleSource: latest.code,
+      };
+      servedEngineAssetsVersion = latest.assetsVersion;
+      servedEngineVersion = latest.version;
+      lastEngineError = null;
+    } catch {
+      // The build is broken (already reported): keep the last good bundle.
+    }
+  };
+
+  // Registry Fast Refresh: a development metro-format bundle (bundle.moduleGraph
+  // is populated), diffed and re-serialized on every save.
+  const fastRefreshMode = !isHoistedFormat && isDevelopment;
+  // Either Fast Refresh flavor needs the app to open the `/hot` socket.
+  const isHotSocketEnabled = () => fastRefreshMode || engine !== null;
+  let hmrRevision = 0;
   const bundleUrlPath = await createExpoGoBundleUrlPath({
     dev: resolveBundleMode(options) !== "production",
     exp,
@@ -1482,10 +1933,9 @@ export async function startExpoGoDevServer(
     projectRoot,
   });
   const sourceMapUrlPath = createExpoGoSourceMapUrlPath(bundleUrlPath);
-  const emittedAssetsRoot = path.join(projectRoot, path.dirname(bundle.bundle.path), "assets");
-  const messageChannel = createExpoGoMessageChannel();
+  // Read per request: which of the two it is depends on how the build started.
+  const emittedAssetsRoot = () => path.join(engine ? engineAssetsRoot : absoluteOutDir, "assets");
   let devtools: VifxExpoDevtools | null = null;
-  const hotChannel = createHotChannel();
 
   // Extracted/renamed in the contracts commit so the instrumentation (timing +
   // report) and incremental-HMR workstreams plug into one stable entry point.
@@ -1502,6 +1952,9 @@ export async function startExpoGoDevServer(
       const artifacts = await buildExpoBundle({
         ...bundleOptions,
         existingModuleIds: prevModuleIds,
+        // The watcher below invalidates the resolver's view of every path it
+        // reports, so a rebuild resolves from memory instead of the disk.
+        reuseResolverCaches: true,
       });
       // buildExpoBundle's rebuildTimings already sums transform+serialize+write;
       // the wall span around the build is an upper bound on it. Use the measured
@@ -1587,7 +2040,26 @@ export async function startExpoGoDevServer(
     const hostUri = `${displayHost}:${String(actualPort)}`;
     const bundleUrl = `${baseUrl}${bundleUrlPath}`;
 
+    if (requestUrl.pathname === "/status") {
+      // Answered while the first bundle is still building: the packager is up.
+      writeTextResponse(response, 200, "packager-status:running", "text/plain; charset=utf-8");
+      return;
+    }
+
+    try {
+      await firstBuild.attempt;
+    } catch (error) {
+      writeTextResponse(
+        response,
+        500,
+        `vifx could not build the bundle.\n${summarizeBuildError(error)}\n`,
+        "text/plain; charset=utf-8",
+      );
+      return;
+    }
+
     if (isManifestPath(requestUrl.pathname)) {
+      await refreshEngineBundle();
       const negotiated = negotiateManifestResponse({
         manifestJson: buildManifest({
           bundleUrl,
@@ -1606,36 +2078,41 @@ export async function startExpoGoDevServer(
       return;
     }
 
-    if (requestUrl.pathname === "/status") {
-      writeTextResponse(response, 200, "packager-status:running", "text/plain; charset=utf-8");
-      return;
-    }
-
     if (isBundlePath(requestUrl.pathname)) {
       // In Fast Refresh mode, set the /hot socket URL the injected HMR client
       // reads (hmr-client.ts stays inert without it). Prepend with NO trailing
       // newline so the prelude stays on line 0 and the line-keyed source map is
       // unchanged; the hoisted path serves bytes verbatim.
-      const bundleSource = fastRefreshMode
-        ? `globalThis.${VIFX_HMR_URL_GLOBAL}=${JSON.stringify(`ws://${hostUri}/hot`)};${servedBundle.bundleSource}`
+      await refreshEngineBundle();
+      const hotState = engine
+        ? `globalThis.${VIFX_HMR_STATE_GLOBAL}=${JSON.stringify({ seq: engineSession.seq, session: engineSession.id })};`
+        : "";
+      const bundleSource = isHotSocketEnabled()
+        ? `globalThis.${VIFX_HMR_URL_GLOBAL}=${JSON.stringify(`ws://${hostUri}/hot`)};${hotState}${servedBundle.bundleSource}`
         : servedBundle.bundleSource;
       writeTextResponse(response, 200, bundleSource, "application/javascript; charset=utf-8");
       return;
     }
 
-    if (isSourceMapPath(requestUrl.pathname) && servedBundle.sourceMapText !== null) {
-      writeTextResponse(
-        response,
-        200,
-        servedBundle.sourceMapText,
-        "application/json; charset=utf-8",
-      );
-      return;
+    if (isSourceMapPath(requestUrl.pathname)) {
+      // Engine mode keeps the map on disk (rewritten with each build) instead
+      // of holding a second multi-megabyte string in memory.
+      const sourceMapText =
+        servedBundle.sourceMapText ??
+        (engine && servedBundle.sourceMapPath
+          ? await readFile(path.resolve(projectRoot, servedBundle.sourceMapPath), "utf8").catch(
+              () => null,
+            )
+          : null);
+      if (sourceMapText !== null) {
+        writeTextResponse(response, 200, sourceMapText, "application/json; charset=utf-8");
+        return;
+      }
     }
 
     if (requestUrl.pathname.startsWith("/assets/")) {
       const assetPath = await resolveServedAssetPath({
-        emittedAssetsRoot,
+        emittedAssetsRoot: emittedAssetsRoot(),
         projectRoot,
         requestPathname: requestUrl.pathname,
       });
@@ -1688,8 +2165,26 @@ export async function startExpoGoDevServer(
   });
 
   const watcher = await createBundleWatcher({
-    ignore: [outDir],
+    // Short window: a save is one or two events, and changes that land while a
+    // rebuild is running are coalesced into the next one anyway.
+    debounceMs: 50,
+    // The engine's asset store sits beside the output directory.
+    ignore: [outDir, `${outDir}.assets`],
     onEvent: (event) => {
+      if (event.type === "change") {
+        // Any event may be a file appearing or disappearing (editors save by
+        // rename), so the resolver re-reads that directory on the next build.
+        const changedPath = path.resolve(projectRoot, event.filePath);
+        invalidateResolverPath(changedPath);
+        lastChangeSeenAt = performance.now();
+        // An asset is not a module the engine can patch: rebuild and reload.
+        if (engine && isSupportedAssetFile(changedPath)) {
+          void engine
+            .requestFullBuild()
+            .then(() => messageChannel.broadcast("reload"))
+            .catch(() => undefined);
+        }
+      }
       if (event.type === "watch-error") {
         console.error(
           "[vifx] Expo Go file watching is unavailable; automatic reloads are disabled.",
@@ -1698,7 +2193,33 @@ export async function startExpoGoDevServer(
       }
     },
     projectRoot,
-    rebuild: runExpoGoRebuild,
+    // The dev engine watches the module graph itself; this watcher then only
+    // keeps the resolver's view of the disk current (see onEvent).
+    // Nothing to rebuild either until the first bundle exists.
+    rebuild: async () => {
+      if (!ready) {
+        // The project did not compile when the server started: now that a
+        // file changed, build again, and bring in the apps that were waiting.
+        if (firstBuild.failed) {
+          await startFirstBuild().then(
+            () => {
+              messageChannel.broadcast("reload");
+            },
+            (error: unknown) => {
+              reportFirstBuildFailure(error);
+            },
+          );
+        }
+        return;
+      }
+      if (engine === null) {
+        await runExpoGoRebuild();
+        return;
+      }
+
+      // Engine mode: the engine watches the module graph and reports each
+      // save itself (see `onChange` above); nothing to do from here.
+    },
   });
 
   await listen(server, host, strictPort ? port : 0);
@@ -1718,32 +2239,55 @@ export async function startExpoGoDevServer(
     symbolicate: (stack) =>
       symbolicateStack({
         projectRoot,
-        sourceMapPath: bundle.sourceMap?.path ?? null,
+        sourceMapPath: ready ? servedBundle.sourceMapPath : null,
         stack,
       }),
   });
+
+  const close = async () => {
+    await devtools?.close();
+    await watcher.close();
+    await engine?.close();
+    await hotChannel.close();
+    messageChannel.closeAll();
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  };
+
+  // The server already answers `/status`; every other request waits for the
+  // first bundle. With `lazyStart` the caller gets its URLs right away (like
+  // `expo start`) and a failed build is reported on the terminal and to the
+  // requests that waited for it. Otherwise the build is awaited here and its
+  // failure rejects the start, as it always has.
+  const initialized = startFirstBuild();
+  if (options.lazyStart === true) {
+    initialized.catch(reportFirstBuildFailure);
+  } else {
+    try {
+      await initialized;
+    } catch (error) {
+      await close().catch(() => undefined);
+      throw error;
+    }
+  }
+  // Fast Refresh is known for sure once the first build is done; before that,
+  // it is what this configuration will use unless the engine cannot start.
+  const fastRefreshEnabled = ready ? isHotSocketEnabled() : fastRefreshMode || devEngineWanted;
 
   return {
     broadcast: (method: string, params?: Record<string, unknown>) => {
       messageChannel.broadcast(method, params as VifxJsonValue | undefined);
     },
     bundleUrl: `${baseUrl}${bundleUrlPath}`,
-    close: async () => {
-      await devtools?.close();
-      await watcher.close();
-      await hotChannel.close();
-      messageChannel.closeAll();
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-      });
-    },
+    close,
     ...(devClientScheme === null
       ? {}
       : { devClientUrl: createDevClientLaunchUrl({ manifestUrl, scheme: devClientScheme }) }),
     eventsSocketUrl: `${baseUrl.replace(/^http:/u, "ws:")}/events`,
     expoGoUrl: `exp://${hostUri}`,
-    fastRefresh: fastRefreshMode,
-    hmr: fastRefreshMode ? "fast-refresh" : "reload",
+    fastRefresh: fastRefreshEnabled,
+    hmr: fastRefreshEnabled ? "fast-refresh" : "reload",
     host,
     hostUri,
     hotSocketUrl: `${baseUrl.replace(/^http:/u, "ws:")}/hot`,
@@ -1756,7 +2300,7 @@ export async function startExpoGoDevServer(
     port: actualPort,
     projectRoot,
     server,
-    sourceMapUrl: bundle.sourceMap ? `${baseUrl}${sourceMapUrlPath}` : null,
+    sourceMapUrl: !ready || servedBundle.sourceMapPath ? `${baseUrl}${sourceMapUrlPath}` : null,
     url: baseUrl,
     watching: watcher.watching,
   };

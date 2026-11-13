@@ -162,7 +162,14 @@ function findSourceMapPosition(sourceMap: VifxJsonObject) {
     sourceMap as unknown as ConstructorParameters<typeof SourceMap>[0],
   );
 
-  for (let line = 0; line < 250; line += 1) {
+  // The dev engine's bundle opens with its runtime and the module graph, which
+  // map to no source: the first mapped position can be thousands of lines in.
+  // Lines without any mapping are skipped outright, so this stays cheap.
+  const mappingLines = typeof sourceMap.mappings === "string" ? sourceMap.mappings.split(";") : [];
+  for (let line = 0; line < mappingLines.length; line += 1) {
+    if (mappingLines[line] === "") {
+      continue;
+    }
     for (let column = 0; column < 250; column += 1) {
       const entry = sourceMapInstance.findEntry(line, column);
       if ("originalSource" in entry && entry.originalSource) {

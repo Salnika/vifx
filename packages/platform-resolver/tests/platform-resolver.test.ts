@@ -332,6 +332,23 @@ test("resolves a symlinked package's dependencies from its real location", async
   const hostEntry = path.join(projectRoot, "node_modules/host/index.js");
   const storeModules = path.join(projectRoot, "node_modules/.store/host@1/node_modules");
 
+  // One identity per file: the package entry is the same module whether it is
+  // reached through the project's symlink or by its real location.
+  const viaSymlink = await resolveReactNativeModule({
+    fromFile: path.join(projectRoot, "index.js"),
+    platform: "ios",
+    projectRoot,
+    specifier: "host",
+  });
+  const viaRealPath = await resolveReactNativeModule({
+    fromFile: path.join(storeModules, "inner/index.js"),
+    platform: "ios",
+    projectRoot,
+    specifier: "host",
+  });
+  expect(viaSymlink.filePath).toBe(path.join(storeModules, "host/index.js"));
+  expect(viaRealPath.filePath).toBe(viaSymlink.filePath);
+
   // Only reachable next to the real directory: not at the project root.
   const inner = await resolveReactNativeModule({
     fromFile: hostEntry,

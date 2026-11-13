@@ -151,7 +151,9 @@ async function writeReactNativeWebPackage(projectRoot: string) {
 function findSymbolicatablePosition(sourceMap: RawSourceMap) {
   const sourceMapInstance = new SourceMap(sourceMap as SourceMapPayload);
 
-  for (let line = 0; line < 200; line += 1) {
+  // The dev engine's bundle opens with its runtime and the module graph, none
+  // of which maps to a source: the first mapped line is well past line 200.
+  for (let line = 0; line < 20_000; line += 1) {
     for (let column = 0; column < 200; column += 1) {
       const entry = sourceMapInstance.findEntry(line, column);
       if ("originalSource" in entry && entry.originalSource) {
@@ -477,7 +479,10 @@ NETWORK_SERVER_TESTS(
 
         expect(server.nativeRuntime).toBe(true);
         expect(server.metro).toBe(false);
-        expect(server.hmr).toBe("reload");
+        // The default development server runs the incremental dev engine:
+        // Fast Refresh on the scope-hoisted bundle, no Metro module registry.
+        expect(server.hmr).toBe("fast-refresh");
+        expect(server.fastRefresh).toBe(true);
         expect(server.expoGoUrl).toBe(`exp://${server.hostUri}`);
         expect(server.hostUri).toContain(`:${String(server.port)}`);
         expect(server.messageSocketUrl).toBe(`${server.url.replace(/^http:/u, "ws:")}/message`);
@@ -511,8 +516,13 @@ NETWORK_SERVER_TESTS(
         expect(manifest.metadata.platform).toBe("ios");
         expect(manifest.runtimeVersion).toBe("exposdk:54.0.0");
         expect(bundleResponse.status).toBe(200);
-        expect(bundleSource).not.toContain("native console polyfill active");
+        // React Native's polyfills, in its order: console (native logging,
+        // and what makes it forward logs to the dev server), then error-guard.
+        expect(bundleSource).toContain("native console polyfill active");
         expect(bundleSource).toContain("native error guard polyfill active");
+        expect(bundleSource.indexOf("native console polyfill active")).toBeLessThan(
+          bundleSource.indexOf("native error guard polyfill active"),
+        );
         expect(bundleSource).toContain("native expo package active");
         expect(bundleSource).toContain("runtime asset");
         expect(bundleSource).toContain('AppRegistry.registerComponent("main"');
@@ -643,7 +653,17 @@ NETWORK_SERVER_TESTS(
       expect(bundleSource).toContain("native expo package active");
       expect(bundleSource).not.toContain("react-native-web compat active");
       expect(bundleSource).not.toContain("__VIFX_WEB_RUNTIME__");
-      expect(defaultExpoGoBundle).toBe(bundleSource);
+      // Served = the bundle on disk behind the prelude the Fast Refresh client
+      // reads: the `/hot` URL, then which server built it and how many saves
+      // it includes (no newline, so line numbers still match).
+      expect(bundleSource.endsWith(defaultExpoGoBundle)).toBe(true);
+      expect(bundleSource.slice(0, bundleSource.length - defaultExpoGoBundle.length)).toMatch(
+        /^globalThis\.__VIFX_HMR_URL="ws:\/\/[^"]+\/hot";globalThis\.__VIFX_HMR_STATE=\{"seq":0,"session":"[^"]+"\};$/u,
+      );
+      // A script, in a function scope of its own: top-level declarations of
+      // the bundle must not land on the global object.
+      expect(defaultExpoGoBundle.startsWith("(function(){\n")).toBe(true);
+      expect(defaultExpoGoBundle).toMatch(/\n\}\)\(\);\n\/\/# sourceMappingURL=[^\n]+\n?$/u);
     } finally {
       await server.close();
     }

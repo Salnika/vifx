@@ -87,6 +87,24 @@ function roundMs(value: number): number {
   return Math.round(value);
 }
 
+const CLIENT_LOG_LABELS: Record<string, string> = {
+  debug: "DEBUG",
+  error: "ERROR",
+  info: "INFO",
+  log: "LOG",
+  trace: "TRACE",
+  warn: "WARN",
+};
+
+/**
+ * One `console.*` call of the app, as a terminal line: ` LOG  message`. Group
+ * markers and unknown levels are printed as plain logs.
+ */
+export function formatClientLog(log: { data: string[]; level: string }): string {
+  const label = CLIENT_LOG_LABELS[log.level] ?? "LOG";
+  return ` ${formatVifxMuted(label)}  ${log.data.join(" ")}`;
+}
+
 /**
  * One-line terminal instrumentation for a dev rebuild cycle, e.g.:
  *
@@ -99,7 +117,36 @@ function roundMs(value: number): number {
  */
 export function formatRebuildReport(report: VifxRebuildReport): string {
   if (report.hmr === "error") {
+    // Dev engine: the error is already the cause and its code frame (see
+    // summarizeBuildError); keep it readable instead of muting it into a line.
+    if (report.engine) {
+      return `${formatVifxMuted("update failed")}\n${report.error ?? "unknown"}`;
+    }
     return formatVifxMuted(`rebuild #${String(report.cycle)} failed: ${report.error ?? "unknown"}`);
+  }
+
+  if (report.engine) {
+    // Dev engine: one save, one line — what changed, what the app did with it.
+    const files = report.changedPaths ?? [];
+    const what =
+      files.length === 0
+        ? ""
+        : files.length === 1
+          ? `  ${files[0] ?? ""}`
+          : `  ${files[0] ?? ""} (+${String(files.length - 1)})`;
+    const took = report.phases.totalMs > 0 ? `  ${String(roundMs(report.phases.totalMs))}ms` : "";
+    if (report.hmr === "reload") {
+      return `${formatVifxMuted("reload")}${what}${took}${
+        report.reason ? `  ${formatVifxMuted(`— ${report.reason}`)}` : ""
+      }`;
+    }
+    // How far the edit propagated: one module is the file itself; a large
+    // number means it feeds many importers (a shared constant, a context).
+    const reran =
+      report.moduleCount !== undefined && report.moduleCount > 1
+        ? `  ${formatVifxMuted(`(${String(report.moduleCount)} modules re-run)`)}`
+        : "";
+    return `${formatVifxMuted("fast refresh")}${what}${took}${reran}`;
   }
 
   const { phases, cache } = report;

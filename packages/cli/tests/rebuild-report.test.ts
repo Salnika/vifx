@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import type { VifxRebuildReport } from "@vifx/types";
-import { formatRebuildReport } from "../src/commands/expo-shared.ts";
+import { formatClientLog, formatRebuildReport } from "../src/commands/expo-shared.ts";
 
 // Strip ANSI so assertions are stable whether or not chalk emits color (the
 // phase labels are dimmed via formatVifxMuted/chalk.gray). The escape byte is
@@ -84,4 +84,70 @@ test("formatRebuildReport renders an error cycle with its reason instead of timi
   );
 
   expect(line).toBe("rebuild #4 failed: boom");
+});
+
+// Dev engine: one save, one line saying what the app did with it.
+const ENGINE: VifxRebuildReport = {
+  changedPaths: ["app/index.tsx"],
+  cycle: 7,
+  engine: true,
+  hmr: "fast-refresh",
+  phases: { transformMs: 32.6, serializeMs: 0, writeMs: 0, totalMs: 32.6 },
+};
+
+test("formatRebuildReport renders a dev engine Fast Refresh as file and time to the app", () => {
+  expect(plain(formatRebuildReport(ENGINE))).toBe("fast refresh  app/index.tsx  33ms");
+  // A single module re-run is the file itself: nothing more to say.
+  expect(plain(formatRebuildReport({ ...ENGINE, moduleCount: 1 }))).toBe(
+    "fast refresh  app/index.tsx  33ms",
+  );
+});
+
+test("formatRebuildReport says how far a dev engine edit propagated", () => {
+  const line = plain(
+    formatRebuildReport({
+      ...ENGINE,
+      changedPaths: ["src/endpoints.ts", "src/other.ts"],
+      moduleCount: 32,
+    }),
+  );
+
+  expect(line).toBe("fast refresh  src/endpoints.ts (+1)  33ms  (32 modules re-run)");
+});
+
+test("formatRebuildReport gives the reason of a dev engine reload", () => {
+  const line = plain(
+    formatRebuildReport({ ...ENGINE, hmr: "reload", reason: "The dev server restarted" }),
+  );
+
+  expect(line).toBe("reload  app/index.tsx  33ms  — The dev server restarted");
+  // No file and no timing when the reload did not come from a save.
+  expect(
+    plain(
+      formatRebuildReport({
+        cycle: 1,
+        engine: true,
+        hmr: "reload",
+        phases: { transformMs: 0, serializeMs: 0, writeMs: 0, totalMs: 0 },
+        reason: "The dev server restarted",
+      }),
+    ),
+  ).toBe("reload  — The dev server restarted");
+});
+
+test("formatRebuildReport keeps a dev engine compile error readable", () => {
+  const error = "SyntaxError: /app/index.tsx: Unexpected token (2:17)\n\n> 2 | const broken = ;";
+  const text = plain(
+    formatRebuildReport({ ...ENGINE, changedPaths: undefined, error, hmr: "error" }),
+  );
+
+  expect(text).toBe(`update failed\n${error}`);
+});
+
+test("formatClientLog labels an app console call the way Metro does", () => {
+  expect(plain(formatClientLog({ data: ["hello", "{a: 1}"], level: "log" }))).toBe(
+    " LOG  hello {a: 1}",
+  );
+  expect(plain(formatClientLog({ data: ["careful"], level: "warn" }))).toBe(" WARN  careful");
+  expect(plain(formatClientLog({ data: ["group"], level: "groupCollapsed" }))).toBe(" LOG  group");
 });

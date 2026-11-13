@@ -156,6 +156,65 @@ test("project Babel runs the project's real worklets plugin over app AND library
   expect(bundleSource).toContain('__workletHash = "WORKLET_libraryWorklet"');
 });
 
+test("project Babel is told whether the build is development or production", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-rn-babel-mode-"));
+
+  await linkRealBabelCore(projectRoot);
+  await writeWorkletsPlugin(path.join(projectRoot, "node_modules", "react-native-worklets"));
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify({ name: "babel-mode-project" }, null, 2),
+  );
+  // Reports what the config sees — the two signals presets and project configs
+  // branch on: `caller.isDev` (babel-preset-expo picks the JSX runtime from it)
+  // and `api.env()` (e.g. `transform-remove-console` only in production).
+  await writeFile(
+    path.join(projectRoot, "babel.config.js"),
+    [
+      "module.exports = function (api) {",
+      "  const isDev = api.caller((caller) => Boolean(caller && caller.isDev));",
+      "  const env = api.env();",
+      "  const probe = () => ({",
+      "    visitor: {",
+      "      Identifier(nodePath) {",
+      '        if (nodePath.node.name === "__BABEL_MODE_PROBE__") {',
+      "          nodePath.replaceWith({",
+      '            type: "StringLiteral",',
+      '            value: "isDev=" + isDev + ";env=" + env,',
+      "          });",
+      "        }",
+      "      },",
+      "    },",
+      "  });",
+      '  return { plugins: ["react-native-worklets/plugin", probe] };',
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    'console.log("babel mode", __BABEL_MODE_PROBE__);\n',
+  );
+
+  const build = async (mode: "development" | "production") => {
+    const bundle = await buildReactNativeBundle({
+      entry: "./index.js",
+      mode,
+      outDir: `.vifx/babel-mode-${mode}`,
+      platform: "ios",
+      projectRoot,
+    });
+    return readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+  };
+
+  expect(await build("development")).toContain("isDev=true;env=development");
+  // A release build must not be transformed as development: that ships the dev
+  // JSX runtime and source locations, and skips production-only plugins.
+  const production = await build("production");
+  expect(production).toContain("isDev=false;env=production");
+  expect(production).not.toContain("isDev=true");
+});
+
 test("project Babel leaves non-worklet sources untouched (no spurious hashes)", async () => {
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-rn-babel-noworklet-"));
 

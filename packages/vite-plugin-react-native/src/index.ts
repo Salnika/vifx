@@ -18,6 +18,8 @@ import {
 import { VifxError } from "@vifx/errors";
 import { compileHermesBytecode } from "@vifx/hermes-tools";
 import {
+  clearResolverCaches,
+  invalidateResolverPath,
   listFrameworkHostManifests,
   resolveFromProject,
   resolveReactNativeModule,
@@ -57,6 +59,7 @@ import {
   type TransformDecision,
 } from "./babel/pipeline.ts";
 import { loadProjectBabelRuntime } from "./babel/project-config.ts";
+import { getSharedBabelWorkerPool } from "./babel/worker-pool.ts";
 import {
   isGatedNativeCompatModule,
   isNativeCompatMockEnabled,
@@ -77,10 +80,23 @@ import {
   resolvePublicEnv,
 } from "./modes.ts";
 import { buildModuleRegistryBundle } from "./module-registry/index.ts";
-import { applyReactRefreshTransform, shouldApplyReactRefresh } from "./react-refresh.ts";
+import {
+  applyReactRefreshTransform,
+  isProjectSource,
+  resolveReactRefreshBabelPlugin,
+  shouldApplyReactRefresh,
+} from "./react-refresh.ts";
 import { VIFX_HMR_CLIENT_SOURCE } from "./hmr-client.ts";
+import { wrapModuleForFastRefresh } from "./dev-runtime.ts";
+
+export {
+  buildVifxDevRuntimeSource,
+  VIFX_DEV_RUNTIME_GLOBAL,
+  VIFX_REFRESH_GLOBAL,
+  wrapModuleForFastRefresh,
+} from "./dev-runtime.ts";
 import { buildVifxPluginPipeline } from "./pipeline.ts";
-export { VIFX_HMR_URL_GLOBAL } from "./hmr-client.ts";
+export { VIFX_HMR_STATE_GLOBAL, VIFX_HMR_URL_GLOBAL } from "./hmr-client.ts";
 export { createIndirectEvalPlugin } from "./indirect-eval.ts";
 export { buildVifxPluginPipeline } from "./pipeline.ts";
 export type { TransformCache } from "@vifx/transform-cache";
@@ -270,7 +286,7 @@ interface ReactNativePluginState {
    */
   compatOrigins: Map<string, string>;
   babelInPackages: string[];
-  emittedAssetFileNames: Set<string>;
+  emittedAssetFileNames: Map<string, string>;
   compatPreview: boolean;
   conditions: string[];
   entry: string;
@@ -290,6 +306,9 @@ interface ReactNativePluginState {
   publicEnv: Record<string, string>;
   reactNativeCompat: NonNullable<VifxReactNativePluginOptions["reactNativeCompat"]>;
   resolvePlatform: VifxPlatform;
+  reuseResolverCaches: boolean;
+  /** Project modules are instrumented for the Rolldown dev engine's Fast Refresh. */
+  fastRefresh: boolean;
   shimJsxRuntime: boolean;
   shimReact: boolean;
   shimReactNative: boolean;
@@ -598,7 +617,8 @@ async function resolveNativeAssetRegistryImport(
 async function renderNativeAssetModule(options: {
   assetExtensions: readonly string[];
   emitFile: (file: { fileName: string; source: Buffer; type: "asset" }) => void;
-  emittedFileNames: Set<string>;
+  /** Content hash of each asset file already emitted, by output file name. */
+  emittedFileNames: Map<string, string>;
   filePath: string;
   projectRoot: string;
   /** Specifier the registry is imported through (see resolveNativeAssetRegistryImport). */
@@ -614,11 +634,13 @@ async function renderNativeAssetModule(options: {
   for (const variant of group.variants) {
     const scaleSuffix = variant.scale > 1 ? `@${variant.scale}x` : "";
     const fileName = `assets/${group.name}${scaleSuffix}.${group.type}`;
-    if (options.emittedFileNames.has(fileName)) {
+    // Emitted once per content: a long-lived build (the dev engine) loads this
+    // module again when the image itself was edited, and must emit it again.
+    if (options.emittedFileNames.get(fileName) === variant.hash) {
       continue;
     }
 
-    options.emittedFileNames.add(fileName);
+    options.emittedFileNames.set(fileName, variant.hash);
     options.emitFile({
       fileName,
       source: await readFile(variant.filePath),
@@ -640,7 +662,14 @@ async function renderNativeAssetModule(options: {
 
   return [
     `import { registerAsset } from ${JSON.stringify(options.registryImport)};`,
-    `export default registerAsset(${JSON.stringify(descriptor)});`,
+    `const asset = registerAsset(${JSON.stringify(descriptor)});`,
+    "export default asset;",
+    // `require("./image.png")` must be the asset id itself, as with Metro, and
+    // not a namespace object holding it: React Native's own code (LogBox, for
+    // one) and most apps pass that value straight to `<Image source>`. The
+    // bundler returns an export named "module.exports" as the module's
+    // CommonJS value.
+    'export { asset as "module.exports" };',
     "",
   ].join("\n");
 }
@@ -1583,6 +1612,24 @@ function renderReanimatedNativeCompat() {
   ].join("\n");
 }
 
+/**
+ * Host hooks of the HMR client: how it reaches React Native's LogBox, to
+ * clear a compile error once the edit that fixes it has been applied. Loaded
+ * lazily (LogBox pulls in the renderer) and only where the installed
+ * `react-native` has the module, so a web or synthetic graph is unaffected.
+ */
+function renderHmrClientHostHooks(
+  state: Pick<ReactNativePluginState, "projectRoot" | "resolvePlatform">,
+): string {
+  const logBoxPath =
+    state.resolvePlatform === "web"
+      ? null
+      : resolveFromProject(state.projectRoot, "react-native/Libraries/LogBox/LogBox");
+  return logBoxPath === null
+    ? "var vifxLoadLogBox = null;\n"
+    : `var vifxLoadLogBox = function () { return require(${JSON.stringify(toPosixPath(logBoxPath))}); };\n`;
+}
+
 async function renderCompat(
   id: string,
   state: Pick<ReactNativePluginState, "platform" | "projectRoot" | "resolvePlatform">,
@@ -1846,8 +1893,8 @@ async function renderCompat(
       ].join("\n");
     case "react-native/Libraries/Utilities/HMRClient":
       // Real Vifx HMR client (inert unless globalThis.__VIFX_HMR_URL is injected
-      // for a dev metro bundle); see hmr-client.ts.
-      return VIFX_HMR_CLIENT_SOURCE;
+      // by the dev server); see hmr-client.ts.
+      return `${renderHmrClientHostHooks(state)}${VIFX_HMR_CLIENT_SOURCE}`;
     case "@expo/metro-runtime":
       if (state.resolvePlatform === "web") {
         return ["export {};", ""].join("\n");
@@ -2016,6 +2063,10 @@ async function renderCompat(
         "    return () => {",
         "      cancelled = true;",
         "      const database = databaseRef.current;",
+        "      // As expo-sqlite does: drop the handle before closing it, so the",
+        "      // children unmount instead of querying a closed database.",
+        "      databaseRef.current = null;",
+        "      setLoading(true);",
         "",
         "      if (database) {",
         "        void database.closeAsync().catch(() => {});",
@@ -2442,7 +2493,10 @@ function resolveProjectBabelVersion(projectRoot: string): string {
  * The instrumentation workstream uses this to hand the same cache to the build
  * and read `snapshotDelta()` off it for the per-cycle hit-rate.
  */
-export function createReactNativeTransformCache(projectRoot: string): TransformCache {
+export function createReactNativeTransformCache(
+  projectRoot: string,
+  options: { memory?: boolean } = {},
+): TransformCache {
   const version = [
     TRANSFORM_CACHE_FORMAT,
     `plugin@${resolvePluginVersion()}`,
@@ -2452,6 +2506,7 @@ export function createReactNativeTransformCache(projectRoot: string): TransformC
 
   return createTransformCache({
     cacheDir: defaultTransformCacheDir(projectRoot),
+    memory: options.memory,
     version,
   });
 }
@@ -2534,9 +2589,14 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     });
   };
 
+  // Babel must know whether this is a release build: presets pick the JSX
+  // runtime from it (`jsxDEV` + source locations in dev, `jsx` in production)
+  // and project configs gate plugins on `api.env("production")`.
+  const isDev = state.mode !== "production";
+
   const pipeline = createBabelPipeline({
     babelInPackages: state.babelInPackages,
-    isDev: true,
+    isDev,
     jsxInPackages: state.jsxInPackages,
     projectRoot: state.projectRoot,
     reactNativeCompat: state.reactNativeCompat,
@@ -2558,7 +2618,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       babelrc: false,
       caller: {
         bundler: "metro",
-        isDev: true,
+        isDev,
         isHMREnabled: false,
         isNodeModule: decision.isNodeModule,
         name: "vifx",
@@ -2566,6 +2626,8 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         projectRoot: state.projectRoot,
         supportsStaticESM: !decision.isNodeModule,
       },
+      // What Metro's Babel transformer sets through BABEL_ENV.
+      envName: isDev ? "development" : "production",
       filename: id,
       sourceMaps: true,
     };
@@ -2596,6 +2658,21 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       return null;
     }
 
+    // Dev engine: project modules also get `react-refresh/babel`, run in the
+    // same pass (the caller keeps `isHMREnabled: false`, so presets do not add
+    // a second copy), then bind its registrations to the in-app runtime.
+    const fastRefresh =
+      state.fastRefresh &&
+      isDev &&
+      !decision.isNodeModule &&
+      isProjectSource(id, state.projectRoot);
+    if (fastRefresh) {
+      transformOptions = {
+        ...transformOptions,
+        plugins: [[resolveReactRefreshBabelPlugin(import.meta.url), { skipEnvCheck: true }]],
+      };
+    }
+
     // 09's pipeline decides the project-Babel options; 06's cache wraps the
     // final compute so identical inputs reuse the on-disk transform result.
     const babelKeyParts = [
@@ -2604,6 +2681,8 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       {
         configFilePath: projectConfig?.configFilePath ?? null,
         configMode: decision.configMode,
+        ...(fastRefresh ? { fastRefresh: true } : {}),
+        isDev,
         isNodeModule: decision.isNodeModule,
         platform: state.resolvePlatform,
         presetPath: runtime.presetPath ?? null,
@@ -2612,7 +2691,22 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     ] as const;
 
     const transformed = await cachedTransform(babelKeyParts, async () => {
-      const output = await runtime.transformAsync(code, transformOptions);
+      // Cache misses under load go to worker threads; a lone transform stays
+      // on this thread (see babel/worker-pool.ts).
+      const inline = () => runtime.transformAsync(code, transformOptions);
+      const output =
+        runtime.corePath === null
+          ? await inline()
+          : await getSharedBabelWorkerPool(runtime.corePath).run(code, transformOptions, inline);
+      if (fastRefresh && output?.code) {
+        return {
+          code: wrapModuleForFastRefresh(
+            output.code,
+            toPosixPath(path.relative(state.projectRoot, stripQuery(id))),
+          ),
+          map: (output.map as TransformResult["map"]) ?? null,
+        };
+      }
       return {
         code: output?.code ?? "",
         map: (output?.map as TransformResult["map"]) ?? null,
@@ -2801,9 +2895,21 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     return origin;
   };
 
-  return {
+  const plugin: Plugin = {
     name: "vifx:react-native",
     enforce: "pre",
+    buildStart() {
+      // Files may have been added or removed since the last build in this
+      // process; a dev server that tracks those itself opts out.
+      if (!state.reuseResolverCaches) {
+        clearResolverCaches();
+      }
+    },
+    watchChange(id) {
+      // A bundler-owned watcher (watch mode, the dev engine) reports the change
+      // before it rebuilds: the resolver must re-read that directory.
+      invalidateResolverPath(id);
+    },
     config() {
       return {
         assetsInclude: state.assetExtensions.map((extension) => `**/*.${extension}`),
@@ -2860,7 +2966,9 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         if (decision.strategy === "project-babel") {
           const transformed = await transformWithProjectBabel(source, originalId, decision);
           if (transformed) {
-            return transformed.code;
+            // Keep the transform's source map: without it the module has no
+            // entry in the bundle map and its frames cannot be symbolicated.
+            return { code: transformed.code, map: transformed.map ?? null };
           }
 
           // No usable project Babel runtime: only fall through to OXC where a
@@ -2877,7 +2985,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
 
         const transformed = await runOxcTransform(source, originalId);
 
-        return transformed.code;
+        return { code: transformed.code, map: transformed.map ?? null };
       }
 
       const compatPathId = resolveCompatPath(id, state.resolvePlatform);
@@ -3148,6 +3256,50 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       }
     },
   };
+
+  return process.env.VIFX_PROFILE === "1" ? profilePluginHooks(plugin) : plugin;
+}
+
+/**
+ * `VIFX_PROFILE=1`: reports, per build, how long vifx's own hooks ran and how
+ * often. Hooks overlap (Rolldown awaits many at once), so the totals are summed
+ * hook time, not wall time — they show where the JavaScript side of a build
+ * goes, which is what decides whether a rebuild can be made cheaper.
+ */
+function profilePluginHooks(plugin: Plugin): Plugin {
+  const totals = new Map<string, { calls: number; ms: number }>();
+  const hooks = plugin as unknown as Record<string, unknown>;
+
+  for (const hookName of ["resolveId", "load", "transform"]) {
+    const original = hooks[hookName];
+    if (typeof original !== "function") {
+      continue;
+    }
+
+    const total = { calls: 0, ms: 0 };
+    totals.set(hookName, total);
+    hooks[hookName] = async function profiledHook(this: unknown, ...args: unknown[]) {
+      const startedAt = performance.now();
+      try {
+        return await (original as (...hookArgs: unknown[]) => unknown).apply(this, args);
+      } finally {
+        total.calls += 1;
+        total.ms += performance.now() - startedAt;
+      }
+    };
+  }
+
+  const startedAt = performance.now();
+  hooks.buildEnd = () => {
+    const summary = [...totals.entries()]
+      .map(([hookName, total]) => `${hookName} ${total.ms.toFixed(0)}ms/${String(total.calls)}`)
+      .join("  ");
+    console.error(
+      `[vifx profile] build ${(performance.now() - startedAt).toFixed(0)}ms  hooks (summed): ${summary}`,
+    );
+  };
+
+  return plugin;
 }
 
 async function collectBuildAssets(options: {
@@ -3221,7 +3373,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
     aliases: normalizeAliases(options.aliases),
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
     assetFiles: new Set<string>(),
-    emittedAssetFileNames: new Set<string>(),
+    emittedAssetFileNames: new Map<string, string>(),
     babelInPackages: normalizeBabelInPackages(options.babelInPackages),
     compatPreview: options.compatPreview ?? false,
     conditions: normalizeConditions(
@@ -3252,6 +3404,8 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
     }),
     userResolveRequest: options.userResolveRequest ?? null,
     compatOrigins: new Map<string, string>(),
+    reuseResolverCaches: options.reuseResolverCaches === true,
+    fastRefresh: options.fastRefresh === true,
     warnedGeneratedModules: new Set<string>(),
   };
 
@@ -3313,7 +3467,7 @@ export async function buildReactNativeBundle(
     aliases: normalizeAliases(options.aliases),
     assetExtensions: normalizeAssetExtensions(options.assetExtensions),
     assetFiles: new Set<string>(),
-    emittedAssetFileNames: new Set<string>(),
+    emittedAssetFileNames: new Map<string, string>(),
     babelInPackages: normalizeBabelInPackages(options.babelInPackages),
     compatPreview: options.compatPreview ?? false,
     conditions: normalizeConditions(
@@ -3340,6 +3494,8 @@ export async function buildReactNativeBundle(
     transformCache,
     userResolveRequest: options.userResolveRequest ?? null,
     compatOrigins: new Map<string, string>(),
+    reuseResolverCaches: options.reuseResolverCaches === true,
+    fastRefresh: options.fastRefresh === true,
     warnedGeneratedModules: new Set<string>(),
   };
 

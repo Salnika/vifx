@@ -13,6 +13,7 @@ import {
   DEFAULT_EXPO_GO_DEV_HOST,
   createExpoDevServerLifetime,
   createExpoGoDevServerLifetime,
+  formatClientLog,
   formatExpoDevServerOutput,
   formatExpoGoServerOutput,
   formatRebuildReport,
@@ -298,9 +299,19 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
       hermes: target.hermes,
       host,
       jsxInPackages: target.jsxInPackages,
+      // Listen first, bundle in the background: the URLs print at once and the
+      // first request waits for the bundle, like `expo start`.
+      lazyStart: true,
       mainFields: loaded.config.resolver.mainFields,
       mode: "development",
       moduleFormat,
+      // App console output, as `expo start` prints it. Kept out of --json
+      // mode, whose stdout is one rebuild report per line.
+      onClientLog: parsed.flags.json
+        ? undefined
+        : (log) => {
+            process.stdout.write(`${formatClientLog(log)}\n`);
+          },
       onRebuild,
       platform: target.platform,
       port,

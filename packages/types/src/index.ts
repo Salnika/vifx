@@ -197,6 +197,14 @@ export interface VifxRebuildReport {
   moduleCount?: number;
   hmr: "fast-refresh" | "reload" | "error";
   error?: string;
+  /**
+   * True when the report comes from the incremental dev engine: `phases` then
+   * only carries `totalMs` (save seen → update sent), there is no
+   * transform/serialize/write breakdown to show.
+   */
+  engine?: boolean;
+  /** Why the app had to reload instead of applying the edit in place. */
+  reason?: string;
 }
 
 /**
@@ -443,6 +451,21 @@ export interface VifxReactNativePluginOptions {
    * instrumentation workstream; current builds ignore it and create their own.
    */
   transformCacheInstance?: unknown;
+  /**
+   * Keep what the resolver learned about the file system (directory listings,
+   * package manifests) from the previous build instead of starting empty. Only
+   * safe when something else invalidates it on file additions and removals —
+   * the dev server's watcher does, which is what makes rebuilds skip resolution
+   * I/O. One-shot builds leave it off.
+   */
+  reuseResolverCaches?: boolean;
+  /**
+   * Instrument project modules for Fast Refresh under the Rolldown dev engine
+   * (development, scope-hoisted bundle): `react-refresh/babel` runs with the
+   * project's Babel and each module binds its registrations to the in-app dev
+   * runtime. Set by the dev server; one-shot builds leave it off.
+   */
+  fastRefresh?: boolean;
   /**
    * Public env vars (e.g. `EXPO_PUBLIC_*`) to inline as build-time defines.
    * Reserved for the native+web workstream; the RN define table does not read

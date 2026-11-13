@@ -253,7 +253,9 @@ CONTRACT_TEST("POST /symbolicate maps a bundle stack frame back to original sour
       sourceMap as unknown as ConstructorParameters<typeof SourceMap>[0],
     );
     let frame: { column: number; lineNumber: number } | null = null;
-    for (let line = 0; line < 400 && !frame; line += 1) {
+    // The dev engine's bundle opens with its runtime and the module graph,
+    // none of which maps to a source: scan well past that prelude.
+    for (let line = 0; line < 20_000 && !frame; line += 1) {
       for (let column = 0; column < 400; column += 1) {
         const entry = instance.findEntry(line, column);
         if ("originalSource" in entry && entry.originalSource) {

@@ -36,6 +36,14 @@ export interface CreateTransformCacheOptions {
    * invalidate every entry at once (e.g. when the on-disk schema changes).
    */
   version: string;
+  /**
+   * Also keep the entries this process reads or produces in memory. Worth it
+   * for a process that asks for the same modules again and again (a dev server
+   * that rebuilds the whole bundle on each save); a one-shot build reads each
+   * entry once, so holding a second copy of every transform is pure overhead.
+   * Off by default.
+   */
+  memory?: boolean;
 }
 
 export interface TransformCache {
@@ -178,6 +186,9 @@ function isValidDiskEntry(value: unknown): value is DiskEntry {
  * filesystem. Safe to share across concurrent transforms in a single process;
  * cross-process safety is best-effort via atomic temp-file renames.
  */
+/** In-memory entries kept per cache instance (a large app is a few thousand modules). */
+const MEMORY_ENTRY_LIMIT = 20_000;
+
 export function createTransformCache(options: CreateTransformCacheOptions): TransformCache {
   const cacheDir = path.resolve(options.cacheDir);
   const { version } = options;
@@ -194,6 +205,29 @@ export function createTransformCache(options: CreateTransformCacheOptions): Tran
   let deltaWritesBaseline = 0;
 
   const inFlight = new Map<string, Promise<TransformCacheValue>>();
+
+  // With `memory: true`: entries this process has already read or produced. A
+  // dev server that rebuilds the whole bundle asks for the same ~every-module
+  // set on each save; this answers from memory instead of re-reading and
+  // re-parsing each entry from disk. Least-recently-used entries are dropped
+  // past the cap.
+  const memory = new Map<string, TransformCacheValue>();
+
+  const keepInMemory = options.memory === true;
+
+  function remember(key: string, value: TransformCacheValue): void {
+    if (!keepInMemory) {
+      return;
+    }
+    memory.delete(key);
+    memory.set(key, value);
+    if (memory.size > MEMORY_ENTRY_LIMIT) {
+      const oldest = memory.keys().next();
+      if (!oldest.done) {
+        memory.delete(oldest.value);
+      }
+    }
+  }
 
   async function readEntry(key: string): Promise<TransformCacheValue | null> {
     const entryPath = entryPathForKey(cacheDir, key);
@@ -255,6 +289,7 @@ export function createTransformCache(options: CreateTransformCacheOptions): Tran
     const cached = await readEntry(key);
     if (cached !== null) {
       hits += 1;
+      remember(key, cached);
       return cached;
     }
 
@@ -272,12 +307,20 @@ export function createTransformCache(options: CreateTransformCacheOptions): Tran
     }
 
     await writeEntry(key, produced);
+    remember(key, produced);
     return produced;
   }
 
   return {
     async getOrCompute(keyParts, computeFn) {
       const key = computeKey(version, keyParts);
+
+      const remembered = memory.get(key);
+      if (remembered !== undefined) {
+        hits += 1;
+        remember(key, remembered);
+        return remembered;
+      }
 
       const existing = inFlight.get(key);
       if (existing) {
@@ -311,6 +354,7 @@ export function createTransformCache(options: CreateTransformCacheOptions): Tran
     },
     async clear() {
       inFlight.clear();
+      memory.clear();
       hits = 0;
       misses = 0;
       writes = 0;

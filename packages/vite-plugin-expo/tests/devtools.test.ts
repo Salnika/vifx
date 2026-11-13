@@ -105,7 +105,9 @@ async function writeNativeExpoPackage(projectRoot: string) {
 function findSymbolicatablePosition(sourceMap: RawSourceMap) {
   const sourceMapInstance = new SourceMap(sourceMap as SourceMapPayload);
 
-  for (let line = 0; line < 200; line += 1) {
+  // The dev engine's bundle opens with its runtime and the module graph, none
+  // of which maps to a source: the first mapped line is well past line 200.
+  for (let line = 0; line < 20_000; line += 1) {
     for (let column = 0; column < 200; column += 1) {
       const entry = sourceMapInstance.findEntry(line, column);
       if ("originalSource" in entry && entry.originalSource) {

@@ -1,4 +1,4 @@
-import { access, lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
+import { access, readFile, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { VifxError } from "@vifx/errors";
 
@@ -95,7 +95,13 @@ export async function resolveReactNativeModule(
 
   const extensionOrder = normalizeExtensions(options.extensions);
   const platformPriority = normalizePlatformPriority(options.platform, options.platformPriority);
-  const preserveSymlinks = options.preserveSymlinks ?? true;
+  // Lookups walk logical paths; the result is canonicalized once at the end
+  // (see canonicalizeResolvedPath) unless the caller opts out.
+  const preserveSymlinks = true;
+  const canonicalize = (resolvedPath: string) =>
+    options.preserveSymlinks === true
+      ? Promise.resolve(resolvedPath)
+      : canonicalizeResolvedPath(resolvedPath, options.projectRoot);
   const mainFields = normalizeMainFields(options.mainFields);
 
   if (isPathLikeSpecifier(options.specifier)) {
@@ -111,7 +117,7 @@ export async function resolveReactNativeModule(
       trace,
     });
     return {
-      filePath,
+      filePath: await canonicalize(filePath),
       resolvedVia: path.isAbsolute(options.specifier) ? "absolute" : "relative",
       trace,
     };
@@ -184,12 +190,55 @@ export async function resolveReactNativeModule(
   });
 
   return {
-    filePath,
+    filePath: await canonicalize(filePath),
     packageName: packageImport.packageName,
-    packageRoot: packageLocation.root,
+    packageRoot: await canonicalize(packageLocation.root),
     resolvedVia: "package",
     trace,
   };
+}
+
+const realFileCache = new Map<string, Promise<string>>();
+
+/**
+ * One identity per file. A package is reachable through as many paths as it
+ * has dependents on an isolated install (`node_modules/<name>` symlinks, one
+ * per dependent, all pointing at the same virtual-store directory); returning
+ * those paths as-is makes the bundler treat one file as several modules and
+ * ship — and instantiate — it several times. Like Node and Metro, the resolver
+ * therefore answers with the real path.
+ *
+ * Real paths under the project are mapped back onto the project root as it was
+ * given, so a project that itself sits behind a symlink keeps one prefix.
+ */
+async function canonicalizeResolvedPath(filePath: string, projectRoot: string): Promise<string> {
+  let cached = realFileCache.get(filePath);
+  if (!cached) {
+    cached = realpath(filePath).catch(() => filePath);
+    realFileCache.set(filePath, cached);
+  }
+
+  const realFilePath = await cached;
+  if (realFilePath === filePath) {
+    return filePath;
+  }
+
+  const logicalRoot = path.resolve(projectRoot);
+  if ((await realDirectory(logicalRoot)) === logicalRoot) {
+    return realFilePath;
+  }
+
+  // The project sits behind a symlinked ancestor. Re-anchor the real path on
+  // the deepest logical ancestor that contains it, so files in the project and
+  // in its workspace siblings keep the prefix the project was opened with.
+  for (const logicalAncestor of iterateAncestorDirectories(logicalRoot)) {
+    const realAncestor = await realDirectory(logicalAncestor);
+    if (realAncestor !== logicalAncestor && realFilePath.startsWith(`${realAncestor}${path.sep}`)) {
+      return path.join(logicalAncestor, realFilePath.slice(realAncestor.length + 1));
+    }
+  }
+
+  return realFilePath;
 }
 
 function buildResolutionConditions(
@@ -394,10 +443,9 @@ async function assertNoCaseAmbiguousCandidate(
 ) {
   const directory = path.dirname(candidate);
   const basename = path.basename(candidate);
-  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
-  const matches = entries
-    .filter((entry) => entry.isFile() && entry.name.toLowerCase() === basename.toLowerCase())
-    .map((entry) => path.join(directory, entry.name))
+  const listing = await listDirectory(directory);
+  const matches = (listing?.filesByLowerCaseName.get(basename.toLowerCase()) ?? [])
+    .map((name) => path.join(directory, name))
     .sort();
 
   if (matches.length <= 1) {
@@ -671,7 +719,16 @@ async function readDirectories(directory: string): Promise<string[]> {
     .map((entry) => path.join(directory, entry.name));
 }
 
-async function readPackageJson(packageJsonPath: string): Promise<PackageJsonShape> {
+function readPackageJson(packageJsonPath: string): Promise<PackageJsonShape> {
+  let cached = packageJsonCache.get(packageJsonPath);
+  if (!cached) {
+    cached = parsePackageJson(packageJsonPath);
+    packageJsonCache.set(packageJsonPath, cached);
+  }
+  return cached;
+}
+
+async function parsePackageJson(packageJsonPath: string): Promise<PackageJsonShape> {
   const source = await readFile(packageJsonPath, "utf8");
   let parsed: unknown;
 
@@ -1039,19 +1096,153 @@ function resolveExportsValue(
   return undefined;
 }
 
+// ---------------------------------------------------------------------------
+// In-memory view of the file system
+//
+// Resolving one import probes many candidates (platform x extension variants,
+// then `index.*`, in every `node_modules` up the tree). Asking the disk about
+// each of them made resolution the dominant cost of a warm build: thousands of
+// imports, each re-reading whole directories. A directory is instead listed
+// once and every later question about its entries is answered from memory —
+// the idea behind Metro's file map, but lazy: only directories a resolution
+// actually looks into are ever read.
+//
+// Lookups are exact-case, like Metro's and like a case-sensitive file system,
+// so an import that only works because macOS ignores case fails here too
+// instead of failing later in CI.
+// ---------------------------------------------------------------------------
+
+interface DirectoryListing {
+  directories: Set<string>;
+  files: Set<string>;
+  /** Regular files grouped by lower-cased name, to spot case-only duplicates. */
+  filesByLowerCaseName: Map<string, string[]>;
+  symlinks: Set<string>;
+}
+
+const directoryListingCache = new Map<string, Promise<DirectoryListing | null>>();
+const symlinkTargetKindCache = new Map<string, Promise<"directory" | "file" | "missing">>();
+const packageJsonCache = new Map<string, Promise<PackageJsonShape>>();
+
+/**
+ * Forgets everything the resolver has learned about the file system. Call it
+ * whenever files may have been added, removed or re-linked: at the start of a
+ * build, and from a file watcher on add / unlink events. A plain content change
+ * does not affect resolution and needs no reset.
+ */
+export function clearResolverCaches(): void {
+  directoryListingCache.clear();
+  symlinkTargetKindCache.clear();
+  packageJsonCache.clear();
+  realDirectoryCache.clear();
+  realFileCache.clear();
+}
+
+/**
+ * Forgets what is known about one path after it changed on disk: the listing of
+ * its parent directory (the entry may have appeared or disappeared), its own
+ * listing if it is a directory, and anything derived from its content. Cheap
+ * enough to call for every file-watcher event, whatever its kind.
+ */
+export function invalidateResolverPath(changedPath: string): void {
+  const absolutePath = path.resolve(changedPath);
+  directoryListingCache.delete(path.dirname(absolutePath));
+  directoryListingCache.delete(absolutePath);
+  symlinkTargetKindCache.delete(absolutePath);
+  packageJsonCache.delete(absolutePath);
+  realDirectoryCache.delete(absolutePath);
+  realFileCache.delete(absolutePath);
+}
+
+function listDirectory(directory: string): Promise<DirectoryListing | null> {
+  let cached = directoryListingCache.get(directory);
+  if (!cached) {
+    cached = readDirectoryListing(directory);
+    directoryListingCache.set(directory, cached);
+  }
+  return cached;
+}
+
+async function readDirectoryListing(directory: string): Promise<DirectoryListing | null> {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => null);
+  if (entries === null) {
+    return null;
+  }
+
+  const listing: DirectoryListing = {
+    directories: new Set(),
+    files: new Set(),
+    filesByLowerCaseName: new Map(),
+    symlinks: new Set(),
+  };
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      listing.directories.add(entry.name);
+    } else if (entry.isSymbolicLink()) {
+      listing.symlinks.add(entry.name);
+    } else if (entry.isFile()) {
+      listing.files.add(entry.name);
+      const lowerCaseName = entry.name.toLowerCase();
+      const sameName = listing.filesByLowerCaseName.get(lowerCaseName);
+      if (sameName) {
+        sameName.push(entry.name);
+      } else {
+        listing.filesByLowerCaseName.set(lowerCaseName, [entry.name]);
+      }
+    }
+  }
+  return listing;
+}
+
+/** What a symlink points at; the only question that still needs a `stat`. */
+function symlinkTargetKind(linkPath: string): Promise<"directory" | "file" | "missing"> {
+  let cached = symlinkTargetKindCache.get(linkPath);
+  if (!cached) {
+    cached = stat(linkPath).then(
+      (linkStat) => (linkStat.isDirectory() ? "directory" : linkStat.isFile() ? "file" : "missing"),
+      () => "missing" as const,
+    );
+    symlinkTargetKindCache.set(linkPath, cached);
+  }
+  return cached;
+}
+
+async function entryKind(entryPath: string): Promise<"directory" | "file" | "missing" | "symlink"> {
+  const parent = path.dirname(entryPath);
+  if (parent === entryPath) {
+    // A file system root has no parent listing to consult.
+    return (await stat(entryPath).catch(() => undefined))?.isDirectory() ? "directory" : "missing";
+  }
+
+  const listing = await listDirectory(parent);
+  const name = path.basename(entryPath);
+  if (!listing) {
+    return "missing";
+  }
+  if (listing.files.has(name)) {
+    return "file";
+  }
+  if (listing.directories.has(name)) {
+    return "directory";
+  }
+  return listing.symlinks.has(name) ? "symlink" : "missing";
+}
+
 async function isDirectory(directory: string): Promise<boolean> {
-  const fileStat = await stat(directory).catch(() => undefined);
-  return fileStat?.isDirectory() ?? false;
+  const kind = await entryKind(directory);
+  return kind === "symlink"
+    ? (await symlinkTargetKind(directory)) === "directory"
+    : kind === "directory";
 }
 
 async function isDirectoryLike(directory: string): Promise<boolean> {
-  const fileStat = await lstat(directory).catch(() => undefined);
-  return fileStat?.isDirectory() || fileStat?.isSymbolicLink() || false;
+  const kind = await entryKind(directory);
+  return kind === "directory" || kind === "symlink";
 }
 
 async function isFile(filePath: string): Promise<boolean> {
-  const fileStat = await stat(filePath).catch(() => undefined);
-  return fileStat?.isFile() ?? false;
+  const kind = await entryKind(filePath);
+  return kind === "symlink" ? (await symlinkTargetKind(filePath)) === "file" : kind === "file";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -44,10 +44,13 @@ test("buildExpoBundle: production minifies to an IIFE; development is unchanged"
     // Production is genuinely minified -> smaller than the development bundle.
     expect(prod.bundle.sizeBytes).toBeLessThan(dev.bundle.sizeBytes);
 
-    // Production is a single minified IIFE script; development keeps the
-    // readable, unminified scope-hoisted output (one statement per line).
+    // Both run in a function scope of their own, so no top-level declaration
+    // of the bundle lands on the global object. Production is a single
+    // minified IIFE; development keeps the readable, unminified scope-hoisted
+    // output (one statement per line) between its wrapper lines.
     expect(prodCode.trimStart().startsWith("(function(")).toBe(true);
-    expect(devCode.trimStart().startsWith("(function(")).toBe(false);
+    expect(devCode.trimStart().startsWith("(function(")).toBe(true);
+    expect(devCode).toMatch(/\n\}\)\(\);\n/u);
     expect(devCode.split("\n").length).toBeGreaterThan(prodCode.split("\n").length * 5);
 
     // Neither flavor may leak top-level ESM statements: Hermes evaluates

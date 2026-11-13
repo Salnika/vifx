@@ -156,15 +156,47 @@ test("corrupted entries are treated as a miss and counted under errors", async (
   const entries = await readdir(shardPath);
   await writeFile(path.join(shardPath, entries[0]!), "{not valid json", "utf8");
 
+  // A process that produced the entry keeps it in memory; corruption is met by
+  // the next process that opens the cache directory.
+  const reopened = newCache();
   let recomputed = false;
-  const value = await cache.getOrCompute(["corrupt.ts"], async () => {
+  const value = await reopened.getOrCompute(["corrupt.ts"], async () => {
     recomputed = true;
     return "recomputed";
   });
 
   expect(value).toBe("recomputed");
   expect(recomputed).toBe(true);
-  expect(cache.stats().errors).toBe(1);
+  expect(reopened.stats().errors).toBe(1);
+});
+
+test("without the memory option every request goes back to disk", async () => {
+  const cache = newCache();
+  await cache.getOrCompute(["disk-only.ts"], async () => "first");
+  await rm(cacheDir, { force: true, recursive: true });
+
+  const value = await cache.getOrCompute(["disk-only.ts"], async () => "second");
+
+  // Nothing was kept in memory: the entry is gone with the directory.
+  expect(value).toBe("second");
+});
+
+test("with memory: true a second request is answered from memory, not disk", async () => {
+  const cache = createTransformCache({ cacheDir, memory: true, version: "1" });
+  await cache.getOrCompute(["memory.ts"], async () => "first");
+
+  // Remove the on-disk entries: only the in-memory copy can answer now.
+  await rm(cacheDir, { force: true, recursive: true });
+
+  let recomputed = false;
+  const value = await cache.getOrCompute(["memory.ts"], async () => {
+    recomputed = true;
+    return "second";
+  });
+
+  expect(value).toBe("first");
+  expect(recomputed).toBe(false);
+  expect(cache.stats().hits).toBe(1);
 });
 
 test("entries with a missing code field are treated as a miss", async () => {
@@ -176,14 +208,15 @@ test("entries with a missing code field are treated as a miss", async () => {
   const entries = await readdir(shardPath);
   await writeFile(path.join(shardPath, entries[0]!), JSON.stringify({ hasMap: false }), "utf8");
 
+  const reopened = newCache();
   let recomputed = false;
-  await cache.getOrCompute(["bad-shape.ts"], async () => {
+  await reopened.getOrCompute(["bad-shape.ts"], async () => {
     recomputed = true;
     return "recomputed";
   });
 
   expect(recomputed).toBe(true);
-  expect(cache.stats().errors).toBe(1);
+  expect(reopened.stats().errors).toBe(1);
 });
 
 test("compute errors propagate and are not written to disk", async () => {

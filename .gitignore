@@ -29,3 +29,6 @@ dist-ssr
 
 # AI agent worktrees
 .claude/worktrees/
+
+# Raw benchmark output (scripts/bench); curated results live in docs/benchmarks.
+.bench/

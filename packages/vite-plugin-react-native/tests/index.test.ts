@@ -1,6 +1,7 @@
 import { chmod, cp, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { runInNewContext } from "node:vm";
 import { build } from "vite";
 import { expect, test } from "vite-plus/test";
 import { buildReactNativeBundle, reactNative } from "../src/index.ts";
@@ -427,6 +428,49 @@ test("buildReactNativeBundle registers native assets via AssetRegistry with scal
   for (const name of ["icon.png", "icon@2x.png", "icon@3x.png", "font.ttf"]) {
     expect((await stat(path.join(assetsDir, name))).isFile()).toBe(true);
   }
+});
+
+test("buildReactNativeBundle makes require() of an asset the asset id, like an import", async () => {
+  const projectRoot = await copyFixture("rn-bare-assets");
+
+  const registryRoot = path.join(projectRoot, "node_modules", "@react-native", "assets-registry");
+  await mkdir(registryRoot, { recursive: true });
+  await writeFile(
+    path.join(registryRoot, "package.json"),
+    JSON.stringify({ name: "@react-native/assets-registry" }, null, 2),
+  );
+  await writeFile(
+    path.join(registryRoot, "registry.js"),
+    ["let nextId = 1;", "export function registerAsset(asset) { return nextId++; }", ""].join("\n"),
+  );
+  // React Native's own code (LogBox, for one) and most apps write
+  // `<Image source={require("./icon.png")} />`.
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import imported from "./assets/icon.png";',
+      'const required = require("./assets/icon.png");',
+      'const font = require("./assets/font.ttf");',
+      "globalThis.__assetCheck = { font, imported, required };",
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    outDir: ".vifx/helper-ios-asset-require",
+    platform: "ios",
+    projectRoot,
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+
+  const sandbox: { __assetCheck?: { font: unknown; imported: unknown; required: unknown } } = {};
+  runInNewContext(bundleSource, Object.assign(sandbox, { globalThis: sandbox }));
+
+  // A namespace object here would reach `<Image source>` as `{ default: 1 }`.
+  expect(sandbox.__assetCheck?.imported).toBe(1);
+  expect(sandbox.__assetCheck?.required).toBe(1);
+  expect(sandbox.__assetCheck?.font).toBe(2);
 });
 
 test("buildReactNativeBundle uses native Reanimated compat for Expo Go bundles when compatPreview is enabled", async () => {

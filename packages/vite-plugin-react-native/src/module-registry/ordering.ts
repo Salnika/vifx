@@ -28,10 +28,12 @@ import { resolveProjectImportSpecifier } from "@vifx/platform-resolver";
 
 /**
  * Polyfill module specifiers imported (in order) before the user entry when
- * they are resolvable from the target project. This mirrors the prelude used
- * by the Expo bundle pipeline (`@react-native/js-polyfills/error-guard`).
+ * they are resolvable from the target project. This is React Native's own
+ * polyfill list (`@react-native/js-polyfills`), in its order, and mirrors the
+ * prelude used by the Expo bundle pipeline.
  */
 export const MODULE_REGISTRY_POLYFILL_SPECIFIERS = [
+  "@react-native/js-polyfills/console",
   "@react-native/js-polyfills/error-guard",
 ] as const;
 

@@ -48,7 +48,7 @@ function toPosixPath(filePath: string) {
   return filePath.split(path.sep).join("/");
 }
 
-function isProjectSource(id: string, projectRoot: string) {
+export function isProjectSource(id: string, projectRoot: string) {
   const normalizedId = stripQuery(id);
 
   if (normalizedId.includes("\0") || toPosixPath(normalizedId).includes(NODE_MODULES_SEGMENT)) {
@@ -125,7 +125,7 @@ export interface ApplyReactRefreshTransformResult {
   map: unknown;
 }
 
-function resolveReactRefreshBabelPlugin(resolveFrom: string): string {
+export function resolveReactRefreshBabelPlugin(resolveFrom: string): string {
   const cached = reactRefreshBabelPluginCache.get(resolveFrom);
   if (cached !== undefined) {
     return cached;

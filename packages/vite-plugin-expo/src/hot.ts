@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { type WebSocket, WebSocketServer } from "ws";
 import { isVifxError } from "@vifx/errors";
+import { isSourceCompileError, summarizeBuildError } from "./build-error.ts";
 
 const HOT_SOCKET_PATHNAME = "/hot";
 const HOT_SOCKET_CLOSE_GOING_AWAY = 1001;
@@ -57,6 +58,23 @@ export interface VifxHotChannel {
   clientCount: () => number;
   close: () => Promise<void>;
   handleUpgrade: (request: IncomingMessage, socket: Duplex, head: Buffer) => boolean;
+  /** Whether this app's socket is still open. */
+  isConnected: (client: VifxHotClient) => boolean;
+  /** Sends one message to a single connected app (see {@link VifxHotChannelOptions}). */
+  sendTo: (client: VifxHotClient, message: { body?: unknown; type: string }) => void;
+}
+
+/** Opaque handle of one connected app. */
+export type VifxHotClient = object;
+
+/**
+ * Per-app hooks. Metro's protocol is broadcast-only; the dev engine also needs
+ * to hear from each app (which modules it holds) and to address it alone.
+ */
+export interface VifxHotChannelOptions {
+  onDisconnect?: (client: VifxHotClient) => void;
+  /** A JSON message sent by an app. Anything that is not JSON is dropped. */
+  onMessage?: (client: VifxHotClient, message: unknown) => void;
 }
 
 /**
@@ -64,6 +82,18 @@ export interface VifxHotChannel {
  * `FormattedError` shape produced by Metro's `formatBundlingError`.
  */
 export function createHotErrorPayload(error: unknown): VifxHotErrorPayload {
+  // A compile error of the user's source, in the shape Metro sends it: the app
+  // (LogBox) parses "TransformError SyntaxError: <file>: <message> (l:c)" and
+  // its code frame into the syntax-error screen.
+  const summary = summarizeBuildError(error);
+  if (isSourceCompileError(summary)) {
+    return {
+      errors: [{ description: summary.split("\n", 1)[0] ?? summary }],
+      message: summary,
+      type: "TransformError",
+    };
+  }
+
   if (isVifxError(error)) {
     return {
       errors: [{ description: error.message }],
@@ -94,7 +124,7 @@ export function createHotErrorPayload(error: unknown): VifxHotErrorPayload {
  * {@link VifxHotChannel.handleUpgrade}, which claims `/hot` connections and
  * leaves every other pathname untouched.
  */
-export function createHotChannel(): VifxHotChannel {
+export function createHotChannel(options: VifxHotChannelOptions = {}): VifxHotChannel {
   const websocketServer = new WebSocketServer({ clientTracking: false, noServer: true });
   const clients = new Set<WebSocket>();
   let closed = false;
@@ -103,10 +133,29 @@ export function createHotChannel(): VifxHotChannel {
     clients.add(socket);
 
     const removeClient = () => {
-      clients.delete(socket);
+      if (clients.delete(socket)) {
+        options.onDisconnect?.(socket);
+      }
     };
     socket.once("close", removeClient);
     socket.on("error", removeClient);
+    socket.on("message", (data) => {
+      if (!options.onMessage) {
+        return;
+      }
+      let message: unknown;
+      try {
+        const bytes = Array.isArray(data)
+          ? Buffer.concat(data)
+          : Buffer.isBuffer(data)
+            ? data
+            : Buffer.from(new Uint8Array(data));
+        message = JSON.parse(bytes.toString("utf8"));
+      } catch {
+        return;
+      }
+      options.onMessage(socket, message);
+    });
   });
 
   const broadcast = (message: VifxHotMessage) => {
@@ -168,6 +217,16 @@ export function createHotChannel(): VifxHotChannel {
         websocketServer.emit("connection", websocket, request);
       });
       return true;
+    },
+    isConnected(client) {
+      const socket = client as WebSocket;
+      return clients.has(socket) && socket.readyState === socket.OPEN;
+    },
+    sendTo(client, message) {
+      const socket = client as WebSocket;
+      if (clients.has(socket) && socket.readyState === socket.OPEN) {
+        socket.send(JSON.stringify(message));
+      }
     },
   };
 }

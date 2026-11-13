@@ -1,5 +1,9 @@
 # Vifx vs Metro — Benchmark (HNewsPro, iOS, release path)
 
+> **Mesures plus récentes et plus complètes** (iOS + Android, release + dev, serveur de dev,
+> mémoire) : [`docs/benchmarks/expo-vs-vifx-2026-11.md`](./docs/benchmarks/expo-vs-vifx-2026-11.md),
+> produites par `pnpm bench:expo`. Les chiffres ci-dessous datent de juin 2026.
+
 > Date: 2026-06-13. Toolchain Vifx = `batch/integration` (les 20 unités du batch phases 0→6 mergées).
 > App: HNewsPro — Expo SDK 54.0.33, RN 0.81.5, React 19.1, Reanimated 4.1, expo-router 6, 2000 modules.
 > Machine: darwin (mesure locale, monoposte).

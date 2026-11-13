@@ -32,6 +32,11 @@ interface BabelPartialConfigLike {
  */
 export interface ProjectBabelRuntime {
   /**
+   * Absolute path of the project's `@babel/core` entry, so worker threads load
+   * the very same installation. `null` when it cannot be located on disk.
+   */
+  corePath: string | null;
+  /**
    * `babel-preset-expo` or `@react-native/babel-preset`, resolved from the
    * project. `null` when neither preset is installed — the project may still
    * drive transforms entirely through its own `babel.config.js`, so a missing
@@ -121,6 +126,7 @@ export async function loadProjectBabelRuntime(
         resolveFromProject(projectRoot, "@react-native/babel-preset");
 
       return {
+        corePath: resolveFromProject(projectRoot, "@babel/core"),
         loadPartialConfigAsync:
           typeof babel.loadPartialConfigAsync === "function"
             ? babel.loadPartialConfigAsync.bind(babel)
