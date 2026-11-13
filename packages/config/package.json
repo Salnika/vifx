@@ -1,11 +1,23 @@
 {
   "name": "@vifx/config",
   "version": "0.0.0",
-  "description": "Shared config definition and loader for the Vifx monorepo.",
+  "description": "defineVifxConfig and the vifx.config.ts loader.",
+  "keywords": [
+    "config",
+    "expo",
+    "react-native",
+    "vifx"
+  ],
+  "homepage": "https://github.com/Salnika/vifx/tree/master/packages/config#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/config"
+  },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "type": "module",
   "sideEffects": false,
@@ -19,10 +31,9 @@
   },
   "scripts": {
     "build": "vp pack",
-    "dev": "vp pack --watch",
-    "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp run build"
+    "dev": "vp pack --watch",
+    "test": "vp test run"
   },
   "dependencies": {
     "@vifx/errors": "workspace:*",

@@ -1,15 +1,30 @@
 {
   "name": "@vifx/expo-export",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.0.0",
+  "description": "Expo export artifacts (bundles, source maps, assets, metadata) produced by Vifx.",
+  "keywords": [
+    "expo",
+    "export",
+    "vifx"
+  ],
+  "homepage": "https://github.com/Salnika/vifx/tree/master/packages/expo-export#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/expo-export"
+  },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "type": "module",
   "exports": {
     ".": "./dist/index.mjs",
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "vp pack",
@@ -28,5 +43,8 @@
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
   }
 }

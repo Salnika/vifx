@@ -1,6 +1,7 @@
 import type { VifxDiagnosticData, VifxJsonObject } from "@vifx/types";
 
-export const VIFX_DOCS_BASE_URL = "https://vifx.dev";
+// The documentation site (apps/docs), deployed to GitHub Pages by .github/workflows/docs.yml.
+export const VIFX_DOCS_BASE_URL = "https://salnika.github.io/vifx";
 
 export const VIFX_ERROR_CODES = [
   "VIFX_INTERNAL_ERROR",
@@ -119,8 +120,10 @@ export interface SerializedVifxError {
   causeMessage?: string;
 }
 
+// Every code has a row in the error reference page (apps/docs/reference/errors.md),
+// and the docs site gives that row the code as its anchor.
 function defaultDocsPath(code: string) {
-  return `/errors/${code}`;
+  return `/reference/errors#${code}`;
 }
 
 export class VifxError extends Error {
@@ -174,7 +177,14 @@ export function resolveVifxDocsUrl(docsPath?: string, docsBaseUrl = VIFX_DOCS_BA
       return new URL(docsPath).toString();
     }
 
-    return new URL(docsPath, docsBaseUrl).toString();
+    // Resolve below the base's path, so a site served from a subdirectory (a
+    // GitHub Pages project site such as https://salnika.github.io/vifx) keeps it.
+    const base = new URL(docsBaseUrl);
+    if (!base.pathname.endsWith("/")) {
+      base.pathname = `${base.pathname}/`;
+    }
+
+    return new URL(docsPath.replace(/^\/+/u, ""), base).toString();
   } catch {
     return docsPath;
   }

@@ -40,12 +40,12 @@ Options:
 
 export const EXPO_GO_DEV_KEY_HINT = "Keys: r reload  m dev menu  j devtools  o editor  ? all";
 export const EXPO_GO_DEV_KEYS_HELP = [
-  "Commandes Expo Go :",
-  "  r  recharger l'app",
-  "  m  ouvrir le menu de développement",
-  "  j  ouvrir React Native DevTools",
-  "  o  ouvrir le projet dans l'éditeur ($EXPO_EDITOR / $EDITOR)",
-  "  ?  afficher cette aide",
+  "Expo Go commands:",
+  "  r  reload the app",
+  "  m  open the dev menu",
+  "  j  open React Native DevTools",
+  "  o  open the project in your editor ($EXPO_EDITOR / $EDITOR)",
+  "  ?  show this help",
 ].join("\n");
 const CTRL_C_BYTE = 0x03;
 const CTRL_D_BYTE = 0x04;
@@ -67,7 +67,7 @@ const DEVTOOLS_OPEN_PATHNAME = "/open-debugger";
 export function openReactNativeDevTools(server: VifxExpoGoDevServer): void {
   if (typeof server.port !== "number" || !server.inspectorProxyUrl) {
     process.stdout.write(
-      "RN DevTools indisponible : ce serveur n'expose pas de proxy inspector.\n",
+      "React Native DevTools unavailable: this server has no inspector proxy.\n",
     );
     return;
   }
@@ -76,16 +76,16 @@ export function openReactNativeDevTools(server: VifxExpoGoDevServer): void {
     .then((response) => {
       if (response.status === 404) {
         process.stdout.write(
-          "Aucune cible de debug connectée. Ouvre/recharge l'app sur ton device (moteur Hermes requis), puis appuie de nouveau sur j.\n",
+          "No debug target connected. Open or reload the app on your device (Hermes required), then press j again.\n",
         );
       } else if (!response.ok) {
-        process.stdout.write(`Impossible d'ouvrir RN DevTools (HTTP ${response.status}).\n`);
+        process.stdout.write(`Could not open React Native DevTools (HTTP ${response.status}).\n`);
       }
       // 200 → dev-middleware is launching the DevTools window.
     })
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
-      process.stdout.write(`Impossible d'ouvrir RN DevTools : ${message}\n`);
+      process.stdout.write(`Could not open React Native DevTools: ${message}\n`);
     });
 }
 
@@ -100,7 +100,7 @@ export function openProjectInEditor(server: VifxExpoGoDevServer): void {
   const editor = process.env.EXPO_EDITOR ?? process.env.EDITOR;
   if (!editor) {
     process.stdout.write(
-      "Aucun éditeur configuré : définis $EDITOR (ou $EXPO_EDITOR) pour ouvrir le projet avec o.\n",
+      "No editor configured: set $EDITOR (or $EXPO_EDITOR) to open the project with o.\n",
     );
     return;
   }
@@ -109,12 +109,12 @@ export function openProjectInEditor(server: VifxExpoGoDevServer): void {
   try {
     const child = spawn(editor, [target], { detached: true, stdio: "ignore" });
     child.once("error", (error) => {
-      process.stdout.write(`Impossible d'ouvrir l'éditeur "${editor}" : ${error.message}\n`);
+      process.stdout.write(`Could not open the editor "${editor}": ${error.message}\n`);
     });
     child.unref();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    process.stdout.write(`Impossible d'ouvrir l'éditeur "${editor}" : ${message}\n`);
+    process.stdout.write(`Could not open the editor "${editor}": ${message}\n`);
   }
 }
 

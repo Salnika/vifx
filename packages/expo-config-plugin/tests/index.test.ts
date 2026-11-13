@@ -41,9 +41,9 @@ function parsePbxprojFixture() {
 
 test("resolveVifxBundlerProps applies the fixed export:embed contract by default", () => {
   expect(resolveVifxBundlerProps()).toEqual({
-    androidCliFile: "../../node_modules/@vifx/cli/bin/vifx.mjs",
+    androidCliFile: "../../node_modules/@vifx/cli/dist/bin.mjs",
     bundleCommand: "export:embed",
-    iosCliPath: "$PROJECT_DIR/../node_modules/@vifx/cli/bin/vifx.mjs",
+    iosCliPath: "$PROJECT_DIR/../node_modules/@vifx/cli/dist/bin.mjs",
   });
 });
 
@@ -76,7 +76,7 @@ test("iOS bundle phase merge replaces the generated section when props change", 
   expect(second.contents).toContain('export CLI_PATH="$PROJECT_DIR/../tools/custom-cli.mjs"');
   expect(second.contents).toContain('export BUNDLE_COMMAND="custom:embed"');
   expect(second.contents).not.toContain(
-    'export CLI_PATH="$PROJECT_DIR/../node_modules/@vifx/cli/bin/vifx.mjs"',
+    'export CLI_PATH="$PROJECT_DIR/../node_modules/@vifx/cli/dist/bin.mjs"',
   );
   expect(second.contents.match(/@generated begin/gu)).toHaveLength(1);
   // The template fallback guards survive untouched below the generated block.
@@ -132,7 +132,7 @@ test("Expo template app/build.gradle gains vifx assignments at the end of react 
   // Gradle assignment wins inside the react extension block.
   const templateCliFileIndex = merged.contents.indexOf("cliFile = new File");
   const vifxCliFileIndex = merged.contents.indexOf(
-    'cliFile = file("../../node_modules/@vifx/cli/bin/vifx.mjs")',
+    'cliFile = file("../../node_modules/@vifx/cli/dist/bin.mjs")',
   );
 
   expect(templateCliFileIndex).toBeGreaterThan(-1);

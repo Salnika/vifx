@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { VIFX_DOCS_BASE_URL } from "@vifx/errors";
 import { readTextFileIfExists } from "./files.ts";
 
 /**
@@ -192,7 +193,7 @@ async function evaluateMetroConfig(absolutePath: string): Promise<RawMetroConfig
   }
 }
 
-const SVG_TRANSFORMER_DOCS = "https://vifx.dev/migration/metro#react-native-svg-transformer";
+const SVG_TRANSFORMER_DOCS = `${VIFX_DOCS_BASE_URL}/guide/migration#_3-map-your-metro-config-js`;
 
 function buildBabelTransformerHint(
   filename: MetroConfigFilename,
@@ -202,7 +203,7 @@ function buildBabelTransformerHint(
     return {
       severity: "action",
       source: `${filename}:transformer.babelTransformerPath`,
-      suggestion: `Replace react-native-svg-transformer with Vifx SVG support. See ${SVG_TRANSFORMER_DOCS}.`,
+      suggestion: `Replace react-native-svg-transformer with a Vite SVG plugin (such as vite-plugin-svgr) in vite.config.vifx.ts. See ${SVG_TRANSFORMER_DOCS}.`,
       vifxConfigKey: "plugins",
     };
   }
@@ -215,7 +216,7 @@ function buildBabelTransformerHint(
   };
 }
 
-const RESOLVE_REQUEST_DOCS = "https://vifx.dev/guide/migration#resolverequest";
+const RESOLVE_REQUEST_DOCS = `${VIFX_DOCS_BASE_URL}/guide/migration#resolverequest`;
 
 /**
  * A custom `resolver.resolveRequest` is now supported via a Vite-side hook, so

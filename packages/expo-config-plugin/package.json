@@ -1,11 +1,25 @@
 {
   "name": "@vifx/expo-config-plugin",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.0.0",
+  "description": "Expo config plugin that routes native release builds through vifx export:embed instead of Metro.",
+  "keywords": [
+    "expo",
+    "expo-config-plugin",
+    "metro",
+    "react-native",
+    "vifx"
+  ],
+  "homepage": "https://github.com/Salnika/vifx/tree/master/packages/expo-config-plugin#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/expo-config-plugin"
+  },
   "files": [
     "app.plugin.js",
-    "dist",
-    "src"
+    "dist"
   ],
   "type": "module",
   "exports": {
@@ -15,6 +29,9 @@
     },
     "./app.plugin": "./app.plugin.js",
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "vp pack",
@@ -31,5 +48,8 @@
     "typescript": "catalog:",
     "vite-plus": "catalog:",
     "xcode": "^4.0.0"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
   }
 }

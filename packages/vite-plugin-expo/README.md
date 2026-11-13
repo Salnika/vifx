@@ -1,55 +1,32 @@
 # @vifx/vite-plugin-expo
 
-Experimental Expo layer on top of `@vifx/vite-plugin-react-native`.
+The Expo layer of [Vifx](https://github.com/Salnika/vifx): Expo-aware builds on top of [`@vifx/vite-plugin-react-native`](../vite-plugin-react-native), the Expo Go dev server and Expo export artifacts.
 
-## Highlights
+Most projects use it through the `vifx` command (`vifx expo dev`, `vifx export:embed`, `vifx expo export`) from [`@vifx/cli`](../cli). Use this package directly to embed the dev server or the builds in your own tooling.
 
-- `expo(options)` layers Expo-specific config detection on top of the RN Vite plugin
-- `findExpoAppConfig(projectRoot, explicitPath?)` locates `app.json` or `app.config.*`
-- `startExpoDevServer(options)` starts a bounded Vite browser dev server for Expo experiments
-- `startExpoGoDevServer(options)` starts the first Vifx-backed native Expo Go protocol server
-- `buildExpoBundle(options)` builds Expo bundle artifacts through the Expo-aware Vite plugin
-- Injects `EXPO_PUBLIC_*` variables into the Vite build
-- Provides a minimal safe shim for `expo` and `registerRootComponent`
-- Can mount the registered root into the Vifx browser runtime
-- Can participate in bounded `expo-router/entry` experiments
+## What it provides
+
+- `expo(options)`: the Vite plugins for an Expo app (app config, `EXPO_PUBLIC_*` variables, Expo Router entry, assets).
+- `startExpoGoDevServer(options)`: the Expo Go dev server. It serves the manifest, bundles, source maps, assets, `/status`, `/symbolicate`, React Native DevTools and the `/message`, `/events` and `/hot` sockets. In development, Fast Refresh runs on Rolldown's incremental dev engine; see [Dev server and Fast Refresh](https://salnika.github.io/vifx/guide/dev-server).
+- `buildExpoBundle(options)`: one build of an Expo bundle (development or production), with its source map and assets.
+- `startExpoDevServer(options)`: the browser preview server (react-native-web).
+- `findExpoAppConfig(projectRoot)`: locates `app.json` or `app.config.*`.
 
 ## Example
 
 ```ts
-import { defineConfig } from "vite";
-import {
-  expo,
-  findExpoAppConfig,
-  startExpoDevServer,
-  startExpoGoDevServer,
-} from "@vifx/vite-plugin-expo";
+import { startExpoGoDevServer } from "@vifx/vite-plugin-expo";
 
-export default defineConfig({
-  plugins: [expo({ platform: "ios", entry: "./index.js" })],
-});
-
-const appConfigPath = await findExpoAppConfig(process.cwd());
-console.log(appConfigPath);
-
-const server = await startExpoDevServer({
-  platform: "ios",
-  projectRoot: process.cwd(),
-});
-console.log(server.url);
-
-const expoGoServer = await startExpoGoDevServer({
+const server = await startExpoGoDevServer({
   entry: "./index.js",
   platform: "ios",
   projectRoot: process.cwd(),
+  lazyStart: true,
 });
-console.log(expoGoServer.manifestUrl);
+
+console.log(server.expoGoUrl);
 ```
 
-## Boundaries
+## Scope
 
-- `startExpoDevServer` remains browser-only and uses Vite HMR.
-- `startExpoGoDevServer` is an early native protocol server. It serves manifest, bundle, config asset, source-map, status, source-map-backed symbolication, and `/message` plus `/events` WebSocket endpoints for device commands such as reload, but it is not full `expo start` parity yet.
-- React Native Fast Refresh parity, hosted Updates signing, native app binary replacement, and EAS integration remain out of scope.
-- HNewsPro/real-device acceptance is still required before calling the Expo Go replacement complete.
-- This package stays experimental and bounded to fixture-backed proof.
+Vifx replaces the Metro bundling path. Expo Go itself, native builds, EAS and Expo Updates stay with Expo. See the [project status](https://salnika.github.io/vifx/guide/status) for what is validated and what is not.

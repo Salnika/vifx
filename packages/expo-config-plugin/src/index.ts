@@ -39,8 +39,9 @@ export const VIFX_IOS_TAG = "vifx-bundle-command";
 export const VIFX_ANDROID_TAG = "vifx-bundle-command";
 
 const DEFAULT_BUNDLE_COMMAND = "export:embed";
-const DEFAULT_IOS_CLI_PATH = "$PROJECT_DIR/../node_modules/@vifx/cli/bin/vifx.mjs";
-const DEFAULT_ANDROID_CLI_FILE = "../../node_modules/@vifx/cli/bin/vifx.mjs";
+// The built CLI entry: the published @vifx/cli package ships dist/ only.
+const DEFAULT_IOS_CLI_PATH = "$PROJECT_DIR/../node_modules/@vifx/cli/dist/bin.mjs";
+const DEFAULT_ANDROID_CLI_FILE = "../../node_modules/@vifx/cli/dist/bin.mjs";
 const ANDROID_GENERATED_END = `// @generated end ${VIFX_ANDROID_TAG}`;
 
 export function resolveVifxBundlerProps(props?: VifxBundlerProps): ResolvedVifxBundlerProps {
@@ -134,7 +135,7 @@ function parsePbxShellScript(shellScript: string) {
       cause: error,
       code: "VIFX_EXPO_PLUGIN_SHELL_SCRIPT_UNREADABLE",
       details: { shellScript },
-      docsPath: "/guide/native-builds",
+      docsPath: "/guide/migration#expo-native-builds",
       hint: 'Re-run "npx expo prebuild --clean" to restore the template build phase, or export CLI_PATH and BUNDLE_COMMAND manually in ios/.xcode.env.',
       message: `Could not parse the "${VIFX_BUNDLE_PHASE_NAME}" shell script in the Xcode project.`,
     });
@@ -152,7 +153,7 @@ export function applyVifxToXcodeProject(project: XcodeProjectLike, props?: VifxB
   if (phases.length === 0) {
     throw new VifxError({
       code: "VIFX_EXPO_PLUGIN_BUNDLE_PHASE_NOT_FOUND",
-      docsPath: "/guide/native-builds",
+      docsPath: "/guide/migration#expo-native-builds",
       hint: 'Expected a "Bundle React Native code and images" PBXShellScriptBuildPhase, which "npx expo prebuild" generates. Re-run prebuild or add the phase before applying @vifx/expo-config-plugin.',
       message: `No "${VIFX_BUNDLE_PHASE_NAME}" build phase was found in the Xcode project.`,
     });
@@ -232,7 +233,7 @@ function findReactBlockClosingLine(lines: string[]) {
 
   throw new VifxError({
     code: "VIFX_EXPO_PLUGIN_GRADLE_REACT_BLOCK_UNTERMINATED",
-    docsPath: "/guide/native-builds",
+    docsPath: "/guide/migration#expo-native-builds",
     hint: "The react { ... } block in android/app/build.gradle never closes. Fix the Gradle file before applying @vifx/expo-config-plugin.",
     message: "Could not locate the end of the react {} block in android/app/build.gradle.",
   });
@@ -311,8 +312,8 @@ export const withVifxBundler: ConfigPlugin<VifxBundlerProps | undefined> = (conf
       throw new VifxError({
         code: "VIFX_EXPO_PLUGIN_GRADLE_LANGUAGE_UNSUPPORTED",
         details: { language: gradleConfig.modResults.language },
-        docsPath: "/guide/native-builds",
-        hint: 'Set cliFile = file("../../node_modules/@vifx/cli/bin/vifx.mjs") and bundleCommand = "export:embed" inside react {} of android/app/build.gradle.kts manually.',
+        docsPath: "/guide/migration#expo-native-builds",
+        hint: 'Set cliFile = file("../../node_modules/@vifx/cli/dist/bin.mjs") and bundleCommand = "export:embed" inside react {} of android/app/build.gradle.kts manually.',
         message: "@vifx/expo-config-plugin only supports Groovy android/app/build.gradle files.",
       });
     }

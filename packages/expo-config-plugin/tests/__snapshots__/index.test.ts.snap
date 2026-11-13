@@ -38,8 +38,8 @@ react {
 
     /* Autolinking */
     autolinkLibrariesWithApp()
-    // @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-46157043bd38fb4bbc096391d1934f4dc45de471
-    cliFile = file("../../node_modules/@vifx/cli/bin/vifx.mjs")
+    // @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-4a18b309054813a3ad4518aca0b2a80c9bc1e61f
+    cliFile = file("../../node_modules/@vifx/cli/dist/bin.mjs")
     bundleCommand = "export:embed"
     // @generated end vifx-bundle-command
 }
@@ -118,7 +118,7 @@ exports[`Xcode project fixture is patched in place and serializes deterministica
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-7aad9f622de05c71bab08cb51ee82280632b6497\\nexport CLI_PATH=\\"$PROJECT_DIR/../node_modules/@vifx/cli/bin/vifx.mjs\\"\\nexport BUNDLE_COMMAND=\\"export:embed\\"\\n# @generated end vifx-bundle-command\\nif [[ -f \\"$PODS_ROOT/../.xcode.env\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env\\"\\nfi\\nif [[ -f \\"$PODS_ROOT/../.xcode.env.local\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env.local\\"\\nfi\\n\\n# The project root by default is one level up from the ios directory\\nexport PROJECT_ROOT=\\"$PROJECT_DIR\\"/..\\n\\nif [[ \\"$CONFIGURATION\\" = *Debug* ]]; then\\n  export SKIP_BUNDLING=1\\nfi\\nif [[ -z \\"$ENTRY_FILE\\" ]]; then\\n  # Set the entry JS file using the bundler's entry resolution.\\n  export ENTRY_FILE=\\"$(\\"$NODE_BINARY\\" -e \\"require('expo/scripts/resolveAppEntry')\\" \\"$PROJECT_ROOT\\" ios absolute | tail -n 1)\\"\\nfi\\n\\nif [[ -z \\"$CLI_PATH\\" ]]; then\\n  # Use Expo CLI\\n  export CLI_PATH=\\"$(\\"$NODE_BINARY\\" --print \\"require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })\\")\\"\\nfi\\nif [[ -z \\"$BUNDLE_COMMAND\\" ]]; then\\n  # Default Expo CLI command for bundling\\n  export BUNDLE_COMMAND=\\"export:embed\\"\\nfi\\n\\n# Source .xcode.env.updates if it exists to allow\\n# SKIP_BUNDLING to be unset if needed\\nif [[ -f \\"$PODS_ROOT/../.xcode.env.updates\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env.updates\\"\\nfi\\n# Source local changes to allow skipping bundling\\nif [[ -f \\"$PODS_ROOT/../.xcode.env.local\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env.local\\"\\nfi\\n\\n\`\\"$NODE_BINARY\\" --print \\"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\\"\`\\n";
+			shellScript = "# @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-8046b6c92978c82be1249bbb2bcf98dd8bb7d019\\nexport CLI_PATH=\\"$PROJECT_DIR/../node_modules/@vifx/cli/dist/bin.mjs\\"\\nexport BUNDLE_COMMAND=\\"export:embed\\"\\n# @generated end vifx-bundle-command\\nif [[ -f \\"$PODS_ROOT/../.xcode.env\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env\\"\\nfi\\nif [[ -f \\"$PODS_ROOT/../.xcode.env.local\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env.local\\"\\nfi\\n\\n# The project root by default is one level up from the ios directory\\nexport PROJECT_ROOT=\\"$PROJECT_DIR\\"/..\\n\\nif [[ \\"$CONFIGURATION\\" = *Debug* ]]; then\\n  export SKIP_BUNDLING=1\\nfi\\nif [[ -z \\"$ENTRY_FILE\\" ]]; then\\n  # Set the entry JS file using the bundler's entry resolution.\\n  export ENTRY_FILE=\\"$(\\"$NODE_BINARY\\" -e \\"require('expo/scripts/resolveAppEntry')\\" \\"$PROJECT_ROOT\\" ios absolute | tail -n 1)\\"\\nfi\\n\\nif [[ -z \\"$CLI_PATH\\" ]]; then\\n  # Use Expo CLI\\n  export CLI_PATH=\\"$(\\"$NODE_BINARY\\" --print \\"require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })\\")\\"\\nfi\\nif [[ -z \\"$BUNDLE_COMMAND\\" ]]; then\\n  # Default Expo CLI command for bundling\\n  export BUNDLE_COMMAND=\\"export:embed\\"\\nfi\\n\\n# Source .xcode.env.updates if it exists to allow\\n# SKIP_BUNDLING to be unset if needed\\nif [[ -f \\"$PODS_ROOT/../.xcode.env.updates\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env.updates\\"\\nfi\\n# Source local changes to allow skipping bundling\\nif [[ -f \\"$PODS_ROOT/../.xcode.env.local\\" ]]; then\\n  source \\"$PODS_ROOT/../.xcode.env.local\\"\\nfi\\n\\n\`\\"$NODE_BINARY\\" --print \\"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\\"\`\\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -152,9 +152,9 @@ android {
 dependencies {
     implementation("com.facebook.react:react-android")
 }
-// @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-613d361523aa104e4c4f83edf90044c0ab1b6f0e
+// @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-7469e4b51ef29c988117536e00cb8f8d18ade45e
 react {
-    cliFile = file("../../node_modules/@vifx/cli/bin/vifx.mjs")
+    cliFile = file("../../node_modules/@vifx/cli/dist/bin.mjs")
     bundleCommand = "export:embed"
 }
 // @generated end vifx-bundle-command
@@ -162,8 +162,8 @@ react {
 `;
 
 exports[`iOS bundle phase script gains marker-guarded CLI_PATH/BUNDLE_COMMAND exports 1`] = `
-"# @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-7aad9f622de05c71bab08cb51ee82280632b6497
-export CLI_PATH="$PROJECT_DIR/../node_modules/@vifx/cli/bin/vifx.mjs"
+"# @generated begin vifx-bundle-command - expo prebuild (DO NOT MODIFY) sync-8046b6c92978c82be1249bbb2bcf98dd8bb7d019
+export CLI_PATH="$PROJECT_DIR/../node_modules/@vifx/cli/dist/bin.mjs"
 export BUNDLE_COMMAND="export:embed"
 # @generated end vifx-bundle-command
 if [[ -f "$PODS_ROOT/../.xcode.env" ]]; then

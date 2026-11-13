@@ -1,6 +1,6 @@
 {
   "name": "docs",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,12 +10,12 @@
     "preview": "vitepress preview"
   },
   "devDependencies": {
-    "esbuild": "latest",
+    "esbuild": "^0.28.2",
     "oxc-minify": "catalog:",
     "tsrs": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",
-    "vitepress": "next"
+    "vitepress": "2.0.0-alpha.21"
   }
 }

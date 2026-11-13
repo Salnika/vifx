@@ -1,0 +1,49 @@
+name: Bug report
+description: Something does not build, run or behave like it does with Metro.
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead. Paste error messages as text.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: The commands you ran and, ideally, a link to a minimal project that shows the problem.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Vifx version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - iOS
+        - Android
+        - Web
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `vifx doctor --json`
+      description: Run it in the project. It lists the Expo SDK, React Native, Node.js and package-manager versions Vifx detected.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: metro
+    attributes:
+      label: Does it work with Metro?
+      description: Whether the same project and command work with `expo start` / `expo export:embed`.

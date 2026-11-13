@@ -1,8 +1,12 @@
 import { defineConfig } from "vitepress";
 
+const repositoryUrl = "https://github.com/Salnika/vifx";
+
 export default defineConfig({
   title: "Vifx",
   description: "A unified Vite + Rolldown toolchain that replaces Metro for React Native and Expo.",
+  // GitHub Pages serves the site under /<repository>/ (set by the docs workflow).
+  base: process.env.DOCS_BASE ?? "/",
   lastUpdated: true,
   outDir: "./dist",
   // The workspace aliases `vite` to @voidzero-dev/vite-plus-core (rolldown-vite).
@@ -25,13 +29,43 @@ export default defineConfig({
       rollupOptions: { logLevel: "silent" },
     },
   },
+  markdown: {
+    config(md) {
+      // CLI errors link to /reference/errors#<CODE>: on that page, a table cell
+      // holding only an error code gets the code as its id.
+      const renderCodeInline = md.renderer.rules.code_inline;
+      md.renderer.rules.code_inline = (tokens, index, options, env, self) => {
+        const token = tokens[index];
+        const relativePath = (env as { relativePath?: string }).relativePath;
+        if (
+          token &&
+          tokens.length === 1 &&
+          relativePath === "reference/errors.md" &&
+          /^VIFX_[A-Z0-9_]+$/u.test(token.content)
+        ) {
+          token.attrSet("id", token.content);
+        }
+        return renderCodeInline
+          ? renderCodeInline(tokens, index, options, env, self)
+          : self.renderToken(tokens, index, options);
+      };
+    },
+  },
   themeConfig: {
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Features", link: "/reference/features" },
       { text: "vs Metro", link: "/reference/comparisons" },
       { text: "Reference", link: "/reference/cli" },
+      { text: "Status", link: "/guide/status" },
     ],
+    socialLinks: [{ icon: "github", link: repositoryUrl }],
+    editLink: {
+      pattern: `${repositoryUrl}/edit/master/apps/docs/:path`,
+    },
+    footer: {
+      message: "Released under the MIT License.",
+    },
     search: {
       provider: "local",
     },
@@ -42,9 +76,11 @@ export default defineConfig({
           items: [
             { text: "Getting Started", link: "/guide/getting-started" },
             { text: "Migration", link: "/guide/migration" },
+            { text: "Dev Server and Fast Refresh", link: "/guide/dev-server" },
             { text: "Architecture", link: "/guide/architecture" },
             { text: "Compatibility Philosophy", link: "/guide/compatibility-philosophy" },
             { text: "Workflows", link: "/guide/workflows" },
+            { text: "Project Status", link: "/guide/status" },
           ],
         },
       ],

@@ -1,22 +1,36 @@
 {
   "name": "@vifx/compat-runner",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.0.0",
+  "description": "Runs Vifx and Metro over the compatibility fixtures and reports where they differ.",
+  "keywords": [
+    "compatibility",
+    "metro",
+    "vifx"
+  ],
+  "homepage": "https://github.com/Salnika/vifx/tree/master/packages/compat-runner#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/compat-runner"
+  },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "type": "module",
   "exports": {
     ".": "./dist/index.mjs",
     "./package.json": "./package.json"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "vp pack",
     "check": "vp check",
     "dev": "vp pack --watch",
-    "test": "vp test run",
-    "prepublishOnly": "vp run build"
+    "test": "vp test run"
   },
   "dependencies": {
     "@vifx/asset-registry": "workspace:*",
@@ -32,5 +46,8 @@
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
   }
 }

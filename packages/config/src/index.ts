@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { VifxError, toVifxError } from "@vifx/errors";
+import { VIFX_DOCS_BASE_URL, VifxError, toVifxError } from "@vifx/errors";
 import type {
   VifxBundleMode,
   VifxBundlePlatform,
@@ -41,7 +41,7 @@ export const VIFX_DEFAULT_RESOLVER_EXTENSIONS = ["tsx", "ts", "jsx", "js", "json
 export const VIFX_DEFAULT_RESOLVER_CONDITIONS: readonly string[] = [];
 export const VIFX_DEFAULT_RESOLVER_MAIN_FIELDS = ["react-native", "module", "main"] as const;
 export const VIFX_DEFAULT_LOG_LEVEL: VifxLogLevel = "info";
-export const VIFX_DEFAULT_DOCS_BASE_URL = "https://vifx.dev";
+export const VIFX_DEFAULT_DOCS_BASE_URL = VIFX_DOCS_BASE_URL;
 export const VIFX_DEFAULT_EXPO_PUBLIC_ENV_PREFIX = "EXPO_PUBLIC_";
 export const VIFX_DEFAULT_VITE_ENTRY = "./index.js";
 

@@ -1,0 +1,8 @@
+{
+  "version": 3,
+  "file": "index.bundle",
+  "sources": ["App.tsx"],
+  "names": ["App"],
+  "mappings": "AAAAA",
+  "sourcesContent": ["export default function App() {\n  return null;\n}\n"]
+}

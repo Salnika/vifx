@@ -1,15 +1,30 @@
 {
   "name": "@vifx/codemods",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.0.0",
+  "description": "Project setup and migration codemods used by the vifx command line.",
+  "keywords": [
+    "codemods",
+    "migration",
+    "vifx"
+  ],
+  "homepage": "https://github.com/Salnika/vifx/tree/master/packages/codemods#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/codemods"
+  },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "type": "module",
   "exports": {
     ".": "./dist/index.mjs",
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "vp pack",
@@ -25,5 +40,8 @@
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
   }
 }

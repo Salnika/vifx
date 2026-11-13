@@ -584,7 +584,9 @@ export async function evaluateExpoNoMetroContract(
   const workflows: VifxExpoNoMetroWorkflowReport[] = [
     createWorkflow({
       blockers: [
-        ...(!expoVersion ? ["Add an Expo dependency before using the Expo Vite corridor."] : []),
+        ...(!expoVersion
+          ? ["Add an Expo dependency before bundling the project as an Expo app."]
+          : []),
         ...(!reactNativeVersion
           ? ["Add a React Native dependency before building Expo bundles."]
           : []),

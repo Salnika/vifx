@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "platforms": ["ios", "android"],
+  "bundles": {
+    "ios": "dist/ios/index.bundle",
+    "android": "dist/android/index.bundle"
+  }
+}

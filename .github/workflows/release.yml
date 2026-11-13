@@ -1,0 +1,53 @@
+name: release
+
+# On every push to master:
+# - with pending changesets, open or update the "Version Packages" pull request;
+# - once that pull request is merged, publish the new versions to npm, tag them
+#   and create the GitHub releases.
+# See CONTRIBUTING.md, "Releasing", for the one-time npm and repository setup.
+
+on:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  release:
+    name: Version or publish
+    # Forks have no npm credentials and nothing to publish.
+    if: github.repository == 'Salnika/vifx'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Vite+ and install dependencies
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          node-version: 24
+          cache: true
+          registry-url: https://registry.npmjs.org
+
+      - name: Build packages
+        run: vp run build
+
+      - name: Version packages or publish to npm
+        uses: changesets/action@v2
+        with:
+          version-script: pnpm run version-packages
+          publish-script: pnpm run release
+          commit-message: "chore: release packages"
+          pr-title: "chore: release packages"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

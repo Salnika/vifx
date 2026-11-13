@@ -70,18 +70,18 @@ You rarely write all of this by hand. [`vifx setup`](./cli) onboards an existing
 
 The config shape is closed: any key outside the documented set throws `VIFX_CONFIG_INVALID` with `Unknown config key`. The same closed-set rule applies inside `resolver`, `logger`, `expoOptions`, `vite`, and each `vite.targets[]` entry.
 
-| Key           | Type                                                           | Default                   | Purpose                                                                                    |
-| ------------- | -------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
-| `projectRoot` | `string`                                                       | resolved cwd              | Absolute or relative root the build resolves against.                                      |
-| `platforms`   | `("ios" \| "android" \| "native" \| "web")[]`                  | `["ios", "android"]`      | Platforms vifx is aware of. Deduped; an empty array is rejected.                           |
-| `projectType` | `"expo" \| "react-native" \| "workspace-package" \| "unknown"` | inferred                  | Project shape. See [inference](#inference-and-defaults).                                   |
-| `expo`        | `boolean`                                                      | `projectType === "expo"`  | Marks the project as Expo.                                                                 |
-| `reactNative` | `boolean`                                                      | derived                   | Marks the project as React Native.                                                         |
-| `expoOptions` | object                                                         | see [below](#expooptions) | Expo bundler options.                                                                      |
-| `vite`        | object                                                         | see [below](#vite)        | The Vite engine config (mode, targets, user config).                                       |
-| `resolver`    | object                                                         | see [below](#resolver)    | Module resolution order.                                                                   |
-| `logger`      | object                                                         | see [below](#logger)      | Log level and JSON output.                                                                 |
-| `docsBaseUrl` | `string`                                                       | `https://vifx.dev`        | Base URL used in doc links. Must be an absolute HTTP(S) URL; a trailing slash is stripped. |
+| Key           | Type                                                           | Default                          | Purpose                                                                                    |
+| ------------- | -------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------ |
+| `projectRoot` | `string`                                                       | resolved cwd                     | Absolute or relative root the build resolves against.                                      |
+| `platforms`   | `("ios" \| "android" \| "native" \| "web")[]`                  | `["ios", "android"]`             | Platforms vifx is aware of. Deduped; an empty array is rejected.                           |
+| `projectType` | `"expo" \| "react-native" \| "workspace-package" \| "unknown"` | inferred                         | Project shape. See [inference](#inference-and-defaults).                                   |
+| `expo`        | `boolean`                                                      | `projectType === "expo"`         | Marks the project as Expo.                                                                 |
+| `reactNative` | `boolean`                                                      | derived                          | Marks the project as React Native.                                                         |
+| `expoOptions` | object                                                         | see [below](#expooptions)        | Expo bundler options.                                                                      |
+| `vite`        | object                                                         | see [below](#vite)               | The Vite engine config (mode, targets, user config).                                       |
+| `resolver`    | object                                                         | see [below](#resolver)           | Module resolution order.                                                                   |
+| `logger`      | object                                                         | see [below](#logger)             | Log level and JSON output.                                                                 |
+| `docsBaseUrl` | `string`                                                       | `https://salnika.github.io/vifx` | Base URL used in doc links. Must be an absolute HTTP(S) URL; a trailing slash is stripped. |
 
 ### `platforms`
 
@@ -113,23 +113,23 @@ If `vite.targets` is omitted (and `mode` is not `none`), vifx synthesizes one ta
 
 Each target accepts exactly these keys. `platform` and `entry` are required; everything else is optional.
 
-| Key                 | Type                            | Default                | Purpose                                                                                                     |
-| ------------------- | ------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `platform`          | `"ios" \| "android"`            | — (required)           | Bundle platform. `native`/`web` are not valid here.                                                         |
-| `entry`             | `string`                        | — (required)           | Entry module, e.g. `./index.js` or `expo-router/entry`.                                                     |
-| `hermes`            | `boolean`                       | `false`                | Compile the release `index.bundle` to Hermes bytecode (`index.hbc`).                                        |
-| `outDir`            | `string`                        | `dist/vite/<platform>` | Output directory.                                                                                           |
-| `mode`              | `"development" \| "production"` | per build              | Overrides the resolved bundle mode for this target.                                                         |
-| `moduleFormat`      | `"hoisted" \| "metro"`          | `hoisted`              | Serialization format — see [module formats](#module-formats).                                               |
-| `reactNativeCompat` | `"none" \| "web"`               | `none`                 | Set `web` to build the companion browser target (react-native-web).                                         |
-| `aliases`           | `Record<string, string>`        | —                      | Per-target module aliases.                                                                                  |
-| `babelInPackages`   | `string[]`                      | —                      | Extra `node_modules` packages to run project Babel over.                                                    |
-| `jsxInPackages`     | `string[]`                      | —                      | Extra packages to run the JSX transform over.                                                               |
-| `compatPreview`     | `boolean`                       | `false`                | Gate the native compat-preview shims (e.g. the from-scratch reanimated mock).                               |
-| `shimReact`         | `boolean`                       | —                      | Dedupe/shim the React runtime for this target.                                                              |
-| `shimReactNative`   | `boolean`                       | —                      | Dedupe/shim the React Native runtime.                                                                       |
-| `shimJsxRuntime`    | `boolean`                       | —                      | Dedupe/shim the JSX runtime.                                                                                |
-| `transformCache`    | `boolean`                       | `true`                 | Set `false` to disable the [content-addressed transform cache](./features#transform-cache) for this target. |
+| Key                 | Type                            | Default                | Purpose                                                                                                                       |
+| ------------------- | ------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `platform`          | `"ios" \| "android"`            | — (required)           | Bundle platform. `native`/`web` are not valid here.                                                                           |
+| `entry`             | `string`                        | — (required)           | Entry module, e.g. `./index.js` or `expo-router/entry`.                                                                       |
+| `hermes`            | `boolean`                       | `false`                | Compile the release `index.bundle` to Hermes bytecode (`index.hbc`).                                                          |
+| `outDir`            | `string`                        | `dist/vite/<platform>` | Output directory.                                                                                                             |
+| `mode`              | `"development" \| "production"` | per build              | Overrides the resolved bundle mode for this target.                                                                           |
+| `moduleFormat`      | `"hoisted" \| "metro"`          | `hoisted`              | Serialization format — see [module formats](#module-formats).                                                                 |
+| `reactNativeCompat` | `"none" \| "web"`               | `none`                 | Set `web` to build the companion browser target (react-native-web).                                                           |
+| `aliases`           | `Record<string, string>`        | —                      | Per-target module aliases.                                                                                                    |
+| `babelInPackages`   | `string[]`                      | —                      | Extra `node_modules` packages to run project Babel over.                                                                      |
+| `jsxInPackages`     | `string[]`                      | —                      | Extra packages to run the JSX transform over.                                                                                 |
+| `compatPreview`     | `boolean`                       | `false`                | Gate the native compat-preview shims (e.g. the from-scratch reanimated mock).                                                 |
+| `shimReact`         | `boolean`                       | —                      | Dedupe/shim the React runtime for this target.                                                                                |
+| `shimReactNative`   | `boolean`                       | —                      | Dedupe/shim the React Native runtime.                                                                                         |
+| `shimJsxRuntime`    | `boolean`                       | —                      | Dedupe/shim the JSX runtime.                                                                                                  |
+| `transformCache`    | `boolean`                       | `true`                 | Set `false` to disable the [content-addressed transform cache](./features#content-addressed-transform-cache) for this target. |
 
 Targets are deduped by a composite key over all of their fields, so two identical target entries collapse into one.
 
@@ -137,8 +137,8 @@ Targets are deduped by a composite key over all of their fields, so two identica
 
 `moduleFormat` selects how the bundle is serialized:
 
-- **`hoisted`** is the native release output: a single scope-hoisted IIFE script (`index.bundle`, `format: "iife"`, inlined dynamic imports, global name `__vifx`). Hermes and JSC evaluate the bundle in a non-module (script) context, so this format guarantees no residual `import`/`export`/`import.meta` reaches the engine. Web targets always emit ESM.
-- **`metro`** is the Metro-graph `__d`/`__r` registry format that backs the dev server's Fast Refresh path. The hoisted IIFE serializer does not produce this format: a native target whose `moduleFormat` is `metro` throws `VIFX_MODULE_FORMAT_UNSUPPORTED`. The [`--fast-refresh`](./cli) flag on `vifx expo dev` selects the registry format for the dev server itself, where the module-registry serializer produces it.
+- **`hoisted`** is the default. In release it is a single scope-hoisted IIFE script (`index.bundle`, `format: "iife"`, inlined dynamic imports, global name `__vifx`). Hermes and JSC evaluate the bundle in a non-module (script) context, so this format guarantees no residual `import`/`export`/`import.meta` reaches the engine. In development, `vifx expo dev --expo-go` serves this format through Rolldown's dev engine, with Fast Refresh (see [Dev Server and Fast Refresh](../guide/dev-server)). Web targets always emit ESM.
+- **`metro`** is the Metro-graph `__d`/`__r` registry format behind the alternative, experimental `--fast-refresh` dev path. The hoisted IIFE serializer does not produce this format: a native target whose `moduleFormat` is `metro` throws `VIFX_MODULE_FORMAT_UNSUPPORTED`. The [`--fast-refresh`](./cli#vifx-expo-dev) flag on `vifx expo dev` selects the registry format for the dev server itself, where the module-registry serializer produces it. Fast Refresh does not require it.
 
 Native is the primary target by design; web is a companion target set per-target via `reactNativeCompat: "web"`.
 
@@ -166,7 +166,7 @@ Exactly three sub-keys.
 | `inspectExportPath` | `string` | `undefined`    | Path to an existing Expo export to inspect.                                                 |
 | `publicEnvPrefix`   | `string` | `EXPO_PUBLIC_` | Prefix for public env vars inlined as build-time defines.                                   |
 
-`appConfigPath` and `publicEnvPrefix` are threaded into `vifx export:embed`'s Expo build. Public env vars matching `publicEnvPrefix` are inlined as both `import.meta.env.<KEY>` and `process.env.<KEY>` for native and web — see [the env table in Features](./features#define-and-env).
+`appConfigPath` and `publicEnvPrefix` are threaded into `vifx export:embed`'s Expo build. Public env vars matching `publicEnvPrefix` are inlined as both `import.meta.env.<KEY>` and `process.env.<KEY>` for native and web — see [the env table in Features](./features#unified-define-and-env).
 
 ## `logger`
 
@@ -226,7 +226,7 @@ Your plugins are appended _after_ vifx's own, which always run physically first.
 
 ### Keys vifx owns
 
-vifx re-imposes the keys it must control for native output, platform resolution, and Fast Refresh serialization. When your config sets one of these, vifx neutralizes it and emits a `VIFX_USER_VITE_CONFIG_CONFLICT` warning so the override is never silently dropped. A config that sets none of them merges identically to the no-user-config path.
+vifx re-imposes the keys it must control for native output, platform resolution, and the registry-format serialization. When your config sets one of these, vifx neutralizes it and emits a `VIFX_USER_VITE_CONFIG_CONFLICT` warning so the override is never silently dropped. A config that sets none of them merges identically to the no-user-config path.
 
 | Owned key                                                                           | What vifx does                                                                                                                                          |
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -247,9 +247,9 @@ All of these carry the `VIFX_USER_VITE_CONFIG_CONFLICT` code:
 
 A user config that fails to load (a syntax or export error in `vite.config.vifx.*`) also throws `VIFX_USER_VITE_CONFIG_CONFLICT`, with the hint to fix the file or set `vite.userConfigFile: false`.
 
-### The Fast Refresh staging path
+### The registry-format staging path
 
-The `moduleFormat: "metro"` dev build does not merge your whole config. It pulls only your plugins plus the non-reserved parts of `resolve` and `define`, because its CJS staging output (`format: "cjs"`, `preserveModules`, `exports: "named"`) is the Fast Refresh serialization contract and must stay vifx-owned. Your plugins still run; the output layout does not change.
+The `moduleFormat: "metro"` dev build used by `--fast-refresh` does not merge your whole config. It pulls only your plugins plus the non-reserved parts of `resolve` and `define`, because its CJS staging output (`format: "cjs"`, `preserveModules`, `exports: "named"`) is the registry serialization contract and must stay vifx-owned. Your plugins still run; the output layout does not change. The default dev engine merges your config like a regular development build.
 
 ### `resolveRequest` (Metro drop-in)
 

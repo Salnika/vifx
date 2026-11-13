@@ -10,6 +10,7 @@ import {
 import { EXPO_SDK_SUPPORT, SUPPORTED_EXPO_SDK_VERSIONS } from "@vifx/expo-export";
 import { expect, test } from "vite-plus/test";
 import { executeCli } from "../src/index.ts";
+import cliPackage from "../package.json" with { type: "json" };
 import {
   EXPO_GO_DEV_KEY_HINT,
   EXPO_GO_DEV_KEYS_HELP,
@@ -182,7 +183,7 @@ test("expo parent command prints Expo audit help", async () => {
   expect(result.stdout).toContain("vifx expo dev");
   expect(result.stdout).toContain("vifx expo export");
   expect(result.stdout).toContain("vifx expo smoke");
-  expect(result.stdout).toContain("no-Metro Vite bundling corridor");
+  expect(result.stdout).toContain("bundled with Vite instead of Metro");
   expect(result.stdout).toContain("--expo-go");
   expect(result.stdout).not.toContain("expo serve");
   expect(result.stdout).not.toContain("signing");
@@ -768,16 +769,16 @@ test("setup --json returns the expected machine-readable preview shape", async (
   expect(parsed.withViteConfig).toBe(false);
   expect(parsed.changes.map((change) => change.path)).toEqual(["vifx.config.ts"]);
   expect(parsed.nextCommands).toContain(
-    `pnpm vifx build ${path.join(FIXTURE_ROOT, "expo-router-basic")}`,
+    `npx vifx build ${path.join(FIXTURE_ROOT, "expo-router-basic")}`,
   );
   expect(parsed.nextCommands).toContain(
-    `pnpm vifx expo dev ${path.join(FIXTURE_ROOT, "expo-router-basic")} --platform ios`,
+    `npx vifx expo dev ${path.join(FIXTURE_ROOT, "expo-router-basic")} --platform ios`,
   );
   expect(parsed.nextCommands).toContain(
-    `pnpm vifx expo export ${path.join(FIXTURE_ROOT, "expo-router-basic")} --out-dir dist/expo`,
+    `npx vifx expo export ${path.join(FIXTURE_ROOT, "expo-router-basic")} --out-dir dist/expo`,
   );
   expect(parsed.nextCommands).not.toContain(
-    `pnpm vifx native run ${path.join(FIXTURE_ROOT, "expo-router-basic")} --platform ios`,
+    `npx vifx native run ${path.join(FIXTURE_ROOT, "expo-router-basic")} --platform ios`,
   );
 });
 
@@ -806,7 +807,7 @@ test("setup --expo-go generates native Expo targets and next command", async () 
 
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Expo Go server: requested");
-  expect(result.stdout).toContain(`pnpm vifx expo dev ${targetPath} --platform ios --expo-go`);
+  expect(result.stdout).toContain(`npx vifx expo dev ${targetPath} --platform ios --expo-go`);
   expect(vifxConfig).toContain('aliases: {"@":"."}');
   expect(vifxConfig).toContain('entry: "expo-router/entry"');
   expect(vifxConfig).not.toContain("reactNativeCompat");
@@ -907,7 +908,7 @@ test("migrate expo previews package.json and vifx.config.ts changes", async () =
 
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Deprecated surface:");
-  expect(result.stdout).toContain("pnpm vifx setup <expo-project-path> --yes");
+  expect(result.stdout).toContain("vifx setup <expo-project-path> --yes");
   expect(result.stdout).toContain("[update] package.json");
   expect(result.stdout).toContain("[create] vifx.config.ts");
   expect(result.stdout).toContain("Dry run only. No files were written.");
@@ -919,7 +920,7 @@ test("migrate renders structured errors for project type mismatches", async () =
   expect(result.exitCode).toBe(1);
   expect(result.stderr).toContain("[VIFX_MIGRATION_UNSAFE_CHANGE]");
   expect(result.stderr).toContain("Expected an Expo project");
-  expect(result.stderr).toContain("Docs: https://vifx.dev/guide/migration");
+  expect(result.stderr).toContain("Docs: https://salnika.github.io/vifx/guide/migration");
 });
 
 test("vite init --write creates a plugin-backed vite.config.vifx.ts in a copied fixture", async () => {
@@ -977,8 +978,17 @@ test("migrate react-native --write preserves existing scripts while adding vifx 
   expect(result.stdout).toContain("Deprecated surface:");
   expect(migratedPackageJson.scripts?.custom).toBe("node custom.js");
   expect(migratedPackageJson.scripts?.["vifx:doctor"]).toBe("vifx doctor");
-  expect(migratedPackageJson.scripts?.["vifx:metro"]).toBe("vifx metro inspect . --platform ios");
-  expect(migratedPackageJson.devDependencies?.["@vifx/config"]).toBe("workspace:*");
+  expect(migratedPackageJson.scripts?.["vifx:inspect"]).toBe("vifx inspect");
+  // A version range installable from npm, never a workspace protocol.
+  expect(migratedPackageJson.devDependencies?.["@vifx/cli"]).toBe(`^${cliPackage.version}`);
+  expect(migratedPackageJson.devDependencies?.["@vifx/config"]).toBeUndefined();
+});
+
+test("--version prints the version from package.json", async () => {
+  const result = await executeCli(["--version"]);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.stdout).toBe(cliPackage.version);
 });
 
 test("metro inspect returns captured Metro reference artifacts", async () => {
@@ -1241,7 +1251,7 @@ test("expo dev keybindings print the help block on ?", () => {
     detach?.();
   }
 
-  expect(writes.join("")).toContain("afficher cette aide");
+  expect(writes.join("")).toContain("show this help");
 });
 
 test("expo dev keybindings are skipped without an interactive TTY", () => {
@@ -1273,6 +1283,6 @@ test("expo dev exposes its keybinding hint string", () => {
   expect(EXPO_GO_DEV_KEY_HINT).toContain("j devtools");
   expect(EXPO_GO_DEV_KEY_HINT).toContain("o editor");
   expect(EXPO_GO_DEV_KEY_HINT).toContain("? all");
-  expect(EXPO_GO_DEV_KEYS_HELP).toContain("recharger l'app");
+  expect(EXPO_GO_DEV_KEYS_HELP).toContain("reload the app");
   expect(EXPO_GO_DEV_KEYS_HELP).toContain("React Native DevTools");
 });

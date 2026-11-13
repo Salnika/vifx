@@ -8,7 +8,7 @@ export const MIGRATE_HELP = `Usage:
   vifx migrate react-native <path> [--dry-run] [--write] [--with-vite] [--verbose]
 
 Deprecated legacy manual migration surface. Prefer:
-  - pnpm vifx setup <expo-project-path> --yes
+  - vifx setup <expo-project-path> --yes
   - vifx init <react-native-project-path> --write
   - vifx vite init <project-path> --write
 
@@ -25,7 +25,7 @@ Options:
 function createDeprecationNotice(kind: "expo" | "react-native") {
   const preferredCommand =
     kind === "expo"
-      ? "pnpm vifx setup <expo-project-path> --yes"
+      ? "vifx setup <expo-project-path> --yes"
       : "vifx init <react-native-project-path> --write";
 
   return [

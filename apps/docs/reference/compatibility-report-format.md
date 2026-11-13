@@ -1,19 +1,19 @@
 # Compatibility Report Format
 
-Status: Current.
-
 The `vifx compat run` command can render the same compatibility results in three formats:
 
 - `terminal`: concise output for local development
 - `json`: machine-readable output for automation
 - `markdown`: shareable report output for docs, issues, or PR comments
 
+The compatibility matrix is built from the fixtures in the Vifx repository, so `vifx compat run` runs from a clone of the repository, with the `vifx` command set up as [CONTRIBUTING.md](https://github.com/Salnika/vifx/blob/master/CONTRIBUTING.md) describes.
+
 ## Terminal
 
 Use terminal output during local development:
 
 ```bash
-pnpm --filter @vifx/cli vifx compat run --adapter all
+vifx compat run --adapter all
 ```
 
 The terminal formatter includes:
@@ -29,7 +29,7 @@ The terminal formatter includes:
 Use JSON output for CI, tooling, or snapshots:
 
 ```bash
-pnpm --filter @vifx/cli vifx compat run --adapter vifx --report json
+vifx compat run --adapter vifx --report json
 ```
 
 JSON output includes:
@@ -50,7 +50,7 @@ Each case includes the case id, category, fixture id, pass/fail state, expected 
 Use Markdown output when a compatibility run should be pasted into an issue or PR:
 
 ```bash
-pnpm --filter @vifx/cli vifx compat run --adapter all --report markdown
+vifx compat run --adapter all --report markdown
 ```
 
 The Markdown formatter includes:
@@ -59,11 +59,11 @@ The Markdown formatter includes:
 - a category table
 - a failures section that links each failing case back to its docs path
 
-## Current Adapters
+## Adapters
 
-The current first-pass adapters are:
+The adapters are:
 
 - `metro`: reference adapter backed by captured Metro-like fixture expectations
-- `vifx`: adapter backed by current Vifx primitives
+- `vifx`: adapter backed by the current Vifx primitives
 
-Use `--adapter all` to run both adapters in one invocation and compare the current foundation against the Metro reference surface.
+Use `--adapter all` to run both adapters in one invocation and compare Vifx against the Metro reference surface.

@@ -1,43 +1,29 @@
 # @vifx/vite-plugin-react-native
 
-Experimental React Native Vite plugin for controlled bundle builds on top of Vifx primitives.
+The React Native core of [Vifx](https://github.com/Salnika/vifx): a Vite plugin that bundles a React Native app with Rolldown instead of Metro.
 
-## Highlights
+Most projects use it through the `vifx` command from [`@vifx/cli`](../cli), or through [`@vifx/vite-plugin-expo`](../vite-plugin-expo) for Expo apps.
 
-- `reactNative(options)` Vite plugin for bounded React Native bundle experiments
-- `buildReactNativeBundle(options)` helper that returns bundle, source-map, asset, and runtime artifacts
-- Uses `@vifx/platform-resolver`, `@vifx/asset-registry`, and `@vifx/source-map-tools`
-- Can optionally compile Hermes bytecode after the bundle is produced
-- Emits a simple browser runtime when `reactNativeCompat: "web"` is enabled
-- Can generate a bounded `expo-router/entry` preview context on that browser runtime path
+## What it does
+
+- Resolves modules the way React Native does: `.ios` / `.android` / `.native` / `.web` files, `react-native` and `exports` conditions, workspaces and isolated installs.
+- Transforms with the project's own Babel where a library needs it (worklets, React Compiler, `babel.config.js` plugins), on worker threads under load, and with Oxc everywhere else, behind a persistent transform cache.
+- Turns `require("./image.png")` into React Native asset registrations and emits every scale variant.
+- Emits the development bundle (with Vifx's Fast Refresh runtime) or a scope-hoisted, Oxc-minified production IIFE, and can compile it to Hermes bytecode with the project's `hermesc`.
+- Serves a react-native-web preview when a target sets `reactNativeCompat: "web"`.
 
 ## Example
 
 ```ts
-import { defineConfig } from "vite";
-import { buildReactNativeBundle, reactNative } from "@vifx/vite-plugin-react-native";
-
-export default defineConfig({
-  plugins: [
-    reactNative({
-      platform: "ios",
-      entry: "./index.js",
-      hermes: false,
-    }),
-  ],
-});
+import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 
 const artifacts = await buildReactNativeBundle({
-  platform: "ios",
   entry: "./index.js",
+  mode: "production",
+  platform: "ios",
 });
 
-console.log(artifacts.runtime?.htmlPath ?? artifacts.bundle.path);
+console.log(artifacts.bundle.path);
 ```
 
-## Boundaries
-
-- Controlled build plus browser runtime preview only. No Fast Refresh, HMR, Expo Go, or device runtime parity.
-- `fixtures/rn-bare-basic` is the current smoke target for this package.
-- Full Expo Router parity, Updates output, and production replacement claims stay out of scope.
-- Only a bounded `expo-router/entry` browser preview is supported today.
+See the [documentation](https://salnika.github.io/vifx/) for the configuration and the CLI.

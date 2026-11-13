@@ -1,11 +1,21 @@
 {
   "name": "@vifx/types",
   "version": "0.0.0",
-  "description": "Shared public TypeScript contracts for the Vifx monorepo.",
+  "description": "Shared TypeScript types for the Vifx packages.",
+  "keywords": [
+    "types",
+    "vifx"
+  ],
+  "homepage": "https://github.com/Salnika/vifx/tree/master/packages/types#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/types"
+  },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "type": "module",
   "sideEffects": false,
@@ -19,10 +29,9 @@
   },
   "scripts": {
     "build": "vp pack",
-    "dev": "vp pack --watch",
-    "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp run build"
+    "dev": "vp pack --watch",
+    "test": "vp test run"
   },
   "devDependencies": {
     "@types/node": "catalog:",

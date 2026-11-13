@@ -1,61 +1,52 @@
 # Packages
 
-This page lists the packages that remain in the no-Metro Vite bundling scope.
+The Vifx packages are published to npm under the `@vifx` scope. All of them are released together, with the same version.
 
-## Package Snapshot
+## Packages you install
 
-| Package                          | Status                 | Scope                                                                |
-| -------------------------------- | ---------------------- | -------------------------------------------------------------------- |
-| `@vifx/types`                    | Implemented first pass | Shared public TypeScript contracts.                                  |
-| `@vifx/errors`                   | Implemented first pass | Structured errors with codes, hints, and docs paths.                 |
-| `@vifx/logger`                   | Implemented first pass | Terminal and JSON logging helpers.                                   |
-| `@vifx/config`                   | Implemented first pass | `vifx.config.*` definition, defaults, discovery, and loading.        |
-| `@vifx/core`                     | Implemented first pass | Project discovery and orchestration glue.                            |
-| `@vifx/platform-resolver`        | Implemented first pass | React Native-style platform resolution.                              |
-| `@vifx/asset-registry`           | Implemented first pass | Asset scale grouping, dimensions, hashes, and metadata.              |
-| `@vifx/source-map-tools`         | Implemented first pass | Source-map validation, normalization, and comparison helpers.        |
-| `@vifx/hermes-tools`             | Implemented first pass | Hermes compiler detection and post-build bytecode orchestration.     |
-| `@vifx/expo-export`              | Artifact generation    | Expo export artifact inspection and generation without Metro.        |
-| `@vifx/compat`                   | Implemented first pass | Fixture manifests, compatibility cases, and assertions.              |
-| `@vifx/compat-runner`            | Implemented first pass | Compatibility execution and report generation.                       |
-| `@vifx/metro-inspect`            | Implemented first pass | Captured Metro artifact inspection.                                  |
-| `@vifx/codemods`                 | Implemented first pass | Conservative setup/init/migration file planning.                     |
-| `@vifx/cli`                      | Implemented first pass | CLI for setup, build, audit, dev/export, comparison, and inspection. |
-| `@vifx/vite-plugin-react-native` | Available              | Core React Native Vite bundle production.                            |
-| `@vifx/vite-plugin-expo`         | Available              | Expo-specific layer above the RN Vite plugin.                        |
+| Package                          | What it is                                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `@vifx/cli`                      | The `vifx` command. It brings the Vite plugins and the other building blocks with it.                                           |
+| `@vifx/config`                   | `defineVifxConfig` and the config loader, for a typed `vifx.config.ts`.                                                         |
+| `@vifx/expo-config-plugin`       | Routes the Xcode and Gradle bundle phases of `expo prebuild` projects through `vifx export:embed`.                              |
+| `@vifx/vite-config-bridge`       | `vifxResolveRequest(...)`, for a Metro-style `resolveRequest` in `vite.config.vifx.ts`.                                         |
+| `@vifx/vite-plugin-expo`         | Expo builds and the Expo Go dev server; `expo()` for a hand-written `vite.config.vifx.ts`.                                      |
+| `@vifx/vite-plugin-react-native` | React Native resolution, transforms, assets, Hermes and Fast Refresh; `reactNative()` for a hand-written `vite.config.vifx.ts`. |
 
-## Primary Bundle Packages
+Install `@vifx/cli` first (see [Getting Started](../guide/getting-started#install)), and add the others when your config files import them.
 
 ### `@vifx/vite-plugin-react-native`
 
-The core replacement surface for Metro bundle output. It wires platform resolution, asset collection, source maps, optional Hermes output, and controlled Vite builds.
+The core replacement for Metro's bundle output. It wires platform resolution, asset collection, source maps, optional Hermes output, the transform cache, and the in-app runtime that applies Fast Refresh patches.
 
 ### `@vifx/vite-plugin-expo`
 
-The Expo layer above the RN plugin. It adds Expo app config handling, `EXPO_PUBLIC_*` env support, Expo shims, and the bounded Vite dev-server path.
+The Expo layer above the React Native plugin. It adds Expo app config handling, `EXPO_PUBLIC_*` env support, Expo shims, the Expo Go dev server with its dev engine, and the browser preview server.
 
-### `@vifx/expo-export`
+### `@vifx/expo-config-plugin`
 
-Generates and inspects Expo export artifacts from Vifx bundles:
+An Expo config plugin that rewrites the generated native build scripts so that they call `vifx export:embed` instead of Metro. See [Expo native builds](../guide/migration#expo-native-builds).
 
-- bundles
-- source maps
-- assets
-- `manifest.json`
-- `metadata.json`
+## Building blocks
 
-It does not implement Expo Updates runtime, local Updates serving, response signing, EAS metadata parity, or app execution.
+These packages are used by the ones above and have no stable API of their own:
 
-## Comparison Packages
+| Package                               | Scope                                                            |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| `@vifx/types`                         | Shared public TypeScript contracts.                              |
+| `@vifx/errors`                        | Structured errors with codes, hints, and docs paths.             |
+| `@vifx/logger`                        | Terminal and JSON logging helpers.                               |
+| `@vifx/core`                          | Project discovery and orchestration glue.                        |
+| `@vifx/platform-resolver`             | React Native-style platform resolution.                          |
+| `@vifx/asset-registry`                | Asset scale grouping, dimensions, hashes, and metadata.          |
+| `@vifx/transform-cache`               | The content-addressed transform cache.                           |
+| `@vifx/source-map-tools`              | Source-map validation, normalization, and comparison helpers.    |
+| `@vifx/hermes-tools`                  | Hermes compiler detection and post-build bytecode orchestration. |
+| `@vifx/expo-export`                   | Expo export artifact inspection and generation without Metro.    |
+| `@vifx/codemods`                      | Conservative setup, init, and migration file planning.           |
+| `@vifx/metro-inspect`                 | Captured Metro artifact inspection.                              |
+| `@vifx/compat`, `@vifx/compat-runner` | Compatibility cases, assertions, execution, and reports.         |
 
-### `@vifx/metro-inspect`
+`@vifx/expo-export` generates and inspects Expo export artifacts from Vifx bundles: bundles, source maps, assets, `manifest.json`, and `metadata.json`. It does not implement the Expo Updates runtime, local Updates serving, response signing, EAS metadata parity, or app execution.
 
-Inspects captured Metro reference artifacts so Vifx output can be compared against stable evidence.
-
-### `@vifx/compat` and `@vifx/compat-runner`
-
-Keep compatibility cases and report generation implementation-independent so Metro and Vifx adapters can be measured against the same expectations.
-
-## Removed From Scope
-
-`@vifx/native-artifacts` has been removed from the workspace. Native artifact manifests, native lifecycle planning, app install/launch orchestration, and toolchain diagnostics are outside the current product corridor.
+`@vifx/metro-inspect` inspects captured Metro reference artifacts so that Vifx output can be compared against stable evidence. `@vifx/compat` and `@vifx/compat-runner` keep compatibility cases and report generation independent of the implementation, so that the Metro and Vifx adapters are measured against the same expectations.

@@ -1,0 +1,20 @@
+name: Feature request
+description: A Metro or Expo CLI capability Vifx lacks, or a new idea.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The workflow or project setup this is about, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How you would expect Vifx to handle it. If Metro or Expo CLI already does it, say how.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered

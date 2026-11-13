@@ -1,99 +1,87 @@
 # Workflows
 
+The commands below run the CLI with `npx vifx`; with pnpm or Yarn, use `pnpm vifx` or `yarn vifx`. See [Getting Started](/guide/getting-started#install) to install it.
+
 ## Analyze An Expo Project
 
 Audience: Expo maintainers and bundler authors.
 
 ```sh
-pnpm vifx doctor <expo-project-path>
-pnpm vifx setup <expo-project-path> --yes --expo-go
-pnpm vifx build <expo-project-path>
-pnpm vifx expo audit <expo-project-path>
-pnpm vifx expo dev <expo-project-path> --platform ios --expo-go
-pnpm vifx expo export <expo-project-path> --out-dir dist/expo
+npx vifx doctor <expo-project-path>
+npx vifx setup <expo-project-path> --yes --expo-go
+npx vifx build <expo-project-path>
+npx vifx expo audit <expo-project-path>
+npx vifx expo dev <expo-project-path> --platform ios --expo-go
+npx vifx expo export <expo-project-path> --out-dir dist/expo
 ```
 
-Use this flow to move from config to Vite bundle production, audit evidence, Expo Go dev-server proof, and export artifacts. Keep EAS and native app binary workflows unchanged.
+Use this flow to move from config to Vite bundle production, audit evidence, the Expo Go dev server, and export artifacts. Keep EAS and native app binary workflows unchanged.
 
 ## Analyze A React Native Project
 
 Audience: bare React Native maintainers.
 
 ```sh
-vifx doctor ./fixtures/rn-bare-basic
-vifx metro inspect ./fixtures/rn-bare-basic --platform ios
-vifx init ./fixtures/rn-bare-basic --write
-vifx build ./fixtures/rn-bare-basic --platform ios
+npx vifx doctor <rn-project-path>
+npx vifx metro inspect <rn-project-path> --platform ios
+npx vifx init <rn-project-path> --write
+npx vifx build <rn-project-path> --platform ios
 ```
 
 Use captured Metro output as the reference before comparing Vifx/Vite bundles.
-
-## Run Compatibility Tests
-
-Audience: package authors and CI maintainers.
-
-```sh
-vifx compat run --adapter metro
-vifx compat run --adapter vifx
-vifx compat run --adapter all --report markdown
-```
-
-Treat compatibility as a report with context, not a single boolean.
 
 ## Inspect Metro Output
 
 Audience: bundler researchers.
 
 ```sh
-vifx metro inspect ./fixtures/rn-bare-basic --platform ios
-vifx metro inspect ./fixtures/expo-basic --platform android --json > report.json
+npx vifx metro inspect <project-path> --platform ios
+npx vifx metro inspect <project-path> --platform android --json > report.json
 ```
 
-Metro is the comparison baseline. Vifx should make differences visible before claiming replacement behavior.
+`vifx metro inspect` reads Metro output captured under `metro-output/<platform>` in the project. Metro is the comparison baseline. Vifx should make differences visible before claiming replacement behavior.
+
+## Run Compatibility Tests
+
+Audience: package authors and CI maintainers.
+
+`vifx compat run` runs the compatibility matrix against the Metro and Vifx adapters and prints a terminal, JSON or Markdown report. The matrix is built from the fixtures in the Vifx repository, so it runs from a clone of the repository; [CONTRIBUTING.md](https://github.com/Salnika/vifx/blob/master/CONTRIBUTING.md) explains how. See the [compatibility report format](/reference/compatibility-report-format) for the report schema.
+
+Treat compatibility as a report with context, not a single boolean.
 
 ## Use Direct Vite Configuration
 
 Audience: maintainers who need a hand-authored Vite surface.
 
 ```sh
-pnpm vifx setup <expo-project-path> --yes --with-vite-config
-pnpm vifx build <expo-project-path>
-pnpm vifx expo audit <expo-project-path>
+npx vifx setup <expo-project-path> --yes --with-vite-config
+npx vifx build <expo-project-path>
+npx vifx expo audit <expo-project-path>
 ```
 
 Direct Vite config is an advanced opt-in. It is not required for the main setup flow.
 
-## Validate Repository Playgrounds
+## Start Expo Development
 
-Audience: maintainers changing Vite plugins, CLI build paths, resolver behavior, assets, or Expo env handling.
-
-```sh
-pnpm playground:rn-bare
-pnpm playground:expo
-pnpm playground:validate
-```
-
-The bare React Native and Expo playgrounds run doctor, inspect, iOS and Android `vifx build`, and a direct Vite build through `vite.config.vifx.ts`.
-
-## Start Expo Vite Development
-
-Audience: maintainers working on Expo dev-server proof.
+Audience: Expo app developers.
 
 ```sh
-pnpm vifx expo dev <expo-project-path> --platform ios
-pnpm vifx expo dev <expo-project-path> --platform android --port 5174
-pnpm vifx expo dev <expo-project-path> --platform ios --expo-go
+npx vifx expo dev <expo-project-path> --platform ios --expo-go
+npx vifx expo dev <expo-project-path> --platform android --expo-go --port 5174
+npx vifx expo dev <expo-project-path> --platform ios
 ```
 
-The default workflow requires a configured Expo target with `reactNativeCompat: "web"` and serves the browser preview path. The `--expo-go` workflow serves the first native Expo Go manifest and bundle endpoints from Vifx/Vite artifacts; full Expo CLI parity and Fast Refresh are still incomplete.
+The `--expo-go` workflow serves the Expo Go manifest, bundle, source maps and assets from Vifx/Vite artifacts, with Fast Refresh on by default. One server serves one platform, so the Android server runs on a second port. See [Dev Server and Fast Refresh](/guide/dev-server) for the details and the current limitations.
+
+Without `--expo-go`, the server requires a configured Expo target with `reactNativeCompat: "web"` and serves the browser preview.
 
 ## Generate Expo Export Artifacts
 
 Audience: maintainers working on Metro-free Expo export artifacts.
 
 ```sh
-vifx expo export ./apps/playground-expo --out-dir dist/expo
-vifx expo audit ./apps/playground-expo --export-root dist/expo
+npx vifx expo export <expo-project-path> --out-dir dist/expo
+npx vifx expo audit <expo-project-path> --export-root dist/expo
 ```
 
 The generated output is limited to bundles, source maps, assets, `manifest.json`, and `metadata.json`.

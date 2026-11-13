@@ -34,7 +34,7 @@ test("compileHermesBytecode fails gracefully without a Hermes compiler", async (
     }),
   ).rejects.toMatchObject({
     code: "VIFX_HERMES_UNAVAILABLE",
-    docsPath: "/errors/VIFX_HERMES_UNAVAILABLE",
+    docsPath: "/reference/errors#VIFX_HERMES_UNAVAILABLE",
     name: "VifxError",
   });
 });

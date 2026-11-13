@@ -30,7 +30,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_DYNAMIC_CONTEXT_MODE_UNSUPPORTED`            | A `require.context` call requested a context mode other than the supported `sync` mode.                                           |
 | `VIFX_DYNAMIC_CONTEXT_NOT_STATIC`                  | A `require.context` call used arguments that cannot be statically analyzed at build time.                                         |
 | `VIFX_DYNAMIC_IMPORT_NOT_STATIC`                   | A native bundle contains a dynamic `import()` whose specifier is not a string literal.                                            |
-| `VIFX_EXPERIMENTAL_EXPO`                           | Expo support falls outside the current supported corridor for the inspected workflow.                                             |
+| `VIFX_EXPERIMENTAL_EXPO`                           | The inspected Expo workflow is outside what Vifx currently supports.                                                              |
 | `VIFX_EXPO_CONFIG_INVALID`                         | A dynamic Expo app config (`app.config.js` / `app.config.ts`) threw or did not evaluate to a config object.                       |
 | `VIFX_EXPO_CONFIG_NOT_FOUND`                       | The Expo layer could not find or read app config metadata.                                                                        |
 | `VIFX_EXPO_DEV_CLIENT_SIGNING_UNSUPPORTED`         | A manifest request demanded a code-signed response, which the Vifx dev server does not support.                                   |
@@ -69,7 +69,7 @@ These codes describe the public diagnostic vocabulary currently emitted by Vifx 
 | `VIFX_MODULE_REGISTRY_ENTRY_MISSING`               | A module-registry build produced no entry module or no module chunks.                                                             |
 | `VIFX_MODULE_REGISTRY_REQUIRE_UNRESOLVED`          | A staged module require could not be resolved into the module-registry bundle.                                                    |
 | `VIFX_MODULE_REGISTRY_SOURCEMAP_INVALID`           | A staged chunk source map could not be parsed while composing the module-registry map.                                            |
-| `VIFX_MONOREPO_EXPERIMENTAL`                       | Project inspection detected a workspace path that still depends on the current monorepo-limited support corridor.                 |
+| `VIFX_MONOREPO_EXPERIMENTAL`                       | Project inspection detected a workspace path, and monorepo support is still limited.                                              |
 | `VIFX_NO_ISSUES`                                   | Project inspection completed without finding actionable issues.                                                                   |
 | `VIFX_PROD_ASSET_VARIANT_MISSING`                  | A production asset group reached the writer without any file variants to copy.                                                    |
 | `VIFX_PROD_ASSET_WRITE_FAILED`                     | A production asset could not be written, or its destination escaped the assets dest.                                              |

@@ -7,14 +7,23 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies and build output
 node_modules
+.pnpm-store
 dist
 dist-ssr
 *.local
+*.tgz
 
 # Synthetic library packages checked in for compatibility fixtures.
 !fixtures/libs/*/node_modules/
 !fixtures/libs/*/node_modules/**
+# A hand-written Expo export, the input of the @vifx/expo-export tests.
+!fixtures/expo-export-basic/dist/
+!fixtures/expo-export-basic/dist/**
+
+# Vifx caches and build output inside fixtures and example apps
+.vifx
 
 # Editor directories and files
 .vscode/*
@@ -27,8 +36,9 @@ dist-ssr
 *.sln
 *.sw?
 
-# AI agent worktrees
-.claude/worktrees/
+# Local agent and tool state
+.claude/
+.playwright-cli/
 
 # Raw benchmark output (scripts/bench); curated results live in docs/benchmarks.
 .bench/

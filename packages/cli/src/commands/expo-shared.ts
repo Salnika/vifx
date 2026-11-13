@@ -17,7 +17,7 @@ export const EXPO_HELP = `Usage:
   vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--json]
   vifx expo smoke [path] [--platform ios|android] [--config <file>] [--host <host>] [--public-host <host>] [--port <number>] [--asset-limit <number>] [--json]
 
-Audits and runs the Expo no-Metro Vite bundling corridor. The --expo-go dev mode starts the Vifx native manifest and bundle server for Expo Go; these commands still do not replace EAS or native app binaries.
+Audits, serves and exports Expo projects bundled with Vite instead of Metro. The --expo-go dev mode starts the Vifx native manifest and bundle server for Expo Go; these commands still do not replace EAS or native app binaries.
 
 Options:
   --export-root     Optional existing Expo export directory to inspect.

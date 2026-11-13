@@ -229,7 +229,7 @@ NETWORK_SERVER_TESTS(
       }
 
       const openUrlResponse = await fetch(`${server.url}/open-url`, {
-        body: JSON.stringify({ url: "https://vifx.dev/devtools" }),
+        body: JSON.stringify({ url: "https://example.com/devtools" }),
         headers: {
           "Content-Type": "application/json",
         },
@@ -271,7 +271,7 @@ NETWORK_SERVER_TESTS(
 
       expect(openUrlResponse.status).toBe(200);
       expect(openUrl.opened).toBe(false);
-      expect(openUrl.url).toBe("https://vifx.dev/devtools");
+      expect(openUrl.url).toBe("https://example.com/devtools");
       expect(logsResponse.status).toBe(200);
       expect(logs.received).toBe(2);
       expect(sourceMapResponse.status).toBe(200);

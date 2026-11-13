@@ -1,4 +1,5 @@
 import { formatVifxError, serializeVifxError, toVifxError } from "@vifx/errors";
+import packageJson from "../package.json" with { type: "json" };
 import { runBuildCommand } from "./commands/build.ts";
 import { runCompatRunCommand } from "./commands/compat-run.ts";
 import { runDevCommand } from "./commands/dev.ts";
@@ -49,7 +50,8 @@ Options:
   --version  Print the CLI version.
 `;
 
-const CLI_VERSION = "0.0.0";
+// Inlined at build time, so the published CLI reports the version Changesets wrote.
+const CLI_VERSION = packageJson.version;
 
 function ok(stdout: string): CliResult {
   return {

@@ -1,84 +1,78 @@
 # Vifx
 
-A Vite + Rolldown bundling engine for React Native and Expo, without Metro. One toolchain builds your native iOS and Android bundles, serves an Expo Go-compatible dev server, and produces release artifacts for Xcode and Gradle — and your `vite.config.vifx.ts` makes the entire Vite/Rollup plugin ecosystem available to a React Native app.
+[![ci](https://github.com/Salnika/vifx/actions/workflows/ci.yml/badge.svg)](https://github.com/Salnika/vifx/actions/workflows/ci.yml)
+[![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
+Vite and Rolldown bundling for React Native and Expo, without Metro.
+
+Vifx builds your iOS and Android bundles, serves an Expo Go dev server with Fast Refresh, and produces the release bundle and assets that Xcode and Gradle embed. Your app is a real Rolldown module graph, so any Vite or Rollup plugin can run against it through a `vite.config.vifx.ts`.
+
+> [!WARNING]
+> Vifx is pre-1.0 and experimental. It is validated on one production Expo SDK 54 app (about 2,000 modules) on iOS and Android; Expo SDK 55 to 58 are experimental. Expect rough edges, and keep Metro around for anything Vifx does not cover yet. See [Project status](https://salnika.github.io/vifx/guide/status).
+
+## Features
+
+- **Expo Go dev server with Fast Refresh.** `vifx expo dev --expo-go` serves the manifest, bundles, source maps, assets, `/symbolicate` and React Native DevTools. A save is compiled into a patch by Rolldown's incremental dev engine and applied in place in the running app, with Metro's Fast Refresh rules. Compile errors appear on the device; app logs appear in the terminal.
+- **Release bundles for native builds.** `vifx export:embed` takes the flags of `expo export:embed` and `react-native bundle`, and writes a scope-hoisted, Oxc-minified bundle, its source map and the production asset layout. Hermes bytecode is compiled with the project's own `hermesc`.
+- **Any Vite or Rollup plugin.** Vifx loads your `vite.config.vifx.ts` through Vite's own config loader and runs your plugins after its own, so `.ios` / `.android` / `.native` resolution stays correct.
+- **One engine for native and web.** The same pipeline and the same define/env table serve a react-native-web preview.
+- **Fast builds.** A content-addressed transform cache, the project's own Babel on worker threads where a library needs it, and Oxc everywhere else.
+- **Onboarding without rewrites.** `vifx setup` writes a Vifx-owned config next to your Expo app and leaves `app.json`, scripts and sources alone. `vifx doctor` checks the project and reads your `metro.config.js` for settings to carry over.
+
+## Benchmarks
+
+One Expo SDK 54 app (about 2,000 modules), iOS, Apple M4 Pro, median of 3 warm runs, November 2026:
+
+| Measure                                |   Metro |    Vifx |
+| -------------------------------------- | ------: | ------: |
+| Release build, cold                    |  15.2 s |   4.6 s |
+| Release build, warm                    |   8.7 s |   1.6 s |
+| Dev server, cold start to first bundle |   9.0 s |   4.6 s |
+| Edit to Fast Refresh update in the app |  0.14 s |  0.05 s |
+| Release JS bundle                      | 3.54 MB | 3.37 MB |
+| Hermes bytecode                        | 4.96 MB | 5.15 MB |
+
+Metro is still ahead on Hermes bytecode size (+3.9 %) and compile time, and on the peak memory of a warm release build (+15 %). These are single-app, single-machine results; the [full report](./docs/benchmarks/expo-vs-vifx-2026-11.md) has every measure and how to reproduce it.
+
+## Getting started
+
+Requirements: Node.js 22.18+, 24.11+ or 26+, and an Expo or React Native project.
 
 ```bash
 npm install --save-dev @vifx/cli
 ```
 
-The CLI installs a `vifx` binary. Every command below runs through it.
-
-## Why teams choose Vifx over Metro
-
-- **An open plugin graph.** Vifx loads and merges your project's `vite.config.vifx.ts` through Vite's own config loader, so any standard Vite/Rollup plugin — svgr, unplugin-icons, mdx, virtual modules — runs against your React Native bundle. Vifx's own plugins run physically first, so platform resolution for `.ios`/`.android`/`.native`/`.web` stays correct. Metro's closed `__d`/`__r` registry has no equivalent plugin protocol.
-- **Native and web from one engine.** A single Rolldown pipeline and a single define/env table drive both targets. Public env vars (`EXPO_PUBLIC_*`) are inlined as both `import.meta.env.*` and `process.env.*` for native and web alike.
-- **Scope-hoisted release bundles.** Production native bundles are a single scope-hoisted IIFE, minified with the Oxc minifier, keeping Rolldown's cross-module tree-shaking. On HNewsPro the release JS is 2.2% smaller than Metro with 15% fewer modules.
-- **Fast warm rebuilds.** A content-addressed transform cache keys every entry by SHA-256 of its inputs and a tool-version stamp, so an unchanged file is a guaranteed hit. Warm rebuilds run around 3.2x faster than Metro on the same app.
-- **Per-save instrumentation Metro doesn't expose.** `vifx expo dev --expo-go` prints one phase-ventilated line per save — transform, serialize, write, apply — with a per-cycle transform-cache hit rate, and `--json` emits pure NDJSON you can aggregate for median and p95.
-
-See [Vifx vs Metro](apps/docs/reference/comparisons.md) for the benchmark-backed comparison.
-
-## 60-second quickstart
-
-Onboard an existing Expo project. `vifx setup` writes a Vifx-owned `vifx.config.ts` and leaves your Expo-owned files (`app.json`, scripts, source) untouched:
+The package installs the `vifx` command. For an Expo project:
 
 ```bash
-vifx setup ./my-expo-app --yes
+# Write a Vifx config next to the app (Expo-owned files are left untouched)
+npx vifx setup . --yes
+
+# Start the Expo Go dev server, scan the QR code, edit
+npx vifx expo dev . --expo-go --platform ios
+
+# Check the project at any point
+npx vifx doctor .
 ```
 
-Start the Expo Go dev server with state-preserving Fast Refresh, scan the QR code, and edit:
+Build the release bundle, source map and assets for the native build:
 
 ```bash
-vifx expo dev ./my-expo-app --expo-go --fast-refresh --platform ios
-```
-
-Build the release bundle, source map, and production asset layout for embedding:
-
-```bash
-vifx export:embed ./my-expo-app \
+npx vifx export:embed . \
   --platform ios \
   --dev false \
-  --bundle-output ios.bundle \
-  --sourcemap-output ios.map \
-  --assets-dest ./assets
+  --bundle-output ios/main.jsbundle \
+  --sourcemap-output ios/main.jsbundle.map \
+  --assets-dest ios/assets
 ```
 
-Check the project at any point:
+To make `expo prebuild` route the Xcode and Gradle bundle phases through Vifx, add [`@vifx/expo-config-plugin`](./packages/expo-config-plugin) to `app.json`.
 
-```bash
-vifx doctor ./my-expo-app
-```
-
-For a bare React Native project, use `vifx init` to write `vifx.config.ts`, then run the Metro-compatible dev server:
-
-```bash
-vifx init ./my-rn-app --write
-vifx dev ./my-rn-app --platform ios
-```
-
-`vifx dev` serves the Metro dev-server conventions the React Native community CLI expects: `GET /status`, `GET /<entry>.bundle`, the matching source-map route, `POST /symbolicate`, and a `/message` WebSocket. It is the bare React Native path; Expo projects use `vifx expo dev`.
-
-## Headline capabilities
-
-| Capability                                                | Command                                                  |
-| --------------------------------------------------------- | -------------------------------------------------------- |
-| Onboard an Expo project                                   | `vifx setup`                                             |
-| Onboard a bare React Native project                       | `vifx init`, `vifx vite init`                            |
-| Expo Go dev server + Fast Refresh                         | `vifx expo dev --expo-go --fast-refresh`                 |
-| Web preview (react-native-web)                            | `vifx expo dev` (target sets `reactNativeCompat: "web"`) |
-| Bare React Native dev server                              | `vifx dev`                                               |
-| Build configured targets                                  | `vifx build`                                             |
-| Release bundle + assets for Xcode/Gradle                  | `vifx export:embed`                                      |
-| Expo export artifacts (bundles, maps, manifest, metadata) | `vifx expo export`                                       |
-| Hermes bytecode                                           | per-target `hermes: true`, or `vifx hermes compile`      |
-| Project readiness check                                   | `vifx doctor`                                            |
-| Audit the no-Metro bundling contract                      | `vifx expo audit`                                        |
-
-The full surface is in the [CLI reference](apps/docs/reference/cli.md). Each command accepts `--json` for machine-readable output and `--help` for its flags.
+For a bare React Native project, `vifx init . --write` writes the config and `vifx dev . --platform ios` serves the Metro-compatible dev server the React Native CLI expects.
 
 ## Configuration
 
-Vifx reads an optional `vifx.config.ts` (also `.mts`, `.js`, `.mjs`). With no config file it runs from defaults rooted at the current directory. Author it with the typed `defineVifxConfig` helper:
+`vifx.config.ts` (also `.mts`, `.js`, `.mjs`) is optional; without it Vifx runs from defaults rooted at the current directory.
 
 ```ts
 import { defineVifxConfig } from "@vifx/config";
@@ -88,15 +82,14 @@ export default defineVifxConfig({
   vite: {
     mode: "expo",
     targets: [
-      { platform: "ios", entry: "./index.js", hermes: false },
-      { platform: "android", entry: "./index.js", hermes: false },
+      { platform: "ios", entry: "./index.js" },
+      { platform: "android", entry: "./index.js" },
     ],
   },
-  expoOptions: { publicEnvPrefix: "EXPO_PUBLIC_" },
 });
 ```
 
-To run any Vite/Rollup plugin against your React Native app, add a `vite.config.vifx.ts` (generate one with `vifx vite init`). Vifx auto-detects it, loads it with Vite's own config loader, and appends your plugins after its own so platform resolution stays intact:
+Vite and Rollup plugins go in `vite.config.vifx.ts` (`vifx vite init` writes one):
 
 ```ts
 import { defineConfig } from "vite";
@@ -105,22 +98,37 @@ import svgr from "vite-plugin-svgr";
 export default defineConfig({ plugins: [svgr()] });
 ```
 
-See the [config reference](apps/docs/reference/config.md) for the complete shape.
+## Documentation
 
-## Migrating from Metro
+The documentation site is at **[salnika.github.io/vifx](https://salnika.github.io/vifx/)** (sources in [`apps/docs`](./apps/docs)):
 
-Migration is additive. `vifx setup` writes Vifx-owned config alongside your existing Metro, Expo CLI, EAS, and app scripts without deleting or rewriting them. To repoint native build phases at Vifx, register `@vifx/expo-config-plugin` in `app.json` so `expo prebuild` injects `export:embed` as the Xcode and Gradle bundle command, routing native builds through `vifx export:embed`. Vifx also reads your `metro.config.js` and reports field-by-field migration hints through `vifx doctor` and `vifx setup`.
+- [Getting started](https://salnika.github.io/vifx/guide/getting-started) and [migrating from Metro](https://salnika.github.io/vifx/guide/migration)
+- [Dev server and Fast Refresh](https://salnika.github.io/vifx/guide/dev-server)
+- [CLI](https://salnika.github.io/vifx/reference/cli) and [configuration](https://salnika.github.io/vifx/reference/config) reference
+- [Vifx vs Metro](https://salnika.github.io/vifx/reference/comparisons) and the [library support matrix](https://salnika.github.io/vifx/reference/support-matrix)
 
-The [migration guide](apps/docs/guide/migration.md) walks through the full path.
+Architecture decisions are recorded in [`docs/adr`](./docs/adr).
+
+## Packages
+
+| Package                                                                 | What it is                                                            |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [`@vifx/cli`](./packages/cli)                                           | The `vifx` command.                                                   |
+| [`@vifx/config`](./packages/config)                                     | `defineVifxConfig` and the config loader.                             |
+| [`@vifx/expo-config-plugin`](./packages/expo-config-plugin)             | Routes native release builds through `vifx export:embed`.             |
+| [`@vifx/vite-plugin-expo`](./packages/vite-plugin-expo)                 | Expo builds and the Expo Go dev server.                               |
+| [`@vifx/vite-plugin-react-native`](./packages/vite-plugin-react-native) | React Native resolution, transforms, assets, Hermes and Fast Refresh. |
+
+The other `@vifx/*` packages are building blocks of these and have no stable API of their own. All packages are released together with the same version.
 
 ## Scope
 
-Vifx owns the Metro bundling path. Native (iOS and Android) is the primary target; web is a companion preview served by real react-native-web through the Vite dev server. Vifx orchestrates the Hermes compiler rather than vendoring it, and it leaves EAS, native app build-and-run, and the Expo Updates runtime to Expo and EAS. Custom Metro `resolver.resolveRequest` and `serializer` hooks have no Vifx equivalent; `vifx doctor` flags them so you keep Metro for those paths.
+Vifx replaces the Metro bundling path. Expo Go, the native projects, EAS Build, EAS Update and the Expo Updates runtime stay with Expo. A custom Metro `serializer` has no Vifx equivalent; `vifx doctor` reports it.
 
-## Documentation
+## Contributing
 
-Full guides and reference live under [`apps/docs`](apps/docs/index.md): [getting started](apps/docs/guide/getting-started.md), [features](apps/docs/reference/features.md), [CLI](apps/docs/reference/cli.md), [config](apps/docs/reference/config.md), and [Vifx vs Metro](apps/docs/reference/comparisons.md).
+Contributions are welcome. [CONTRIBUTING.md](./CONTRIBUTING.md) explains how to set up the repository, run the checks and propose a change. Please report security issues privately as described in [SECURITY.md](./SECURITY.md).
 
 ## License
 
-MIT
+[MIT](./LICENSE)

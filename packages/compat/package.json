@@ -1,22 +1,36 @@
 {
   "name": "@vifx/compat",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.0.0",
+  "description": "Compatibility cases and fixture catalog for the Vifx compatibility runner.",
+  "keywords": [
+    "compatibility",
+    "metro",
+    "vifx"
+  ],
+  "homepage": "https://github.com/Salnika/vifx/tree/master/packages/compat#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/compat"
+  },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "type": "module",
   "exports": {
     ".": "./dist/index.mjs",
     "./package.json": "./package.json"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "vp pack",
     "check": "vp check",
     "dev": "vp pack --watch",
-    "test": "vp test run",
-    "prepublishOnly": "vp run build"
+    "test": "vp test run"
   },
   "dependencies": {
     "@vifx/errors": "workspace:*"
@@ -25,5 +39,8 @@
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
   }
 }

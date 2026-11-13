@@ -1,15 +1,30 @@
 {
   "name": "@vifx/cli",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.0.0",
+  "description": "The vifx command line: Expo Go and React Native dev servers, release bundles, doctor and migration tools, without Metro.",
+  "keywords": [
+    "bundler",
+    "cli",
+    "expo",
+    "fast-refresh",
+    "metro",
+    "react-native",
+    "rolldown",
+    "vite"
+  ],
+  "homepage": "https://github.com/Salnika/vifx#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/cli"
+  },
   "bin": {
-    "cli": "./dist/bin.mjs",
     "vifx": "./dist/bin.mjs"
   },
   "files": [
-    "bin",
-    "dist",
-    "src"
+    "dist"
   ],
   "type": "module",
   "exports": {
@@ -17,12 +32,14 @@
     "./bin": "./dist/bin.mjs",
     "./package.json": "./package.json"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "vp pack",
     "check": "vp check",
     "dev": "vp pack --watch",
     "test": "vp test run",
-    "prepublishOnly": "vp run build",
     "vifx": "node ./bin/vifx.mjs"
   },
   "dependencies": {
@@ -51,5 +68,8 @@
     "@types/ws": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
   }
 }

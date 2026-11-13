@@ -41,8 +41,25 @@ test("VifxError keeps structured fields and derives docs URLs", () => {
   });
 
   expect(error.code).toBe("VIFX_RESOLVE_NOT_FOUND");
-  expect(error.docsPath).toBe("/errors/VIFX_RESOLVE_NOT_FOUND");
-  expect(resolveVifxDocsUrl(error.docsPath)).toBe("https://vifx.dev/errors/VIFX_RESOLVE_NOT_FOUND");
+  expect(error.docsPath).toBe("/reference/errors#VIFX_RESOLVE_NOT_FOUND");
+  expect(resolveVifxDocsUrl(error.docsPath)).toBe(
+    "https://salnika.github.io/vifx/reference/errors#VIFX_RESOLVE_NOT_FOUND",
+  );
+});
+
+test("resolveVifxDocsUrl keeps the path of a docs base URL", () => {
+  expect(resolveVifxDocsUrl("/guide/migration", "https://docs.example.com/vifx")).toBe(
+    "https://docs.example.com/vifx/guide/migration",
+  );
+  expect(resolveVifxDocsUrl("/guide/migration", "https://docs.example.com/vifx/")).toBe(
+    "https://docs.example.com/vifx/guide/migration",
+  );
+  expect(resolveVifxDocsUrl("/guide/migration", "https://vifx.example.com")).toBe(
+    "https://vifx.example.com/guide/migration",
+  );
+  expect(resolveVifxDocsUrl("https://example.com/page", "https://docs.example.com/vifx")).toBe(
+    "https://example.com/page",
+  );
 });
 
 test("formatVifxError renders summary, hint, and docs link", () => {
@@ -56,7 +73,9 @@ test("formatVifxError renders summary, hint, and docs link", () => {
 
   expect(output).toContain("[VIFX_CONFIG_INVALID] The configured platforms list is empty.");
   expect(output).toContain("Hint: Provide at least one platform");
-  expect(output).toContain("Docs: https://vifx.dev/errors/VIFX_CONFIG_INVALID");
+  expect(output).toContain(
+    "Docs: https://salnika.github.io/vifx/reference/errors#VIFX_CONFIG_INVALID",
+  );
 });
 
 test("toVifxError wraps unknown failures with a structured fallback", () => {

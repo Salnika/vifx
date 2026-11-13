@@ -8,7 +8,7 @@
 ## Update — 2026-11-13, after the Expo Go validation
 
 The second pass below was then run in Expo Go on a simulator, which found
-eight defects (see `STATUS.md`, "Expo Go validation"). Their fixes change what
+eight defects (see the [project status](../../apps/docs/guide/status.md), "Expo Go validation"). Their fixes change what
 is bundled — React Native's `console` polyfill is included again, the dev
 bundle runs in a function scope, module ids are project-relative — so the
 whole benchmark was run again on the fixed code (same app, iOS, 3 warm runs,
@@ -216,7 +216,7 @@ Delta is vifx relative to Metro; negative is better for vifx except where noted.
 - **Hermes bytecode is 3.7 % smaller** with Metro (4.96 vs 5.14 MB) — what
   actually ships in a release build. The gap was +5.8 % in June; the cause
   (Rolldown's lazy `__esm` / `__export` wrappers on a CommonJS-heavy graph) is
-  unchanged, see `BENCHMARKS.md`.
+  unchanged.
 - **Peak process memory**: vifx's single process peaks at 1.1–1.5 GB against
   0.5–0.8 GB for Metro's largest process (with the caveat in §1).
 
@@ -247,8 +247,8 @@ cold build 15.5 → 11.8 s.
 Two more findings are **not** fixed:
 
 - the source-map hole described in §3;
-- Metro could not run at all inside the agent's shell until the harness put the
-  system `find` first on `PATH` — Metro shells out to `find` to crawl the
+- Metro could not run at all in the benchmark machine's shell until the harness
+  put the system `find` first on `PATH` — Metro shells out to `find` to crawl the
   project, and a wrapper shadowing it made the crawl come back empty. That is an
   environment issue, not a vifx or Metro bug, but it cost time and the harness
   now guards against it.
@@ -273,17 +273,17 @@ pnpm --dir "$BSKY" run intl:compile
 pnpm bench:expo --project "$BSKY" --entry ./index.ts --edit-file index.ts
 ```
 
-Expect vifx to need work before it builds. The June attempt on this app (SDK 54
-at the time) is in [`real-expo-app.md`](./real-expo-app.md); since then the app
-moved to SDK 58 and now relies on three things vifx has never been run against:
-`react-native-worklets` **bundle mode** (a Metro-config integration), a custom
-Sentry Metro serializer, and `react-native-nano-icons`' Metro plugin. The
-static-class-block blocker from June (B1) is also still open.
+Expect vifx to need work before it builds. A June attempt on this app (SDK 54 at
+the time) stopped on a static class block in one of its dependencies, which is
+still open. Since then the app moved to SDK 58 and relies on three things vifx
+has never been run against: `react-native-worklets` **bundle mode** (a
+Metro-config integration), a custom Sentry Metro serializer, and
+`react-native-nano-icons`' Metro plugin.
 
 ## 6. Reproduce
 
 ```bash
-pnpm build                       # the harness runs the built vifx CLI
+vp run build                     # the harness runs the built vifx CLI
 pnpm bench:expo --project /path/to/expo-app --runs 3 --edit-file app/_layout.tsx
 # options: --platforms ios,android  --flavors release,dev  --phases embed,server
 #          --tools metro,vifx  --entry <file>  --out <dir>

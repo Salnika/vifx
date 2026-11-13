@@ -29,7 +29,7 @@ export default defineVifxConfig({
 ```
 
 ```sh
-vifx build --platform ios
+npx vifx build --platform ios
 ```
 
 ## A user-extensible build pipeline (any Vite/Rollup plugin)
@@ -41,7 +41,7 @@ Why it matters: the entire Vite/Rollup ecosystem becomes available to a React Na
 Scaffold the file with `vifx vite init`, then add any plugin:
 
 ```sh
-vifx vite init --write
+npx vifx vite init --write
 ```
 
 ```ts
@@ -60,12 +60,11 @@ Opt out of the bridge entirely by setting `vite.userConfigFile: false`, or point
 
 ### Example: Vite plugins on a React Native app
 
-The runnable [`apps/example-vite-plugins`](https://github.com/) example (in this repo) wires three plugins into `vite.config.vifx.ts` — a virtual-module plugin (`resolveId`/`load`), a custom `transform` plugin that rewrites a token, and a `.yaml` asset loader (the `@rollup/plugin-yaml` pattern) — and proves each one ran with a single grep over the built native bundle, no device required:
+The runnable [`apps/example-vite-plugins`](https://github.com/Salnika/vifx/tree/master/apps/example-vite-plugins) example in the Vifx repository wires three plugins into `vite.config.vifx.ts` — a virtual-module plugin (`resolveId`/`load`), a custom `transform` plugin that rewrites a token, and a `.yaml` asset loader (the `@rollup/plugin-yaml` pattern) — and proves each one ran with a single grep over the built native bundle, no device required. From the example's directory:
 
 ```sh
-vifx export:embed apps/example-vite-plugins --platform ios --dev false \
-  --bundle-output dist/index.bundle
-node apps/example-vite-plugins/scripts/verify-bundle.mjs dist/index.bundle
+npx vifx export:embed . --platform ios --dev false --bundle-output dist/index.bundle
+node ./scripts/verify-bundle.mjs dist/index.bundle
 ```
 
 Each plugin emits a unique sentinel that survives tree-shaking (the app logs it) and therefore appears verbatim in the release IIFE, while the transform plugin's pre-rewrite token is asserted absent. See the example's `README.md` for the full walkthrough.
@@ -74,57 +73,61 @@ Each plugin emits a unique sentinel that survives tree-shaking (the app logs it)
 
 Vifx serves the Metro dev-server conventions the React Native and Expo tooling already speak, from a Vite-powered server with no Metro runtime dependency.
 
-For bare React Native projects, `vifx dev` serves the routes the React Native community CLI expects: `GET /status`, `GET /<entry>.bundle?platform=…&dev=…`, the matching source-map route, `POST /symbolicate`, and a `/message` WebSocket channel.
+For bare React Native projects, `vifx dev` serves the routes the React Native community CLI expects: `GET /status`, `GET /<entry>.bundle?platform=…&dev=…`, the matching source-map route, `POST /symbolicate`, and a `/message` WebSocket channel. It serves a built bundle, without file watching or Fast Refresh.
 
 ```sh
-vifx dev --platform ios --port 8081
+npx vifx dev --platform ios --port 8081
 ```
 
-For Expo, `vifx expo dev --expo-go` serves the Expo Go manifest and bundle server: the manifest (`/`, `/manifest`, `/index.exp` with multipart negotiation for `expo-dev-client`), the bundle and source map, `POST /symbolicate`, `/status`, `/assets`, and React Native DevTools / Fusebox through `@react-native/dev-middleware`. It prints a QR code for Expo Go and exposes interactive keybindings: `r` reload, `m` dev menu, `j` open DevTools/Fusebox, `o` open in your editor, `?` show all keys.
+For Expo, `vifx expo dev --expo-go` serves the Expo Go manifest and bundle server: the manifest (`/`, `/manifest`, `/index.exp` with multipart negotiation for `expo-dev-client`), the bundle and source map, `POST /symbolicate`, `/status`, `/assets`, and React Native DevTools through `@react-native/dev-middleware`. It listens before it bundles, so the QR code and URLs print at once and requests wait for the first bundle. It exposes interactive keybindings: `r` reload, `m` dev menu, `j` open DevTools, `o` open in your editor, `?` show all keys.
 
 ```sh
-vifx expo dev --expo-go --platform ios --public-host 192.168.1.10
+npx vifx expo dev --expo-go --platform ios --public-host 192.168.1.10
 ```
 
 ### Fast Refresh
 
-Fast Refresh is a native, state-preserving update path over a `/hot` WebSocket channel, written from scratch with no Metro runtime dependency. Enable it with `--fast-refresh`, which builds on the Expo Go server and so requires `--expo-go`:
+Fast Refresh is on by default in `vifx expo dev --expo-go` for development builds with the default `hoisted` module format. It runs on Rolldown's native dev engine (`dev()` from `vite/rolldown/experimental`), driven with the same plugins and options as the regular development build. The module graph stays alive between saves: a save compiles only the changed modules into a patch, the server sends it to the app over the `/hot` WebSocket, and the full bundle is rebuilt in the background for the next reload.
 
-```sh
-vifx expo dev --expo-go --fast-refresh
-```
+`react-refresh/babel` runs over your project files, and the vifx HMR client replaces React Native's `HMRClient` in native bundles. In the app, a small runtime — Rolldown's dev runtime ported to ES5, so that Hermes parses it — applies Metro's Fast Refresh rules: a module whose exports are all React components is a refresh boundary; any other edited module re-runs together with its importers up to the nearest boundary; no boundary means a full reload. Compile errors show React Native's syntax-error screen in the app, and the app's `console.*` output is printed in the terminal. See [Dev Server and Fast Refresh](../guide/dev-server) for the details, the settings, and the limitations.
 
-`--fast-refresh` selects the `metro` module format (the `__d`/`__r` Metro-graph serialization), which is the format the Fast Refresh engine consumes. `react-refresh/babel` runs over your source, the vifx HMR client replaces React Native's `HMRClient.js` on both native and web, and `computeHmrUpdate` diffs two builds and re-emits each changed module as a `__d(...)` call routed through the registry's `global.__accept`. The `/hot` channel speaks the Metro protocol verbatim (`update-start`, `update`, `update-done`, `error`), so React Native's built-in client parses the deltas untranslated.
+`--fast-refresh` selects the alternative, earlier path: the `metro` module format (the `__d`/`__r` Metro-graph serialization). On each save it rebuilds the whole bundle, `computeHmrUpdate` diffs the two builds, and each changed module is re-emitted as a `__d(...)` call routed through the registry's `global.__accept`. The `/hot` channel uses Metro's message shapes (`update-start`, `update`, `update-done`, `error`). A deleted module falls back to a full reload, because module ids must stay stable across rebuilds for the delta to apply. This path is experimental.
 
-Without `--fast-refresh`, the default `hoisted` module format does a full reload on each save — correct, just not state-preserving. A deleted module also falls back to a full reload even under Fast Refresh, because module ids must stay stable across rebuilds for the delta to apply.
+`VIFX_DEV_ENGINE=0` turns the dev engine off: each save then rebuilds the whole bundle and reloads the app.
 
 The default `vifx expo dev` (no `--expo-go`) serves a browser preview through a real Vite dev server and requires the target's `reactNativeCompat: "web"`.
 
-## Per-save build instrumentation
+## Per-save output
 
-Every rebuild under `vifx expo dev --expo-go` prints one line ventilated by phase, so you can see exactly where a save spends its time:
+Each save under `vifx expo dev --expo-go` prints one line once the app has applied it, so you can see what changed, what the app did with it, and how long it took:
+
+```text
+fast refresh  app/(tabs)/index.tsx  36ms
+fast refresh  src/api/endpoints.ts  48ms  (32 modules re-run)
+reload  index.js  52ms  — No root boundary: nothing that ran imports index.js
+```
+
+The time runs from the moment the file watcher saw the save to the moment the app reported the update applied. A save that reloads the app gives the reason; a save that does not compile prints `update failed` with the error's cause and code frame.
+
+Add `--json` to keep stdout a pure NDJSON stream — line 1 is a compact dev-server snapshot, then one `VifxRebuildReport` line per save (`cycle`, `engine`, `hmr`, `changedPaths`, `moduleCount`, `reason`, `error`, `phases.totalMs`). Each line is independently parseable and can be aggregated for median and p95:
+
+```sh
+npx vifx expo dev --expo-go --platform ios --json > saves.ndjson
+```
+
+On the `--fast-refresh` path, the line breaks the rebuild down by phase instead, with a per-save transform-cache hit rate:
 
 ```text
 ~210ms  transform 120  serialize 35  write 40  apply 15  cache 92% (11/12)
 ```
 
-The phases are honest about what they measure. `transform` is the single `await build()` Vite/Rolldown span — Babel transform and Rolldown bundling are one call with no isolable pure-Babel sub-phase. `serialize` assembles the `__d`/`__r` registry and source map; `write` covers the two `writeFile` calls plus asset rename and staging cleanup; `apply` is the HMR diff and `/hot` broadcast. When a target compiles Hermes bytecode, an `hbc` phase joins the line.
-
-The `cache` segment is the **per-cycle** transform-cache hit-rate for that one save, computed via `snapshotDelta()` — not the cumulative `stats()`, which falsely converges toward ~100% on a warm cache and hides what a single save actually recomputed.
-
-Add `--json` to keep stdout a pure NDJSON stream — line 1 is a compact dev-server snapshot, then one `VifxRebuildReport` line per save (`cycle`, per-phase timings, cache stats, `moduleCount`, `hmr`). Each line is independently parseable and aggregable for median/p95:
-
-```sh
-vifx expo dev --expo-go --fast-refresh --json > rebuilds.ndjson
-```
-
-This per-phase, per-cycle, machine-readable rebuild report is a vifx surface; Metro exposes no equivalent.
+`transform` is the single Vite/Rolldown build span — Babel transform and Rolldown bundling are one call with no isolable pure-Babel sub-phase. `serialize` assembles the `__d`/`__r` registry and source map; `write` covers the file writes plus asset rename and staging cleanup; `apply` is the HMR diff and `/hot` broadcast. The `cache` segment is the **per-save** transform-cache hit rate, computed with `snapshotDelta()` — not the cumulative `stats()`, which converges toward ~100% on a warm cache and hides what a single save actually recomputed.
 
 ## Content-addressed transform cache
 
-Every transform entry is keyed on the SHA-256 of a stable stringify of its key parts plus a cache version string, and stored at `<projectRoot>/.vifx/cache/transforms/<hash[0..2]>/<hash>.json` with atomic temp-file renames. The version key mixes the cache format with the plugin, Vite, and project Babel versions, so bumping any of those tools invalidates everything automatically. Both the OXC transform and the project-Babel transform are cached.
+Every transform entry is keyed on the SHA-256 of a stable stringify of its key parts plus a cache version string, and stored at `<projectRoot>/.vifx/cache/transforms/<hash[0..2]>/<hash>.json` with atomic temp-file renames. The version key mixes the cache format with the plugin, Vite, and project Babel versions, so bumping any of those tools invalidates everything automatically. Both the OXC transform and the project-Babel transform are cached. Project-Babel transforms that miss the cache run on worker threads when there are many of them, as in a cold build (`VIFX_BABEL_WORKERS` sets the thread count; see [Babel worker threads](../guide/dev-server#babel-worker-threads)).
 
-Why it matters: content-addressing makes an unchanged input a guaranteed hit regardless of mtime or order. On HNewsPro (iOS), a warm rebuild lands at 3.8 s versus Metro's 12.3 s (~3.2× faster), and the cold→warm speedup is 3.4× for vifx against Metro's 1.7× on the same app. These are single-app, single-machine, local numbers — see the [comparisons](./comparisons) page for the full methodology.
+Why it matters: content-addressing makes an unchanged input a guaranteed hit regardless of mtime or order. On the benchmark app (HNewsPro, iOS), a warm `export:embed` release build takes 1.57 s against 8.71 s for Metro, and a warm development build 1.43 s against 9.05 s. These are single-app, single-machine numbers (median of 3 runs) — see [Measured results](./comparisons#measured-results) for the method and the other figures.
 
 The cache is on by default. Disable it per target with `transformCache: false`:
 
@@ -145,7 +148,7 @@ Public env vars (default prefix `EXPO_PUBLIC_`, configurable via `publicEnvPrefi
 
 ```sh
 EXPO_PUBLIC_API_URL=https://api.example.com \
-  vifx export:embed . --platform ios --dev false --bundle-output ios.bundle
+  npx vifx export:embed . --platform ios --dev false --bundle-output ios.bundle
 ```
 
 ```ts
@@ -167,7 +170,7 @@ Set the prefix in config:
 
 ### `.env` files
 
-Every bundling command (`build`, `expo dev`, `expo export`, `expo smoke`, `export:embed`, `start`, `run`) loads the project's dotenv files before bundling, with the semantics of Expo CLI:
+Every bundling command (`build`, `dev`, `expo dev`, `expo export`, `expo smoke`, `export:embed`, `run`) loads the project's dotenv files before bundling, with the semantics of Expo CLI:
 
 | Priority | File                | Notes                                     |
 | -------- | ------------------- | ----------------------------------------- |
@@ -235,7 +238,7 @@ Per-target aliases are also config keys:
 `vifx export:embed` builds the release bundle and production asset layout consumed by Xcode's "Bundle React Native code and images" phase and the Gradle bundle task. Its flag surface is compatible with `npx expo export:embed` and `npx react-native bundle` — unknown Metro flags warn and are ignored rather than failing, so it slots straight into existing scripts.
 
 ```sh
-vifx export:embed . \
+npx vifx export:embed . \
   --platform ios --dev false --minify true \
   --bundle-output ios.bundle \
   --sourcemap-output ios.map \
@@ -246,10 +249,13 @@ vifx export:embed . \
 
 A fixed set of Metro flags are accepted and explicitly no-op (warned, never fatal): `--reset-cache`, `--max-workers`, `--transformer`, `--bundle-encoding`, `--asset-catalog-dest`, `--config-cmd`, `--sourcemap-sources-root`, `--unstable-transform-profile`, `--clear`, `--read-global-cache`, `--sourcemap-use-absolute-path`.
 
-To route Expo's generated native build scripts through this command, register `@vifx/expo-config-plugin` (see the [migration guide](../guide/migration)); the Gradle side wires up as:
+To route Expo's generated native build scripts through this command, register `@vifx/expo-config-plugin` (see the [migration guide](../guide/migration#expo-native-builds)); wired by hand, the Gradle side looks like:
 
 ```groovy
-react { bundleCommand = "export:embed" }
+react {
+  cliFile = file("../../node_modules/@vifx/cli/dist/bin.mjs")
+  bundleCommand = "export:embed"
+}
 ```
 
 ### expo export — Expo artifact directory
@@ -257,7 +263,7 @@ react { bundleCommand = "export:embed" }
 `vifx expo export` builds your configured Expo targets and writes an Expo artifact directory — bundles, source maps, assets, `manifest.json`, and `metadata.json`. It requires `vite.mode: "expo"`.
 
 ```sh
-vifx expo export . --platform all --out-dir dist/expo
+npx vifx expo export . --platform all --out-dir dist/expo
 ```
 
 These commands produce bundle and artifact output. They do not replace EAS, Expo Updates runtime serving, response signing, or native app binaries — those remain Expo and EAS responsibilities. `vifx expo audit` reports the no-Metro bundling contract, and `vifx expo smoke` runs an end-to-end Expo Go endpoint check.
@@ -266,19 +272,19 @@ These commands produce bundle and artifact output. They do not replace EAS, Expo
 
 Production native bundles are emitted as a single scope-hoisted IIFE (`format: "iife"`, `inlineDynamicImports`, `entryFileNames: "index.bundle"`, global name `__vifx`), which keeps Rolldown's cross-module tree-shaking and inlining. Minification uses the OXC minifier built into the toolchain (`minify: "oxc"` in production), which composes the minified source map natively. Because React Native ships one direct `eval` that would otherwise disable global mangling, `createIndirectEvalPlugin` rewrites `eval(` to `(0,eval)(` before minify (production only, behavior-preserving) so OXC can mangle the whole bundle.
 
-Why it matters: Metro's output is the `__d`/`__r` registry even in release — every module stays a separately wrapped CommonJS factory with registry indirection, so there is no cross-module scope hoisting. On HNewsPro the scope-hoisted release JS is 3.46 MB versus Metro's 3.54 MB (−2.2%), with 1711 versus 2007 modules (−15%). This is one app, one machine, single runs.
+Why it matters: Metro's output is the `__d`/`__r` registry even in release — every module stays a separately wrapped CommonJS factory with registry indirection, so there is no cross-module scope hoisting. On the benchmark app (HNewsPro, iOS), the scope-hoisted release JS is 3.37 MB against Metro's 3.54 MB (−4.9 %); gzipped, both are 0.88 MB. The release source map lists 1,629 modules against 2,007 for Metro: part of that is tree-shaking, part a known source-map gap ([details](./comparisons#scope-hoisting-and-cross-module-tree-shaking-in-release)). One app, one machine, median of 3 runs.
 
 When a target sets `hermes: true`, the build compiles `index.bundle` to `index.hbc` via the detected Hermes compiler (vifx orchestrates `hermesc`; it does not vendor Hermes). In production the bundle is already OXC-minified, so bytecode is generated from the minified script. You can also compile a bundle directly:
 
 ```sh
-vifx hermes compile --input index.bundle --output index.hbc --source-map index.map
+npx vifx hermes compile --input index.bundle --output index.hbc --source-map index.map
 ```
 
-Honest boundary on bytecode size: Hermes bytecode is +5.8% versus Metro (5.24 MB vs 4.96 MB on HNewsPro). The cause is isolated — roughly 8,145 lazy `__esm`/`__export` getter-thunk arrows that Rolldown emits to interop a CJS-heavy React Native graph (Metro emits 317). This is not a config flag away: eliminating it needs a de-lazification transform or upstream Rolldown eager-hoisting, and mangling does not help because Hermes ignores identifier names. The `metro` serialization format measures worse for bytecode (+17.3%) precisely because it loses cross-module hoisting. The dev format (Metro-compatible registry) and the release format (hoisted IIFE) are two serializers by design.
+Honest boundary on bytecode: on the benchmark app, Hermes bytecode is 3.9 % larger than Metro's (5.15 MB against 4.96 MB), and compiling it takes 13 % longer (1.53 s against 1.35 s). The likely cause is the lazy `__esm`/`__export` interop wrappers that Rolldown emits for a CommonJS-heavy React Native graph it cannot hoist eagerly: each one is a small function that the bytecode carries. Removing them needs a de-lazification transform or eager-hoisting work in Rolldown, not a config flag, and mangling does not help because it shrinks the JS text, not the bytecode. Release builds always use the hoisted IIFE; the `metro` registry format remains for the `--fast-refresh` dev path.
 
 ## Compatibility layer and matrix
 
-`vifx compat run` runs a fixture-backed matrix of resolver, asset, bundler, and library behaviors against adapters, with per-toolchain status (pass / partial / skip) and a terminal, JSON, or Markdown report:
+`vifx compat run` runs a fixture-backed matrix of resolver, asset, bundler, and library behaviors against adapters, with per-toolchain status (pass / partial / skip) and a terminal, JSON, or Markdown report. The fixtures live in the Vifx repository, so the matrix runs from a clone of it (see [CONTRIBUTING.md](https://github.com/Salnika/vifx/blob/master/CONTRIBUTING.md)):
 
 ```sh
 vifx compat run --adapter all --report markdown
@@ -289,18 +295,19 @@ The plugin ships runtime compat shims for many React Native and Expo internals s
 To inspect your own project's primitives — project type, configs, Vite mode, platform files, asset groups — use:
 
 ```sh
-vifx inspect --json
+npx vifx inspect --json
 ```
 
-And to compare against captured Metro reference artifacts:
+And to compare against Metro reference artifacts captured under `metro-output/<platform>`:
 
 ```sh
-vifx metro inspect --platform ios
+npx vifx metro inspect --platform ios
 ```
 
 ## Where to go next
 
 - [Getting started](../guide/getting-started) — install vifx and run your first build.
+- [Dev Server and Fast Refresh](../guide/dev-server) — how saves reach the app, and what the terminal prints.
 - [Migration](../guide/migration) — onboard an existing Expo or React Native project.
 - [CLI reference](./cli) — every command and flag.
 - [Config reference](./config) — the full `vifx.config.ts` schema.

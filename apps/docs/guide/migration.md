@@ -19,21 +19,24 @@ For an Expo project, the entry point is [`vifx setup`](#expo-projects). For a ba
 
 ## 1. Install
 
-vifx ships as a global CLI plus a set of `@vifx/*` packages. Add the packages your project type needs:
+The vifx packages are published to npm under the `@vifx` scope. Add the CLI as a dev dependency:
 
 ```sh
-# Expo project
-pnpm add -D @vifx/cli @vifx/vite-plugin-expo
-
-# Bare React Native project
-pnpm add -D @vifx/cli @vifx/vite-plugin-react-native
+npm install --save-dev @vifx/cli
 ```
 
-A user-extensible Vite config (`vite.config.vifx.ts`) also depends on `vite`:
+`@vifx/cli` provides the `vifx` command and brings the Vite plugins it builds with. Add the other packages when you need them:
+
+- `@vifx/config` provides `defineVifxConfig` for a typed `vifx.config.ts` (`@vifx/cli` re-exports it too).
+- `@vifx/expo-config-plugin` routes `expo prebuild` native builds through `vifx export:embed` (see [step 5](#expo-native-builds)).
+- A `vite.config.vifx.ts` imports `defineConfig` from `vite`, and possibly helpers from `@vifx/vite-config-bridge` (`vifxResolveRequest`) or `@vifx/vite-plugin-react-native` (`reactNative()`): install the ones it imports.
 
 ```sh
-pnpm add -D vite
+npm install --save-dev @vifx/config @vifx/expo-config-plugin
+npm install --save-dev vite   # when you add a vite.config.vifx.ts
 ```
+
+The examples below run the CLI with `npx vifx`; with pnpm or Yarn, use `pnpm vifx` or `yarn vifx`.
 
 ## 2. Generate config
 
@@ -42,8 +45,8 @@ pnpm add -D vite
 `vifx setup` onboards an existing Expo project. It writes a Vifx-owned config without touching `app.json`, Expo/EAS scripts, or app source:
 
 ```sh
-pnpm vifx setup <expo-project-path> --dry-run   # preview, no writes
-pnpm vifx setup <expo-project-path> --yes        # apply
+npx vifx setup <expo-project-path> --dry-run   # preview, no writes
+npx vifx setup <expo-project-path> --yes        # apply
 ```
 
 `vifx setup` is Expo-only and reports `VIFX_SETUP_EXPO_ONLY` on a non-Expo project. Useful flags:
@@ -87,11 +90,11 @@ export default {
 
 ### Bare React Native projects
 
-`vifx setup` does not apply to bare React Native. Use `vifx init` to write a `vifx.config.ts` with `vite.mode: "react-native"`. It wraps the config with `defineVifxConfig` from `@vifx/config`:
+`vifx setup` does not apply to bare React Native. Use `vifx init` to write a `vifx.config.ts` with `vite.mode: "react-native"`. It wraps the config with `defineVifxConfig`, imported from `@vifx/cli`:
 
 ```sh
-pnpm vifx init <rn-project-path>            # preview
-pnpm vifx init <rn-project-path> --write    # apply
+npx vifx init <rn-project-path>            # preview
+npx vifx init <rn-project-path> --write    # apply
 ```
 
 ### Adding a user Vite config
@@ -99,8 +102,10 @@ pnpm vifx init <rn-project-path> --write    # apply
 To run any Vite/Rollup plugin (svgr, unplugin-icons, mdx, virtual modules) against your app, generate a `vite.config.vifx.ts`:
 
 ```sh
-pnpm vifx vite init <project-path> --write
+npx vifx vite init <project-path> --write
 ```
+
+Besides `vite.config.vifx.ts` (and `vifx.config.ts` when it is missing), `vifx vite init` adds `vifx:*` scripts and Vifx dev dependencies to `package.json`; run it without `--write` first to preview the changes.
 
 vifx auto-detects `vite.config.vifx.{ts,mts,js,mjs}` under the project root and merges your allowed slices (`css`, `define`, `esbuild`, `json`, `plugins`, `resolve`, `worker`) on top of its own. The reserved `resolve.conditions`/`resolve.dedupe` and vifx-owned `define` keys stay owned by vifx. See [Config](/reference/config) for the full contract. Opt out entirely with `vite.userConfigFile: false`.
 
@@ -202,33 +207,29 @@ A migration hint (`vifx doctor` / `vifx setup`) points you here when it detects 
 Once config is in place, produce bundles with the Vite/Rolldown engine instead of Metro:
 
 ```sh
-pnpm vifx build <expo-project-path>
-pnpm vifx build <expo-project-path> --platform ios --json
+npx vifx build <expo-project-path>
+npx vifx build <expo-project-path> --platform ios --json
 ```
 
-Serve a Metro-compatible Expo Go dev server (manifest, bundle, source map, `/symbolicate`, `/status`, React Native DevTools/Fusebox), with a QR code for the Expo Go app:
+Serve a Metro-compatible Expo Go dev server (manifest, bundle, source map, `/symbolicate`, `/status`, React Native DevTools), with a QR code for the Expo Go app. Fast Refresh is on by default:
 
 ```sh
-pnpm vifx expo dev <expo-project-path> --platform ios --expo-go
+npx vifx expo dev <expo-project-path> --platform ios --expo-go
 ```
 
-Add `--fast-refresh` for native, state-preserving Fast Refresh over `/hot` (requires `--expo-go`):
-
-```sh
-pnpm vifx expo dev <expo-project-path> --platform ios --expo-go --fast-refresh
-```
+Each save is compiled into a patch by Rolldown's dev engine and applied in the running app with Metro's Fast Refresh rules. [Dev Server and Fast Refresh](/guide/dev-server) describes the terminal output, compile errors, app logs and the settings that change this behavior. You do not need `--fast-refresh` for Fast Refresh: that flag selects the older, experimental Metro module-registry format instead of the dev engine.
 
 Use `--public-host` when a physical device must fetch a LAN address that differs from the bind host:
 
 ```sh
-pnpm vifx expo dev <expo-project-path> --platform ios --expo-go \
+npx vifx expo dev <expo-project-path> --platform ios --expo-go \
   --host 0.0.0.0 --public-host <lan-ip>
 ```
 
 For a web preview (a target with `reactNativeCompat: "web"`), drop `--expo-go`:
 
 ```sh
-pnpm vifx expo dev <expo-project-path>
+npx vifx expo dev <expo-project-path>
 ```
 
 ## 5. Wire native builds to `vifx export:embed`
@@ -236,7 +237,7 @@ pnpm vifx expo dev <expo-project-path>
 `vifx export:embed` is the drop-in replacement for `expo export:embed` that Xcode's "Bundle React Native code and images" phase and the Gradle bundle task invoke. Its flag surface is compatible with `npx expo export:embed` and `npx react-native bundle` — unknown Metro flags are warned about and ignored rather than failing the build:
 
 ```sh
-vifx export:embed <path> --platform ios --dev false \
+npx vifx export:embed <path> --platform ios --dev false \
   --bundle-output ios.bundle --sourcemap-output ios.map --assets-dest ./assets
 ```
 
@@ -244,15 +245,15 @@ vifx export:embed <path> --platform ios --dev false \
 
 ### Expo native builds
 
-The recommended way to repoint native builds is `@vifx/expo-config-plugin`. It rewrites the generated native build scripts so they call vifx instead of Metro:
+The recommended way to repoint native builds is `@vifx/expo-config-plugin` (install it with `npm install --save-dev @vifx/expo-config-plugin`). It rewrites the generated native build scripts so they call vifx instead of Metro:
 
-- iOS — exports `CLI_PATH` and `BUNDLE_COMMAND` at the top of the "Bundle React Native code and images" Xcode shell build phase.
-- Android — sets `cliFile` and `bundleCommand` inside the `react {}` block of `android/app/build.gradle`.
+- iOS — exports `CLI_PATH` (by default `$PROJECT_DIR/../node_modules/@vifx/cli/dist/bin.mjs`) and `BUNDLE_COMMAND` at the top of the "Bundle React Native code and images" Xcode shell build phase.
+- Android — sets `cliFile` (by default `../../node_modules/@vifx/cli/dist/bin.mjs`) and `bundleCommand` inside the `react {}` block of `android/app/build.gradle`.
 
 The edits are marker-guarded and idempotent, so they survive repeated `expo prebuild` runs without duplicating content. Register the plugin during setup:
 
 ```sh
-pnpm vifx setup <expo-project-path> --yes --experimental-embed
+npx vifx setup <expo-project-path> --yes --experimental-embed
 npx expo prebuild --clean
 ```
 
@@ -269,11 +270,11 @@ The plugin supports Groovy `android/app/build.gradle` (not Kotlin `.kts`), and o
 
 ### Gradle bundle task
 
-If you wire the Gradle task directly instead of through the plugin, point the bundle command at vifx:
+If you wire the Gradle task directly instead of through the plugin, point the bundle command at the vifx CLI. The published `@vifx/cli` package runs from `dist/bin.mjs`:
 
 ```groovy
 react {
-    cliFile = file("../../node_modules/@vifx/cli/bin/vifx.mjs")
+    cliFile = file("../../node_modules/@vifx/cli/dist/bin.mjs")
     bundleCommand = "export:embed"
 }
 ```
@@ -283,7 +284,7 @@ react {
 To produce an Expo artifact directory (bundles, source maps, assets, `manifest.json`, `metadata.json`):
 
 ```sh
-pnpm vifx expo export <expo-project-path> --out-dir dist/expo
+npx vifx expo export <expo-project-path> --out-dir dist/expo
 ```
 
 ## 6. Verify
@@ -293,19 +294,19 @@ Confirm the migration with `vifx doctor` and `vifx expo audit`.
 `vifx doctor` reports project type, Node and package-manager versions, React Native / Expo versions, detected `metro` / `vite` / `vifx` config paths, the Vite plugin mode, the Hermes compiler path, the Expo SDK support tier, and — when a `metro.config.js` is present — the Metro→Vifx migration section:
 
 ```sh
-pnpm vifx doctor <project-path>
-pnpm vifx doctor <project-path> --json
+npx vifx doctor <project-path>
+npx vifx doctor <project-path> --json
 ```
 
 `vifx expo audit` evaluates the no-Metro bundling contract across config, Vite build, Metro parity, dev server, and export artifacts:
 
 ```sh
-pnpm vifx expo audit <expo-project-path>
-pnpm vifx expo audit <expo-project-path> --json
-pnpm vifx expo audit <expo-project-path> --export-root dist/expo
+npx vifx expo audit <expo-project-path>
+npx vifx expo audit <expo-project-path> --json
+npx vifx expo audit <expo-project-path> --export-root dist/expo
 ```
 
-The Expo SDK support table covers majors 54, 55, and 56. SDK 54 is the device-validated tier; 55 and 56 are an experimental tier (fixture- and static-analysis-backed, not device-validated). Outside that table, `vifx doctor` reports `VIFX_PROJECT_UNSUPPORTED_EXPO_VERSION`.
+The Expo SDK support table covers majors 54 to 58. SDK 54 is the validated tier; 55 to 58 are an experimental tier (fixtures, audits and doctor detection, with no real app validated yet). Outside that table, `vifx doctor` reports `VIFX_PROJECT_UNSUPPORTED_EXPO_VERSION`. See [Project Status](/guide/status) for what has been validated.
 
 ## Scope
 
@@ -314,6 +315,7 @@ Migration moves the bundling path. vifx does not replace EAS, native app build-a
 ## Related
 
 - [Getting Started](/guide/getting-started)
+- [Dev Server and Fast Refresh](/guide/dev-server)
 - [Config](/reference/config)
 - [CLI Reference](/reference/cli)
 - [Features](/reference/features)

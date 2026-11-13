@@ -6,45 +6,86 @@ on:
       - master
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   validate:
+    name: Build, check and test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@v1.21.2
+      - name: Setup Vite+ and install dependencies
+        uses: voidzero-dev/setup-vp@v1.22.0
         with:
+          node-version: 24
           cache: true
 
-      - name: Install
-        run: vp install
+      # Packages import one another through their built `dist/`, so they are
+      # built (in dependency order) before anything type-checks or tests them.
+      - name: Build packages
+        run: vp run build
 
-      - name: Lint
-        run: pnpm lint
+      - name: Build leaves the tree unchanged
+        run: git diff --exit-code
+
+      - name: Format, lint and type-aware lint
+        run: vp check
 
       - name: Typecheck
         run: pnpm typecheck
 
       - name: Test
-        run: pnpm test
+        run: vp run test
 
-      - name: Compatibility
+      - name: Compatibility suite
         run: |
           pnpm compat:metro
           pnpm compat:vifx
 
-      - name: Build
-        run: pnpm build
+      - name: Support matrix is up to date
+        run: pnpm docs:support-matrix:check
 
-      - name: Docs Build
+      - name: Docs build
         run: pnpm docs:build
 
-      - name: Smoke CLI
+      - name: CLI smoke
         run: |
           pnpm --filter @vifx/cli vifx doctor --help
           pnpm --filter @vifx/cli vifx metro inspect ./fixtures/rn-bare-basic --platform ios
           pnpm --filter @vifx/cli vifx metro inspect ./fixtures/expo-basic --platform android --json
           pnpm --filter @vifx/cli vifx migrate expo ./fixtures/expo-basic --dry-run
           pnpm --filter @vifx/cli vifx hermes compile --help
+          node packages/cli/dist/bin.mjs --help
+
+      - name: Packages are publishable
+        run: pnpm -r --filter "./packages/*" exec pnpm pack --dry-run
+
+  test-node:
+    name: Test on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 26]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Vite+ and install dependencies
+        uses: voidzero-dev/setup-vp@v1.22.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: true
+
+      - name: Build packages
+        run: vp run build
+
+      - name: Test
+        run: vp run test

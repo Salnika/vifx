@@ -1,15 +1,35 @@
 {
   "name": "@vifx/vite-plugin-expo",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.0.0",
+  "description": "Vite plugin and Expo Go dev server for Expo projects: manifest, bundles, Fast Refresh, assets and export, without Metro.",
+  "keywords": [
+    "expo",
+    "expo-go",
+    "fast-refresh",
+    "metro",
+    "react-native",
+    "rolldown",
+    "vite",
+    "vite-plugin"
+  ],
+  "homepage": "https://github.com/Salnika/vifx/tree/master/packages/vite-plugin-expo#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/vite-plugin-expo"
+  },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "type": "module",
   "exports": {
     ".": "./dist/index.mjs",
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "vp pack",
@@ -34,5 +54,8 @@
     "@types/ws": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
   }
 }

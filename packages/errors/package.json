@@ -1,11 +1,21 @@
 {
   "name": "@vifx/errors",
   "version": "0.0.0",
-  "description": "Structured error primitives for the Vifx monorepo.",
+  "description": "Structured error types and codes for the Vifx packages.",
+  "keywords": [
+    "errors",
+    "vifx"
+  ],
+  "homepage": "https://github.com/Salnika/vifx/tree/master/packages/errors#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/errors"
+  },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "type": "module",
   "sideEffects": false,
@@ -19,10 +29,9 @@
   },
   "scripts": {
     "build": "vp pack",
-    "dev": "vp pack --watch",
-    "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp run build"
+    "dev": "vp pack --watch",
+    "test": "vp test run"
   },
   "dependencies": {
     "@vifx/types": "workspace:*"

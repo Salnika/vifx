@@ -52,7 +52,6 @@ export default defineConfig({
     entry: ["src/index.ts", "src/bin.ts"],
     exports: {
       bin: {
-        cli: "./src/bin.ts",
         vifx: "./src/bin.ts",
       },
     },

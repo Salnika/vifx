@@ -334,7 +334,7 @@ export const compatCases: CompatCase[] = [
       platform: "ios",
       bundleProbes: ["withTiming"],
       partialAspects: [
-        "worklet directives are not compiled to UI-thread worklets without the Reanimated Babel plugin (see the babel-pipeline unit)",
+        "worklet directives are not compiled to UI-thread worklets without the Reanimated Babel plugin",
       ],
     },
     expected: {
@@ -342,7 +342,7 @@ export const compatCases: CompatCase[] = [
       toolchains: {
         vifx: {
           status: "partial",
-          note: "Resolves the react-native field to TypeScript sources and bundles them, but 'worklet' directives are stripped instead of compiled. Real worklets need the Reanimated Babel plugin from the babel-pipeline unit.",
+          note: "Resolves the react-native field to TypeScript sources and bundles them, but 'worklet' directives are stripped instead of compiled. Real worklets need the Reanimated Babel plugin.",
         },
         metro: {
           status: "skip",
@@ -636,7 +636,7 @@ export const compatCases: CompatCase[] = [
       platform: "ios",
       bundleProbes: ["cssInterop", "styled"],
       partialAspects: [
-        "the NativeWind Babel preset (jsxImportSource) and the Tailwind/PostCSS compilation of the imported CSS entry are not applied by a plain bundler build, so utility classes are not registered at runtime (see the babel-pipeline unit)",
+        "the NativeWind Babel preset (jsxImportSource) and the Tailwind/PostCSS compilation of the imported CSS entry are not applied by a plain bundler build, so utility classes are not registered at runtime",
       ],
     },
     expected: {

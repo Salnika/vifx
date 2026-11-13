@@ -75,15 +75,16 @@ function createNextCommands(options: {
   targetPath: string;
 }) {
   const targetPath = formatShellArg(options.targetPath);
-  const nextCommands = [`pnpm vifx build ${targetPath}`, `pnpm vifx expo audit ${targetPath}`];
+  // npx runs the project's installed @vifx/cli whatever its package manager.
+  const nextCommands = [`npx vifx build ${targetPath}`, `npx vifx expo audit ${targetPath}`];
 
   if (options.includeExpoDev) {
     nextCommands.push(
-      `pnpm vifx expo dev ${targetPath} --platform ios${options.expoGo ? " --expo-go" : ""}`,
+      `npx vifx expo dev ${targetPath} --platform ios${options.expoGo ? " --expo-go" : ""}`,
     );
   }
 
-  nextCommands.push(`pnpm vifx expo export ${targetPath} --out-dir dist/expo`);
+  nextCommands.push(`npx vifx expo export ${targetPath} --out-dir dist/expo`);
   return nextCommands;
 }
 

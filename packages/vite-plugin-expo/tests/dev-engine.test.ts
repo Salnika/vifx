@@ -1,7 +1,7 @@
 // Dev engine contract of the Expo Go dev server: what a running app sees on
 // `/hot` when a file is saved, and what the server guarantees around it
 // (assets, symbolication, a project that does not compile). Each case is one
-// a real Expo Go session exposed; see STATUS.md, "Expo Go validation".
+// a real Expo Go session exposed; see apps/docs/guide/status.md, "Expo Go validation".
 
 import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";

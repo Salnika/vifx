@@ -29,3 +29,13 @@ release. Add a tool name to select part of the graph. For example, run
 - [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
 
 <!--VITE PLUS END-->
+
+# Working on Vifx
+
+Vifx replaces Metro for React Native and Expo with Vite and Rolldown. The CLI is `packages/cli`; the bundling lives in `packages/vite-plugin-react-native` (resolution, transforms, assets, Fast Refresh runtime) and `packages/vite-plugin-expo` (Expo builds, the Expo Go dev server and its incremental dev engine). The other `packages/*` are building blocks. `CONTRIBUTING.md` has the layout and the full workflow.
+
+- Packages import one another through their built `dist/`. Run `vp run build` (all packages, dependency order) before type-checking, testing or running the CLI after a change to a package another one depends on.
+- Validate with `vp check`, `pnpm typecheck` and `vp run test`; a single package with `pnpm --filter @vifx/<name> test`.
+- `pnpm --filter @vifx/cli vifx <args>` runs the CLI from source; `pnpm cli:link` puts the built `vifx` on `PATH` for trying it on a real app.
+- Code the app evaluates (the Fast Refresh runtime and HMR client in `vite-plugin-react-native`) must stay ES5: Hermes does not parse `class` in injected code.
+- A change to a published package needs a changeset (`vp run changeset`). Do not edit versions or changelogs by hand.

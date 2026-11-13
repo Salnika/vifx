@@ -26,7 +26,7 @@ Optional props:
       [
         "@vifx/expo-config-plugin",
         {
-          "cliPath": "../../node_modules/@vifx/cli/bin/vifx.mjs",
+          "cliPath": "../../node_modules/@vifx/cli/dist/bin.mjs",
           "bundleCommand": "export:embed"
         }
       ]

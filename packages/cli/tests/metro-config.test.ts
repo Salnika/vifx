@@ -69,7 +69,7 @@ test("maps the svg transformer to a named recipe hint with a docs pointer", asyn
   expect(hint?.severity).toBe("action");
   expect(hint?.suggestion).toContain("react-native-svg-transformer");
   expect(hint?.suggestion).toContain(
-    "https://vifx.dev/migration/metro#react-native-svg-transformer",
+    "https://salnika.github.io/vifx/guide/migration#_3-map-your-metro-config-js",
   );
   expect(hint?.vifxConfigKey).toBe("plugins");
 });

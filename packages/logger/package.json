@@ -1,11 +1,21 @@
 {
   "name": "@vifx/logger",
   "version": "0.0.0",
-  "description": "Structured logger for Vifx CLI tools and packages.",
+  "description": "Terminal logging for the Vifx command line and packages.",
+  "keywords": [
+    "logger",
+    "vifx"
+  ],
+  "homepage": "https://github.com/Salnika/vifx/tree/master/packages/logger#readme",
+  "bugs": "https://github.com/Salnika/vifx/issues",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Salnika/vifx.git",
+    "directory": "packages/logger"
+  },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "type": "module",
   "sideEffects": false,
@@ -19,10 +29,9 @@
   },
   "scripts": {
     "build": "vp pack",
-    "dev": "vp pack --watch",
-    "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp run build"
+    "dev": "vp pack --watch",
+    "test": "vp test run"
   },
   "dependencies": {
     "@vifx/errors": "workspace:*",
