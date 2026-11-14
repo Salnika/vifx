@@ -80,9 +80,6 @@ export default {
   expoOptions: {
     publicEnvPrefix: "EXPO_PUBLIC_",
   },
-  resolver: {
-    conditions: ["react-native", "import", "require", "default"],
-  },
 };
 ```
 

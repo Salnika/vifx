@@ -632,6 +632,65 @@ test("build --mode production emits a smaller minified bundle than development",
   expect(productionBundleSource).not.toContain("import.meta");
 });
 
+test("build applies resolver.conditions, and the list vifx setup used to write changes nothing", async () => {
+  // Builds rn-bare-basic importing a package with one `exports` entry per
+  // condition, and returns the entry the bundle picked.
+  async function bundledEntry(conditions: string[]) {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-build-conditions-"));
+    const targetPath = path.join(tempRoot, "rn-bare-basic");
+    await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
+
+    const probeRoot = path.join(targetPath, "node_modules", "conditional-probe");
+    await mkdir(probeRoot, { recursive: true });
+    await writeFile(
+      path.join(probeRoot, "package.json"),
+      JSON.stringify({
+        exports: {
+          ".": { "vifx-source": "./source.js", require: "./required.js", default: "./default.js" },
+        },
+        name: "conditional-probe",
+      }),
+    );
+    await writeFile(path.join(probeRoot, "source.js"), 'export default "probe-entry:source";\n');
+    await writeFile(
+      path.join(probeRoot, "required.js"),
+      'module.exports = "probe-entry:require";\n',
+    );
+    await writeFile(path.join(probeRoot, "default.js"), 'export default "probe-entry:default";\n');
+    await writeFile(
+      path.join(targetPath, "index.js"),
+      'import entry from "conditional-probe";\n\nconsole.log(entry);\n',
+    );
+    await writeFile(
+      path.join(targetPath, "vifx.config.ts"),
+      [
+        "export default {",
+        "  vite: {",
+        '    mode: "react-native",',
+        '    targets: [{ platform: "ios", entry: "./index.js", outDir: ".vifx/conditions/ios", hermes: false }],',
+        "  },",
+        `  resolver: { conditions: ${JSON.stringify(conditions)} },`,
+        "};",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await executeCli(["build", targetPath, "--json"]);
+    expect(result.exitCode).toBe(0);
+    const bundle = await readFile(
+      path.join(targetPath, ".vifx/conditions/ios/index.bundle"),
+      "utf8",
+    );
+    return [...new Set(bundle.match(/probe-entry:\w+/gu))];
+  }
+
+  expect(await bundledEntry(["vifx-source"])).toEqual(["probe-entry:source"]);
+  // `require` would otherwise win over `default`.
+  expect(await bundledEntry(["react-native", "import", "require", "default"])).toEqual([
+    "probe-entry:default",
+  ]);
+});
+
 test("build rejects an unsupported --mode value", async () => {
   const result = await executeCli(["build", ".", "--mode", "staging"]);
 

@@ -59,6 +59,23 @@ test("planExpoSetup creates an importless Expo config without mutating package.j
   expect(vifxConfigChange?.after).toContain('mode: "expo"');
 });
 
+test("setup and init leave resolver.conditions to the bundler's defaults", async () => {
+  // The list they used to write, ["react-native", "import", "require", "default"],
+  // only named conditions the bundler sets itself.
+  const setup = await planExpoSetup(path.join(FIXTURE_ROOT, "expo-basic"));
+  const init = await planInit(path.join(FIXTURE_ROOT, "rn-bare-basic"), {});
+  const generated = [
+    setup.changes.find((change) => change.path === "vifx.config.ts")?.after,
+    init.changes.find((change) => change.path === "vifx.config.ts")?.after,
+  ];
+
+  for (const config of generated) {
+    expect(config).toContain("export default");
+    expect(config).not.toContain("resolver");
+    expect(config).not.toContain("conditions");
+  }
+});
+
 test("planMigration reports invalid package.json as a structured project error", async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-codemods-invalid-"));
   const targetPath = path.join(tempRoot, "rn-bare-basic");

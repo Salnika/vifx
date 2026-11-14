@@ -360,6 +360,12 @@ export interface VifxProjectMetadata {
 
 export interface VifxResolverConfig {
   extensions: string[];
+  /**
+   * Extra package `exports` conditions, tried in this order after
+   * `react-native` and the platform (`browser` and `web` on web) and before
+   * `import` and `default`. Those conditions, and `require`, are set by the
+   * bundler, so they are dropped from this list.
+   */
   conditions: string[];
   mainFields: string[];
   /**

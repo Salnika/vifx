@@ -42,7 +42,7 @@ test("normalizeVifxConfig applies defaults and deduplicates lists", () => {
     platforms: ["ios", "ios", "android"],
     resolver: {
       extensions: ["tsx", ".tsx", "ts"],
-      conditions: ["react-native", "react-native"],
+      conditions: ["source", "source"],
     },
     vite: {
       mode: "react-native",
@@ -67,7 +67,7 @@ test("normalizeVifxConfig applies defaults and deduplicates lists", () => {
 
   expect(normalized.platforms).toEqual(["ios", "android"]);
   expect(normalized.resolver.extensions).toEqual(["tsx", "ts"]);
-  expect(normalized.resolver.conditions).toEqual(["react-native"]);
+  expect(normalized.resolver.conditions).toEqual(["source"]);
   expect(normalized.vite.mode).toBe("react-native");
   expect(normalized.vite.targets).toHaveLength(1);
   expect(normalized.vite.targets[0]).toMatchObject({
@@ -84,6 +84,36 @@ test("normalizeVifxConfig applies defaults and deduplicates lists", () => {
     shimReactNative: false,
   });
   expect(normalized.logger.level).toBe("info");
+});
+
+test("resolver.conditions keeps only the conditions the bundler does not set", () => {
+  const custom = normalizeVifxConfig({
+    resolver: {
+      conditions: ["source", "react-native", "ios", "worklets", "require", "browser", "default"],
+    },
+  });
+  // Their order is kept: the bundler tries them in the order listed.
+  expect(custom.resolver.conditions).toEqual(["source", "worklets"]);
+
+  // What `vifx setup` and `vifx init` used to write adds nothing.
+  const legacy = validateVifxConfig({
+    resolver: { conditions: ["react-native", "import", "require", "default"] },
+  });
+  expect(legacy.resolver.conditions).toEqual([]);
+  expect(normalizeVifxConfig().resolver.conditions).toEqual([]);
+});
+
+test("loadVifxConfig accepts an empty resolver.conditions", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "vifx-config-conditions-"));
+  tempDirectories.push(directory);
+  await writeFile(
+    join(directory, "vifx.config.ts"),
+    ["export default {", "  resolver: {", "    conditions: [],", "  },", "};", ""].join("\n"),
+  );
+
+  const loaded = await loadVifxConfig({ cwd: directory });
+
+  expect(loaded.config.resolver.conditions).toEqual([]);
 });
 
 test("loadVifxConfig loads and validates a TypeScript config file", async () => {

@@ -55,7 +55,9 @@ export default defineVifxConfig({
   // Module resolution order shared by native and web.
   resolver: {
     extensions: ["tsx", "ts", "jsx", "js", "json"],
-    conditions: ["react-native", "import", "require", "default"],
+    // Your own package `exports` conditions, if any. Vifx sets react-native,
+    // the platform, import and default itself.
+    conditions: [],
     mainFields: ["react-native", "module", "main"],
   },
 
@@ -150,7 +152,7 @@ Controls module resolution, shared by native and web. Four sub-keys.
 | ----------------- | ---------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `extensions`      | `string[]` | `["tsx", "ts", "jsx", "js", "json"]` | File extensions tried during resolution.                                                                                                                                                      |
 | `assetExtensions` | `string[]` | Vifx's asset list                    | Extensions bundled as assets: `require("./a.lottie")` returns an asset id. Replaces the default list, which covers images, video, audio, fonts, `pdf`, `html`, `db`, `xml`, `yaml` and `zip`. |
-| `conditions`      | `string[]` | `[]`                                 | Extra package `exports` conditions (may be empty).                                                                                                                                            |
+| `conditions`      | `string[]` | `[]`                                 | Extra package `exports` conditions, tried after the platform ones and before `import` and `default`. See [`conditions`](#conditions).                                                         |
 | `mainFields`      | `string[]` | `["react-native", "module", "main"]` | `package.json` entry fallback order after `exports` resolution.                                                                                                                               |
 
 `vifx doctor --fix` fills `extensions` and `assetExtensions` from your `metro.config.js` (see [Migration](../guide/migration#_3-map-your-metro-config-js)).
@@ -158,6 +160,24 @@ Controls module resolution, shared by native and web. Four sub-keys.
 List entries are trimmed, a leading `.` is stripped, and duplicates are deduped. `mainFields` controls the entry fallback order after `exports` resolution: the default tries `react-native`, then `module`, then `main`.
 
 Platform-extension resolution (`.ios`, `.android`, `.native`, `.web`) and the on-platform `exports` conditions are applied by the engine on top of these settings; see [Architecture](../guide/architecture) for the full resolution order.
+
+### `conditions`
+
+A package's `exports` conditions are tried in this order: `react-native` and the platform (`ios` or `android`), then your `conditions` in the order you list them, then `import` and `default`. Every build and dev server applies them. Use it for a condition your own packages publish, such as a monorepo package whose `source` condition points at its TypeScript sources:
+
+```ts
+resolver: {
+  conditions: ["source"],
+},
+```
+
+Vifx drops from the list the names it handles itself, so listing them changes nothing:
+
+- the platform conditions, `react-native`, `ios`, `android`, `browser` and `web`, which it sets for each build;
+- `import` and `default`, which always come last;
+- `require`, which it never sets: every import, `require()` included, resolves through `import` (see [Known gaps](../guide/status#known-gaps-vs-expo-cli)).
+
+`vifx setup` and `vifx init` used to write `conditions: ["react-native", "import", "require", "default"]`. Those are all names Vifx handles, so such a config resolves exactly as one without `conditions`, and you can delete the line.
 
 ## `expoOptions`
 

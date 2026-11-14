@@ -219,7 +219,8 @@ Tune resolution from `vifx.config.ts`:
 {
   resolver: {
     extensions: ["tsx", "ts", "jsx", "js", "json"],
-    conditions: ["react-native", "import", "require", "default"],
+    // Extra `exports` conditions, tried before import and default.
+    conditions: ["source"],
     mainFields: ["react-native", "module", "main"],
   },
 }

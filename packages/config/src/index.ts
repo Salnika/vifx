@@ -86,6 +86,25 @@ const TOP_LEVEL_KEYS = new Set([
 ]);
 
 const RESOLVER_KEYS = new Set(["extensions", "conditions", "mainFields", "assetExtensions"]);
+/**
+ * The package `exports` conditions the bundler sets itself, so
+ * `resolver.conditions` keeps only the others. `react-native` and the platform
+ * (`ios`, `android`), or `browser` and `web` on web, come first and `import`
+ * and `default` last, whatever the config lists. `require` is never set: every
+ * import, `require()` included, resolves as `import`. The list `vifx setup`
+ * used to write, `["react-native", "import", "require", "default"]`, therefore
+ * adds nothing, as before builds received the setting.
+ */
+const BUNDLER_RESOLVER_CONDITIONS = new Set([
+  "react-native",
+  "ios",
+  "android",
+  "browser",
+  "web",
+  "import",
+  "require",
+  "default",
+]);
 const LOGGER_KEYS = new Set(["level", "json"]);
 const EXPO_OPTIONS_KEYS = new Set(["appConfigPath", "inspectExportPath", "publicEnvPrefix"]);
 const VITE_KEYS = new Set(["mode", "targets", "userConfigFile"]);
@@ -338,7 +357,7 @@ function parseResolverConfig(value: unknown, source: string) {
     conditions:
       resolver.conditions === undefined
         ? undefined
-        : normalizeStringList(resolver.conditions, "resolver.conditions", source),
+        : normalizeStringList(resolver.conditions, "resolver.conditions", source, true),
     mainFields:
       resolver.mainFields === undefined
         ? undefined
@@ -421,7 +440,7 @@ function normalizeResolverConfig(resolver: VifxConfigInput["resolver"]): VifxRes
       "resolver.conditions",
       undefined,
       true,
-    ),
+    ).filter((condition) => !BUNDLER_RESOLVER_CONDITIONS.has(condition)),
     mainFields: normalizeStringList(
       resolver?.mainFields ?? [...VIFX_DEFAULT_RESOLVER_MAIN_FIELDS],
       "resolver.mainFields",
