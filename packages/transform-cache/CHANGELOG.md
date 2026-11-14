@@ -1,5 +1,14 @@
 # @vifx/transform-cache
 
+## 0.2.0
+
+### Patch Changes
+
+- Updated dependencies [f104cb2]
+- Updated dependencies [8b79fef]
+  - @vifx/types@0.2.0
+  - @vifx/errors@0.2.0
+
 ## 0.1.0
 
 ### Patch Changes
