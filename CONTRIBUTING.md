@@ -86,6 +86,8 @@ Maintainers only. Releases are automated by `.github/workflows/release.yml`:
 1. Pushes to `master` with pending changesets open or update a **"chore: release packages"** pull request that bumps the versions and writes the changelogs.
 2. Merging that pull request publishes the new versions to npm (with provenance), tags them and creates the GitHub releases.
 
+`PNPM_CONFIG_PROVENANCE` in the workflow turns provenance on: pnpm 12 ignores `NPM_CONFIG_PROVENANCE` and `publishConfig.provenance`. npm accepts provenance only from a public repository, for packages whose `repository` field points to it.
+
 One-time setup on a new repository or npm scope:
 
 - Create the `vifx` organization on npm (free for public packages).

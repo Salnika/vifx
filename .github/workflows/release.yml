@@ -50,4 +50,7 @@ jobs:
           pr-title: "chore: release packages"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
+          # `changeset publish` runs `pnpm publish`, which signs provenance with
+          # the job's id-token. pnpm 12 reads PNPM_CONFIG_PROVENANCE: it ignores
+          # NPM_CONFIG_PROVENANCE and `publishConfig.provenance`.
+          PNPM_CONFIG_PROVENANCE: "true"
