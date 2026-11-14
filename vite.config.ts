@@ -53,7 +53,10 @@ export default defineConfig({
   // quirks we are testing. They are fixtures, not source, so exclude them from
   // format, lint, and type checking.
   // `.claude/` holds machine-local agent settings, not project source.
-  fmt: { ignorePatterns: ["fixtures/libs/**", ".claude/**"] },
+  // CHANGELOG.md files are written by `changeset version` (the release PR) and
+  // are not edited by hand; it indents the blank lines of a multi-paragraph
+  // changeset, which the formatter would otherwise reject.
+  fmt: { ignorePatterns: ["fixtures/libs/**", ".claude/**", "**/CHANGELOG.md"] },
   lint: {
     ignorePatterns: ["fixtures/libs/**"],
     options: { typeAware: true, typeCheck: true },
