@@ -1,10 +1,14 @@
+<script setup>
+import BenchChart from "../.vitepress/theme/components/BenchChart.vue";
+</script>
+
 # Project Status
 
-Vifx is pre-1.0 and experimental. It has been validated on one production Expo SDK 54 app, HNewsPro (about 2,000 modules), on iOS and Android, and on the default Expo SDK 58 template in Expo Go on iOS and Android. Expo SDK 55 to 57 are experimental: release bundles of their default templates were built and compared with Metro's, but not run on a device. Keep Metro available for anything Vifx does not cover. This page describes the project as of November 2026.
+Vifx is pre-1.0 and experimental. It has been validated on one production Expo SDK 54 app (about 2,000 modules), on iOS and Android, and on the default Expo SDK 58 template in Expo Go on iOS and Android. Expo SDK 55 to 57 are experimental: release bundles of their default templates were built and compared with Metro's, but not run on a device. Keep Metro available for anything Vifx does not cover. This page describes the project as of November 2026.
 
 ## What works today
 
-HNewsPro loads in Expo Go from a Vifx-built bundle on iOS and Android, with the manifest, the bundle, the source map, assets, symbolication and reload messages served without Metro. The latest pass checked the server protocol on both platforms with `vifx expo smoke`, against a fresh install of the app with pnpm's default isolated layout, and ran the dev engine in Expo Go on an iOS simulator ([below](#expo-go-validation)). On SDK 58, the default template runs in Expo Go on an iOS simulator and an Android emulator, Fast Refresh included ([below](#expo-sdk-55-to-58-validation)).
+That app loads in Expo Go from a Vifx-built bundle on iOS and Android, with the manifest, the bundle, the source map, assets, symbolication and reload messages served without Metro. The latest pass checked the server protocol on both platforms with `vifx expo smoke`, against a fresh install of the app with pnpm's default isolated layout, and ran the dev engine in Expo Go on an iOS simulator ([below](#expo-go-validation)). On SDK 58, the default template runs in Expo Go on an iOS simulator and an Android emulator, Fast Refresh included ([below](#expo-sdk-55-to-58-validation)).
 
 - **Expo Go dev server.** `vifx expo dev --expo-go` serves `/`, `/manifest` and `/index.exp`, the bundle and source map routes, `/assets/*` (with path-traversal guards), `/status`, `POST /symbolicate`, React Native DevTools, and the `/message`, `/events` and `/hot` WebSockets. Fast Refresh runs on Rolldown's dev engine by default. See [Dev Server and Fast Refresh](/guide/dev-server).
 - **Release builds.** `vifx export:embed` accepts the flags of `expo export:embed` and `react-native bundle` and writes a scope-hoisted, Oxc-minified bundle, its source map and the production asset layout. `@vifx/expo-config-plugin` routes the Xcode and Gradle bundle phases through it. `vifx expo export` writes an Expo artifact directory.
@@ -16,13 +20,13 @@ HNewsPro loads in Expo Go from a Vifx-built bundle on iOS and Android, with the 
 
 ## Expo SDK support
 
-| Expo SDK | React Native | Tier         |
-| -------- | ------------ | ------------ |
-| 54       | 0.81         | validated    |
-| 55       | 0.83         | experimental |
-| 56       | 0.85         | experimental |
-| 57       | 0.86         | experimental |
-| 58       | 0.88         | validated    |
+| Expo SDK | React Native | Tier                                         |
+| -------- | ------------ | -------------------------------------------- |
+| 54       | 0.81         | <Badge type="tip" text="validated" />        |
+| 55       | 0.83         | <Badge type="warning" text="experimental" /> |
+| 56       | 0.85         | <Badge type="warning" text="experimental" /> |
+| 57       | 0.86         | <Badge type="warning" text="experimental" /> |
+| 58       | 0.88         | <Badge type="tip" text="validated" />        |
 
 SDK 58 is the current Expo release. Its tier rests on the default `create-expo-app` template, not on a production app. "Experimental" means fixtures, `vifx expo audit` and `vifx doctor` detection, and release bundles of the default template compared with Metro's; those SDKs were not run on a device. See the [support matrix](/reference/support-matrix#expo-sdk-support) for what each tier covers.
 
@@ -44,10 +48,10 @@ Also not done yet: the long tail of library compatibility (Reanimated worklets o
 
 ## Expo Go validation
 
-The dev engine was run in Expo Go 54.0.7 on an iPhone 17 simulator (iOS 26.4) with HNewsPro, through `vifx expo dev --expo-go`. Seen in the app, with the final code:
+The dev engine was run in Expo Go 54.0.7 on an iPhone 17 simulator (iOS 26.4) with the production app, through `vifx expo dev --expo-go`. Seen in the app, with the final code:
 
-- **Fast Refresh.** Editing a screen updates it in place and keeps its local state (the selected feed tab). The terminal prints one line per save, once the app has applied it, for example `fast refresh  app/(tabs)/index.tsx  36ms`. From save to applied took 33 to 87 ms over the session.
-- **An edit to a module that is not a component** (`src/hn/hnEndpoints.ts`) is applied without a reload and re-runs its importers up to the first boundary (32 modules). The state below the contexts those modules re-create is lost, as Metro's Fast Refresh rules imply. The same edit was not timed or observed under Metro.
+- **Fast Refresh.** Editing a screen updates it in place and keeps its local state (the selected tab). The terminal prints one line per save, once the app has applied it, for example `fast refresh  app/(tabs)/index.tsx  36ms`. From save to applied took 33 to 87 ms over the session.
+- **An edit to a module that is not a component** (a module of API endpoints) is applied without a reload and re-runs its importers up to the first boundary (32 modules). The state below the contexts those modules re-create is lost, as Metro's Fast Refresh rules imply. The same edit was not timed or observed under Metro.
 - **Compile error.** React Native's own "Failed to compile" / "Syntax Error" screen appears with the code frame. It goes away when the file is fixed, and the screen keeps its state.
 - **App logs.** `console.*` output is printed in the terminal (` LOG  …`).
 - **Server restart.** A running app reconnects, is told its bundle is stale, and reloads itself.
@@ -67,7 +71,7 @@ Running in Expo Go found eight defects that no sandbox test had caught. Each one
 
 ### Still open
 
-- **Expo Go crashes on some full reloads of this app.** Of seven crash reports in the session, the five examined were four segmentation faults in expo-sqlite's native `closeDatabase` (FTS5 statement finalization on its async queue) and one in React Native's `Scheduler::uiManagerDidFinishTransaction`. HNewsPro opens an FTS5 database through `SQLiteProvider`, which closes it when the tree unmounts. Whether the same reloads crash when Metro serves the app is not known yet.
+- **Expo Go crashes on some full reloads of this app.** Of seven crash reports in the session, the five examined were four segmentation faults in expo-sqlite's native `closeDatabase` (FTS5 statement finalization on its async queue) and one in React Native's `Scheduler::uiManagerDidFinishTransaction`. The app opens an FTS5 database through `SQLiteProvider`, which closes it when the tree unmounts. Whether the same reloads crash when Metro serves the app is not known yet.
 - **The registry format (`--fast-refresh`) was not re-validated**, `require()` of an asset included. The dev engine has since run on Android with the SDK 58 template ([below](#expo-sdk-55-to-58-validation)).
 - **Stack frames inside a hot-patched module** are not yet symbolicated against the patch's own source map.
 
@@ -75,16 +79,28 @@ Running in Expo Go found eight defects that no sandbox test had caught. Each one
 
 Each SDK's default template (`npx create-expo-app`, Expo Router with its routes in `src/app`) was set up with `vifx setup --expo-go`, then built by Metro and by Vifx.
 
-|                                                 | SDK 55            | SDK 56           | SDK 57           | SDK 58           |
-| ----------------------------------------------- | ----------------- | ---------------- | ---------------- | ---------------- |
-| Expo / React Native                             | 55.0.32 / 0.83.10 | 56.0.24 / 0.85.3 | 57.0.33 / 0.86.3 | 58.0.25 / 0.88.1 |
-| `vifx setup`, `vifx doctor`, `vifx expo export` | pass              | pass             | pass             | pass             |
-| `export:embed` asset tree, iOS and Android      | same as Metro     | same as Metro    | same as Metro    | same as Metro    |
-| `export:embed` cold build, iOS (Metro → Vifx)   | 10.1 → 4.2 s      | 6.6 → 4.1 s      | 6.9 → 4.2 s      | —                |
-| `export:embed` warm build, iOS (Metro → Vifx)   | 5.3 → 1.4 s       | 1.7 → 1.5 s      | 1.7 → 1.4 s      | —                |
-| Expo Go                                         | —                 | —                | —                | iOS and Android  |
+|                                                 | SDK 55                                    | SDK 56                                    | SDK 57                                    | SDK 58                                      |
+| ----------------------------------------------- | ----------------------------------------- | ----------------------------------------- | ----------------------------------------- | ------------------------------------------- |
+| Expo / React Native                             | 55.0.32 / 0.83.10                         | 56.0.24 / 0.85.3                          | 57.0.33 / 0.86.3                          | 58.0.25 / 0.88.1                            |
+| `vifx setup`, `vifx doctor`, `vifx expo export` | <Badge type="tip" text="pass" />          | <Badge type="tip" text="pass" />          | <Badge type="tip" text="pass" />          | <Badge type="tip" text="pass" />            |
+| `export:embed` asset tree, iOS and Android      | <Badge type="tip" text="same as Metro" /> | <Badge type="tip" text="same as Metro" /> | <Badge type="tip" text="same as Metro" /> | <Badge type="tip" text="same as Metro" />   |
+| Expo Go                                         | —                                         | —                                         | —                                         | <Badge type="tip" text="iOS and Android" /> |
 
-The asset trees differ from Metro's only by Vifx's extra `assetmap.json`. Build times are one run each, on an Apple M4 Pro; Android is within 0.2 s of iOS for Vifx. Warm release builds peak at 1.0 to 1.1 GB of memory against 0.4 to 0.7 GB for Metro.
+<BenchChart
+  caption="export:embed release build, iOS, one run each"
+  unit="s"
+  :decimals="1"
+  :rows="[
+    { label: 'SDK 55, cold', metro: 10.1, vifx: 4.2 },
+    { label: 'SDK 55, warm', metro: 5.3, vifx: 1.4 },
+    { label: 'SDK 56, cold', metro: 6.6, vifx: 4.1 },
+    { label: 'SDK 56, warm', metro: 1.7, vifx: 1.5 },
+    { label: 'SDK 57, cold', metro: 6.9, vifx: 4.2 },
+    { label: 'SDK 57, warm', metro: 1.7, vifx: 1.4 },
+  ]"
+/>
+
+The asset trees differ from Metro's only by Vifx's extra `assetmap.json`. Build times are one run each, on an Apple M4 Pro; SDK 58 was not timed. Android is within 0.2 s of iOS for Vifx. Warm release builds peak at 1.0 to 1.1 GB of memory against 0.4 to 0.7 GB for Metro.
 
 On SDK 58, the template ran in Expo Go 58.0.7 on an iPhone 17 simulator (iOS 26.5) and in Expo Go 58.0.5 on an Android 16 emulator: both tabs render and navigate, and an edit to `src/app/index.tsx` is applied by Fast Refresh (33 to 60 ms on iOS, about 300 ms on the Android emulator). A native release build was not completed: on the validation machine, Xcode stopped in Expo's own `ExpoModulesJSI` build script, before the bundle phase.
 
@@ -102,19 +118,22 @@ On SDK 58, the template ran in Expo Go 58.0.7 on an iPhone 17 simulator (iOS 26.
 
 ## Benchmark summary
 
-Metro against Vifx on HNewsPro (Expo SDK 54), iOS, on an Apple M4 Pro; median of 3 warm runs, one cold run per cell:
+Metro against Vifx on the production app (Expo SDK 54), iOS, on an Apple M4 Pro; median of 3 warm runs, one cold run per cell:
 
-| Measure                                        | Metro    | Vifx     |
-| ---------------------------------------------- | -------- | -------- |
-| `export:embed` release build, cold             | 15.18 s  | 4.55 s   |
-| `export:embed` release build, warm             | 8.71 s   | 1.57 s   |
-| Dev server, cold start until the first bundle  | 9.03 s   | 4.58 s   |
-| Edit → Fast Refresh update received by the app | 0.14 s   | 0.05 s   |
-| Edit → new full bundle available               | 0.18 s   | 0.18 s   |
-| Release JS bundle                              | 3.54 MB  | 3.37 MB  |
-| Hermes bytecode                                | 4.96 MB  | 5.15 MB  |
-| Hermes compile                                 | 1.35 s   | 1.53 s   |
-| Peak memory, warm release build                | 1,070 MB | 1,229 MB |
+<BenchChart
+  scale="row"
+  :rows="[
+    { label: 'export:embed release build, cold', metro: 15.18, vifx: 4.55, unit: 's', delta: -70.0 },
+    { label: 'export:embed release build, warm', metro: 8.71, vifx: 1.57, unit: 's', delta: -82.0 },
+    { label: 'Dev server, cold start until the first bundle', metro: 9.03, vifx: 4.58, unit: 's', delta: -49.2 },
+    { label: 'Edit to Fast Refresh update in the app', metro: 0.14, vifx: 0.05, unit: 's', delta: -63.6 },
+    { label: 'Edit to new full bundle available', metro: 0.18, vifx: 0.18, unit: 's' },
+    { label: 'Release JS bundle', metro: 3.54, vifx: 3.37, unit: 'MB', delta: -4.9 },
+    { label: 'Hermes bytecode', metro: 4.96, vifx: 5.15, unit: 'MB', delta: 3.9 },
+    { label: 'Hermes compile', metro: 1.35, vifx: 1.53, unit: 's', delta: 13.4 },
+    { label: 'Peak memory, warm release build', metro: 1070, vifx: 1229, unit: 'MB', decimals: 0, delta: 14.9 },
+  ]"
+/>
 
 Metro is ahead on Hermes bytecode size (+3.9 %) and compile time (+13 %), and on the peak memory of a warm release build (+15 %). A new full bundle after an edit is level. These are single-app, single-machine results. [Vifx vs Metro](/reference/comparisons#measured-results) has every measured figure, and the [full report](https://github.com/Salnika/vifx/blob/master/docs/benchmarks/expo-vs-vifx-2026-11.md) describes the method and how to reproduce it.
 

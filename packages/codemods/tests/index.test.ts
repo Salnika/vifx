@@ -167,7 +167,7 @@ test("planExpoSetup preserves package.json and existing vite.config.ts by defaul
 
   await cp(path.join(FIXTURE_ROOT, "expo-basic"), targetPath, { recursive: true });
   const originalPackageJson = await readFile(path.join(targetPath, "package.json"), "utf8");
-  const originalViteConfig = "export default { define: { __HNEWS__: true } };\n";
+  const originalViteConfig = "export default { define: { __APP_FLAG__: true } };\n";
 
   await writeFile(path.join(targetPath, "vite.config.ts"), originalViteConfig, "utf8");
 

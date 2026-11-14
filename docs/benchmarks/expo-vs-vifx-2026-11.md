@@ -47,7 +47,7 @@ figure was taken for Metro.
 
 The first pass (everything from "Scope" down, dated 2026-11-12) left vifx
 behind Metro on the edit loop, the cold dev-server start, memory and Hermes
-bytecode. Three changes later, same app (HNewsPro, iOS), same machine, 3 warm
+bytecode. Three changes later, same app (iOS), same machine, 3 warm
 runs per cell, median reported:
 
 | Metric                                         |     Metro |      vifx |   Delta |
@@ -124,8 +124,8 @@ agent session that ran this benchmark was not permitted to execute the cloned
 project's code (its codegen scripts, its Metro config, its Babel plugins), and
 building an app is exactly that. See §5 for where it stands and how to finish.
 
-What _was_ measured, end to end, is **HNewsPro** — a real but private Expo
-SDK 54 app (React Native 0.81.5, expo-router 6, Reanimated 4, ~2,000 modules),
+What _was_ measured, end to end, is **a real but private Expo SDK 54 app**
+(React Native 0.81.5, expo-router 6, Reanimated 4, ~2,000 modules),
 installed with pnpm's default isolated layout. Treat the numbers as "one real
 mid-size app on one machine", not as a general claim.
 

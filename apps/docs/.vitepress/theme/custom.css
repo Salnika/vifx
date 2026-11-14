@@ -18,6 +18,11 @@
 
   --vp-home-hero-image-background-image: linear-gradient(-45deg, #8b5cf6 50%, #ec4899 50%);
   --vp-home-hero-image-filter: blur(44px);
+
+  /* `tip` badges mark a pass or a lead over Metro: green, like the charts. */
+  --vp-badge-tip-border: transparent;
+  --vp-badge-tip-text: var(--vp-c-green-1);
+  --vp-badge-tip-bg: var(--vp-c-green-soft);
 }
 
 .dark {
@@ -25,6 +30,29 @@
   --vp-c-brand-2: #8b5cf6;
   --vp-c-brand-3: #7c3aed;
   --vp-c-brand-soft: rgba(167, 139, 250, 0.16);
+}
+
+/* Comparison tables: the vifx column (the last one) is tinted with the brand
+   color. Wrap a Markdown table in <div class="vs-compare"> to use it. */
+
+.vp-doc .vs-compare table th:last-child,
+.vp-doc .vs-compare table td:last-child {
+  background-color: var(--vp-c-brand-soft);
+}
+
+.vp-doc .vs-compare table th:last-child {
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc .vs-compare table th:nth-child(2) {
+  color: var(--vp-c-text-2);
+}
+
+/* Badges inside table cells stay on the line of the value they qualify. */
+.vp-doc table .VPBadge {
+  margin-left: 4px;
+  transform: none;
+  vertical-align: middle;
 }
 
 @media (min-width: 640px) {

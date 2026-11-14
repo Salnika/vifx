@@ -1,3 +1,7 @@
+<script setup>
+import BenchChart from "../.vitepress/theme/components/BenchChart.vue";
+</script>
+
 # vifx vs Metro
 
 vifx replaces Metro as the bundling engine for React Native and Expo. The two tools solve the same problem — turn an app's source graph into a JavaScript bundle, source maps, assets, and (optionally) Hermes bytecode — but they are built on different foundations, and most of the differences come from there.
@@ -10,18 +14,22 @@ This page covers the structural differences, the [measured results](#measured-re
 
 ## At a glance
 
-| Capability                         | Metro                                                      | vifx                                                                            |
-| ---------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Plugin model                       | Closed `__d`/`__r` registry; fixed Babel pipeline          | Open Vite/Rollup plugin graph (svgr, unplugin-icons, mdx, virtual modules)      |
-| Native + web                       | Native bundler; web goes through a separate Metro-web path | One engine, one config, one define/env table for both                           |
-| Release output                     | `__d`/`__r` registry preserved in release                  | Scope-hoisted IIFE with cross-module tree-shaking                               |
-| Modern ESM / `import.meta`         | Handled by CJS translation + interop shims                 | First-class graph input; `import.meta.env` inlined                              |
-| Fast Refresh                       | Module registry, incremental rebuilds                      | Rolldown dev engine: patches of the changed modules, Metro's Fast Refresh rules |
-| Per-save output                    | Bundling progress lines in the terminal                    | One line per save (outcome, reason, time); NDJSON reports with `--json`         |
-| Config surface                     | Bespoke `metro.config.js` schema                           | Standard `vite.config.vifx.ts` (`defineConfig`)                                 |
-| Warm release build (benchmark app) | 8.71 s                                                     | 1.57 s                                                                          |
-| Hermes bytecode (benchmark app)    | 4.96 MB                                                    | 5.15 MB (+3.9 %, see [below](#where-metro-is-on-par-or-ahead))                  |
-| Web target                         | react-native-web supported                                 | Companion dev target by design                                                  |
+<div class="vs-compare">
+
+| Capability                         | Metro                                                      | vifx                                                                                    |
+| ---------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Plugin model                       | Closed `__d`/`__r` registry; fixed Babel pipeline          | Open Vite/Rollup plugin graph (svgr, unplugin-icons, mdx, virtual modules)              |
+| Native + web                       | Native bundler; web goes through a separate Metro-web path | One engine, one config, one define/env table for both                                   |
+| Release output                     | `__d`/`__r` registry preserved in release                  | Scope-hoisted IIFE with cross-module tree-shaking                                       |
+| Modern ESM / `import.meta`         | Handled by CJS translation + interop shims                 | First-class graph input; `import.meta.env` inlined                                      |
+| Fast Refresh                       | Module registry, incremental rebuilds                      | Rolldown dev engine: patches of the changed modules, Metro's Fast Refresh rules         |
+| Per-save output                    | Bundling progress lines in the terminal                    | One line per save (outcome, reason, time); NDJSON reports with `--json`                 |
+| Config surface                     | Bespoke `metro.config.js` schema                           | Standard `vite.config.vifx.ts` (`defineConfig`)                                         |
+| Warm release build (benchmark app) | 8.71 s                                                     | 1.57 s <Badge type="tip" text="−82.0 %" />                                              |
+| Hermes bytecode (benchmark app)    | 4.96 MB                                                    | 5.15 MB <Badge type="warning" text="+3.9 %" /> ([why](#where-metro-is-on-par-or-ahead)) |
+| Web target                         | react-native-web supported                                 | Companion dev target by design                                                          |
+
+</div>
 
 The sections below go through the structural differences, then the measured results, then the rows where Metro is on par or ahead.
 
@@ -80,12 +88,16 @@ The transform cache keys every entry by SHA-256 of a stable stringify of its key
 
 On a warm build, unchanged files are read back from this cache instead of being transformed again. Measured with `export:embed` on the benchmark app:
 
-| Build             | Metro   | vifx   |
-| ----------------- | ------- | ------ |
-| Release, cold     | 15.18 s | 4.55 s |
-| Release, warm     | 8.71 s  | 1.57 s |
-| Development, cold | 12.78 s | 4.73 s |
-| Development, warm | 9.05 s  | 1.43 s |
+<BenchChart
+  caption="export:embed build time, iOS"
+  unit="s"
+  :rows="[
+    { label: 'Release, cold', metro: 15.18, vifx: 4.55 },
+    { label: 'Release, warm', metro: 8.71, vifx: 1.57 },
+    { label: 'Development, cold', metro: 12.78, vifx: 4.73 },
+    { label: 'Development, warm', metro: 9.05, vifx: 1.43 },
+  ]"
+/>
 
 Cold builds start with both tools' caches cleared. During a cold build, the Babel transforms that miss the cache run on worker threads (see [Babel worker threads](../guide/dev-server#babel-worker-threads)).
 
@@ -119,28 +131,66 @@ See [Config](./config) for the schema and [Getting Started](../guide/getting-sta
 
 ## Measured results
 
-All figures come from one app, HNewsPro: a private Expo SDK 54 app (React Native 0.81, expo-router, about 2,000 modules) installed with pnpm's default isolated layout, built for iOS on one machine (Apple M4 Pro, 14 cores, 24 GB) in November 2026. Metro is the project's own `expo export:embed` and `expo start`; vifx is `vifx export:embed` and `vifx expo dev --expo-go`. Warm figures are the median of 3 runs; cold figures are one run with the caches cleared first. Memory is the peak of the sum over the process tree, sampled every 100 ms, so Metro's worker processes and vifx's worker threads both count.
+All figures come from one app: a private Expo SDK 54 app (React Native 0.81, expo-router, about 2,000 modules) installed with pnpm's default isolated layout, built for iOS on one machine (Apple M4 Pro, 14 cores, 24 GB) in November 2026. Metro is the project's own `expo export:embed` and `expo start`; vifx is `vifx export:embed` and `vifx expo dev --expo-go`. Warm figures are the median of 3 runs; cold figures are one run with the caches cleared first. Memory is the peak of the sum over the process tree, sampled every 100 ms, so Metro's worker processes and vifx's worker threads both count.
+
+<BenchChart
+  caption="Dev server and Fast Refresh"
+  unit="s"
+  scale="row"
+  :rows="[
+    { label: 'Cold start until the server answers', metro: 1.46, vifx: 0.63, delta: -56.6 },
+    { label: 'Cold start until the first bundle', metro: 9.03, vifx: 4.58, delta: -49.2 },
+    { label: 'Warm start until the first bundle', metro: 5.59, vifx: 1.66, delta: -70.3 },
+    { label: 'Repeat bundle fetch', metro: 0.14, vifx: 0.01, delta: -93.3 },
+    { label: 'Edit to Fast Refresh update in the app', metro: 0.14, vifx: 0.05, delta: -63.6 },
+    { label: 'Edit to new full bundle available', metro: 0.18, vifx: 0.18 },
+  ]"
+/>
+
+<BenchChart
+  caption="Peak memory, summed over the process tree"
+  unit="MB"
+  :decimals="0"
+  :rows="[
+    { label: 'Release build, cold', metro: 3823, vifx: 2959 },
+    { label: 'Release build, warm', metro: 1070, vifx: 1229 },
+    { label: 'Development build, cold', metro: 3511, vifx: 2911 },
+    { label: 'Development build, warm', metro: 1346, vifx: 1033 },
+  ]"
+/>
+
+<BenchChart
+  caption="Output and Hermes"
+  scale="row"
+  :rows="[
+    { label: 'Release JS bundle', metro: 3.54, vifx: 3.37, unit: 'MB', delta: -4.9 },
+    { label: 'Hermes bytecode', metro: 4.96, vifx: 5.15, unit: 'MB', delta: 3.9 },
+    { label: 'Hermes compile time', metro: 1.35, vifx: 1.53, unit: 's', delta: 13.4 },
+  ]"
+/>
+
+Every figure, with the build times above:
 
 | Measure                                        | Metro    | vifx     | Difference                                                            |
 | ---------------------------------------------- | -------- | -------- | --------------------------------------------------------------------- |
-| `export:embed` release, cold                   | 15.18 s  | 4.55 s   | −70.0 %                                                               |
-| `export:embed` release, warm                   | 8.71 s   | 1.57 s   | −82.0 %                                                               |
-| `export:embed` dev, cold                       | 12.78 s  | 4.73 s   | −63.0 %                                                               |
-| `export:embed` dev, warm                       | 9.05 s   | 1.43 s   | −84.2 %                                                               |
-| Peak memory, release cold                      | 3,823 MB | 2,959 MB | −22.6 %                                                               |
-| Peak memory, release warm                      | 1,070 MB | 1,229 MB | +14.9 %                                                               |
-| Peak memory, dev cold                          | 3,511 MB | 2,911 MB | −17.1 %                                                               |
-| Peak memory, dev warm                          | 1,346 MB | 1,033 MB | −23.3 %                                                               |
-| Release JS bundle                              | 3.54 MB  | 3.37 MB  | −4.9 %                                                                |
+| `export:embed` release, cold                   | 15.18 s  | 4.55 s   | <Badge type="tip" text="−70.0 %" />                                   |
+| `export:embed` release, warm                   | 8.71 s   | 1.57 s   | <Badge type="tip" text="−82.0 %" />                                   |
+| `export:embed` dev, cold                       | 12.78 s  | 4.73 s   | <Badge type="tip" text="−63.0 %" />                                   |
+| `export:embed` dev, warm                       | 9.05 s   | 1.43 s   | <Badge type="tip" text="−84.2 %" />                                   |
+| Peak memory, release cold                      | 3,823 MB | 2,959 MB | <Badge type="tip" text="−22.6 %" />                                   |
+| Peak memory, release warm                      | 1,070 MB | 1,229 MB | <Badge type="warning" text="+14.9 %" />                               |
+| Peak memory, dev cold                          | 3,511 MB | 2,911 MB | <Badge type="tip" text="−17.1 %" />                                   |
+| Peak memory, dev warm                          | 1,346 MB | 1,033 MB | <Badge type="tip" text="−23.3 %" />                                   |
+| Release JS bundle                              | 3.54 MB  | 3.37 MB  | <Badge type="tip" text="−4.9 %" />                                    |
 | Modules in the release source map              | 2,007    | 1,629    | [see above](#scope-hoisting-and-cross-module-tree-shaking-in-release) |
-| Hermes bytecode                                | 4.96 MB  | 5.15 MB  | +3.9 %                                                                |
-| Hermes compile                                 | 1.35 s   | 1.53 s   | +13.4 %                                                               |
-| Dev server, cold start until it answers        | 1.46 s   | 0.63 s   | −56.6 %                                                               |
-| Dev server, cold start until the first bundle  | 9.03 s   | 4.58 s   | −49.2 %                                                               |
-| Dev server, warm start until the first bundle  | 5.59 s   | 1.66 s   | −70.3 %                                                               |
-| Repeat bundle fetch                            | 0.14 s   | 0.01 s   | −93.3 %                                                               |
-| Edit → Fast Refresh update received by the app | 0.14 s   | 0.05 s   | −63.6 %                                                               |
-| Edit → new full bundle available               | 0.18 s   | 0.18 s   | level (within 4 %)                                                    |
+| Hermes bytecode                                | 4.96 MB  | 5.15 MB  | <Badge type="warning" text="+3.9 %" />                                |
+| Hermes compile                                 | 1.35 s   | 1.53 s   | <Badge type="warning" text="+13.4 %" />                               |
+| Dev server, cold start until it answers        | 1.46 s   | 0.63 s   | <Badge type="tip" text="−56.6 %" />                                   |
+| Dev server, cold start until the first bundle  | 9.03 s   | 4.58 s   | <Badge type="tip" text="−49.2 %" />                                   |
+| Dev server, warm start until the first bundle  | 5.59 s   | 1.66 s   | <Badge type="tip" text="−70.3 %" />                                   |
+| Repeat bundle fetch                            | 0.14 s   | 0.01 s   | <Badge type="tip" text="−93.3 %" />                                   |
+| Edit → Fast Refresh update received by the app | 0.14 s   | 0.05 s   | <Badge type="tip" text="−63.6 %" />                                   |
+| Edit → new full bundle available               | 0.18 s   | 0.18 s   | <Badge type="info" text="level (within 4 %)" />                       |
 
 vifx is ahead on build times, dev-server start, Fast Refresh latency, JS bundle size and cold-build memory. Metro is ahead on Hermes bytecode size and compile time, and on the peak memory of a warm release build. A new full bundle after an edit is level.
 

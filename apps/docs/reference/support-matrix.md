@@ -23,13 +23,13 @@ Vifx tracks Expo SDK majors with explicit support tiers. The tiers are deliberat
 - **validated** — fixture-backed AND device-validated against Expo Go. This is the current gate.
 - **experimental** — fixtures, `vifx expo audit`, `vifx doctor` detection, compat cases, and release bundles of the SDK's default template compared with Metro's exist, but dev-server protocols and runtime behavior are NOT device-validated.
 
-| Expo SDK | React Native | Tier         | What is covered                                                                                   | What is NOT covered                                               |
-| -------- | ------------ | ------------ | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| 54       | 0.81         | validated    | Fixtures, audits, doctor detection, device-validated Expo Go dev server with a production app     | EAS, Expo Updates runtime, native binaries (see Non-Goals)        |
-| 55       | 0.83         | experimental | Fixtures, audits, doctor detection, compat cases; default template's release build vs Metro       | Device validation; dev-server protocols on real devices           |
-| 56       | 0.85         | experimental | Fixtures, audits, doctor detection, compat cases; default template's release build vs Metro       | Device validation; Hermes V1 runtime behavior on real devices     |
-| 57       | 0.86         | experimental | Fixtures, audits, doctor detection, compat cases; default template's release build vs Metro       | Device validation; dev-server protocols on real devices           |
-| 58       | 0.88         | validated    | Fixtures, audits, doctor detection; default template in Expo Go on iOS and Android, release build | A production app; native release builds (Xcode, Gradle) on SDK 58 |
+| Expo SDK | React Native | Tier                                         | What is covered                                                                                   | What is NOT covered                                               |
+| -------- | ------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 54       | 0.81         | <Badge type="tip" text="validated" />        | Fixtures, audits, doctor detection, device-validated Expo Go dev server with a production app     | EAS, Expo Updates runtime, native binaries (see Non-Goals)        |
+| 55       | 0.83         | <Badge type="warning" text="experimental" /> | Fixtures, audits, doctor detection, compat cases; default template's release build vs Metro       | Device validation; dev-server protocols on real devices           |
+| 56       | 0.85         | <Badge type="warning" text="experimental" /> | Fixtures, audits, doctor detection, compat cases; default template's release build vs Metro       | Device validation; Hermes V1 runtime behavior on real devices     |
+| 57       | 0.86         | <Badge type="warning" text="experimental" /> | Fixtures, audits, doctor detection, compat cases; default template's release build vs Metro       | Device validation; dev-server protocols on real devices           |
+| 58       | 0.88         | <Badge type="tip" text="validated" />        | Fixtures, audits, doctor detection; default template in Expo Go on iOS and Android, release build | A production app; native release builds (Xcode, Gradle) on SDK 58 |
 
 SDK-specific notes:
 
