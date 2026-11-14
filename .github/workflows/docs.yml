@@ -10,6 +10,8 @@ on:
     paths:
       - "apps/docs/**"
       - ".github/workflows/docs.yml"
+      # The nav shows the released version: redeploy when a release bumps it.
+      - "packages/cli/package.json"
   workflow_dispatch:
 
 permissions: {}

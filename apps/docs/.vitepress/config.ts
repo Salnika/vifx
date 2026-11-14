@@ -1,6 +1,13 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vitepress";
+import { packageManagerTabs } from "./package-manager-tabs";
 
 const repositoryUrl = "https://github.com/Salnika/vifx";
+// The released version shown in the nav: every @vifx package shares it.
+// The docs workflow redeploys the site when it changes.
+const { version } = JSON.parse(
+  readFileSync(new URL("../../../packages/cli/package.json", import.meta.url), "utf8"),
+) as { version: string };
 // GitHub Pages serves the site under /<repository>/ (set by the docs workflow).
 // `head` links are not rebased by VitePress, so they are prefixed with it here.
 const base = process.env.DOCS_BASE ?? "/";
@@ -38,6 +45,8 @@ export default defineConfig({
   },
   markdown: {
     config(md) {
+      packageManagerTabs(md);
+
       // CLI errors link to /reference/errors#<CODE>: on that page, a table cell
       // holding only an error code gets the code as its id.
       const renderCodeInline = md.renderer.rules.code_inline;
@@ -66,6 +75,14 @@ export default defineConfig({
       { text: "vs Metro", link: "/reference/comparisons" },
       { text: "Reference", link: "/reference/cli" },
       { text: "Status", link: "/guide/status" },
+      {
+        text: `v${version}`,
+        items: [
+          { text: "Release notes", link: `${repositoryUrl}/releases` },
+          { text: "Changelog", link: `${repositoryUrl}/blob/master/packages/cli/CHANGELOG.md` },
+          { text: "npm", link: "https://www.npmjs.com/package/@vifx/cli" },
+        ],
+      },
     ],
     socialLinks: [{ icon: "github", link: repositoryUrl }],
     editLink: {

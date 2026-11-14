@@ -14,7 +14,7 @@ The Vifx packages are published to npm under the `@vifx` scope. You need Node.js
 npm install --save-dev @vifx/cli
 ```
 
-`@vifx/cli` provides the `vifx` command. The examples on this site run it with `npx vifx`; with pnpm or Yarn, use `pnpm vifx` or `yarn vifx`.
+`@vifx/cli` provides the `vifx` command. Every command block on this site has an npm, pnpm, Yarn and Bun tab: pick your package manager once and the site keeps it on every page.
 
 Two more packages are only needed for specific setups:
 

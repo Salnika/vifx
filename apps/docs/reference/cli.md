@@ -6,7 +6,7 @@
 npx vifx <command> [path] [flags]
 ```
 
-With pnpm or Yarn, use `pnpm vifx` or `yarn vifx`. Run `npx vifx --help` for the command list and `npx vifx <command> --help` for a command's flags.
+The command blocks on this page have an npm, pnpm, Yarn and Bun tab. Add `--help` for the command list (`npx vifx --help`) or for a command's flags (`npx vifx <command> --help`).
 
 ## Global flags
 

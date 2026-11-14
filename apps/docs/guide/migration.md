@@ -36,7 +36,7 @@ npm install --save-dev @vifx/config @vifx/expo-config-plugin
 npm install --save-dev vite   # when you add a vite.config.vifx.ts
 ```
 
-The examples below run the CLI with `npx vifx`; with pnpm or Yarn, use `pnpm vifx` or `yarn vifx`.
+The command blocks below have an npm, pnpm, Yarn and Bun tab; the site remembers the one you pick.
 
 ## 2. Generate config
 

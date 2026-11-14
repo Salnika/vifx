@@ -1,6 +1,6 @@
 # Workflows
 
-The commands below run the CLI with `npx vifx`; with pnpm or Yarn, use `pnpm vifx` or `yarn vifx`. See [Getting Started](/guide/getting-started#install) to install it.
+The command blocks below have an npm, pnpm, Yarn and Bun tab; the site remembers the one you pick. See [Getting Started](/guide/getting-started#install) to install the CLI.
 
 ## Analyze An Expo Project
 
