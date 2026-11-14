@@ -1,6 +1,6 @@
 {
   "name": "@vifx/vite-config-bridge",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Loads a project's vite.config.vifx.ts and merges it into Vifx's own Vite configuration.",
   "keywords": [
     "react-native",
