@@ -2,7 +2,7 @@ import { chmod, cp, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/pr
 import os from "node:os";
 import path from "node:path";
 import { runInNewContext } from "node:vm";
-import { build } from "vite";
+import { build } from "@voidzero-dev/vite-plus-core";
 import { expect, test } from "vite-plus/test";
 import { buildReactNativeBundle, reactNative } from "../src/index.ts";
 

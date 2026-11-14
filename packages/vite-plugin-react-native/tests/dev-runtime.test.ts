@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import vm from "node:vm";
-import { dev } from "vite/rolldown/experimental";
-import { DevRuntime } from "vite/rolldown/experimental/runtime";
+import { dev } from "@voidzero-dev/vite-plus-core/rolldown/experimental";
+import { DevRuntime } from "@voidzero-dev/vite-plus-core/rolldown/experimental/runtime";
 import { afterEach, describe, expect, test } from "vite-plus/test";
 import {
   buildVifxDevRuntimeSource,

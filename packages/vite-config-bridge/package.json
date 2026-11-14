@@ -35,7 +35,7 @@
   "dependencies": {
     "@vifx/errors": "workspace:*",
     "@vifx/types": "workspace:*",
-    "vite": "catalog:"
+    "@voidzero-dev/vite-plus-core": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

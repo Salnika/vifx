@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { SourceMap } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { build } from "vite";
+import { build } from "@voidzero-dev/vite-plus-core";
 import { expect, test } from "vite-plus/test";
 import {
   createExpoGoBundleUrlPath,

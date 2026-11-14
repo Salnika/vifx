@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { InlineConfig, Plugin, UserConfig } from "vite";
+import type { InlineConfig, Plugin, UserConfig } from "@voidzero-dev/vite-plus-core";
 import { expect, test } from "vite-plus/test";
 import {
   allowedViteKeys,
@@ -346,6 +346,48 @@ test("loadUserViteConfig wraps a load failure as VIFX_USER_VITE_CONFIG_CONFLICT"
     await expect(
       loadUserViteConfig({ projectRoot: dir, command: "build", mode: "production" }),
     ).rejects.toMatchObject({ code: "VIFX_USER_VITE_CONFIG_CONFLICT" });
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
+test("loadUserViteConfig says to install vite when the user config cannot import it", async () => {
+  // Vifx builds with its own Vite+ core and no longer provides `node_modules/vite`,
+  // so a config importing `defineConfig` from "vite" needs the project's own vite.
+  const dir = await mkdtemp(path.join(tmpdir(), "vifx-bridge-"));
+  try {
+    await writeFile(
+      path.join(dir, "vite.config.vifx.ts"),
+      'import { defineConfig } from "vite";\nexport default defineConfig({});\n',
+      "utf8",
+    );
+    const error = await loadUserViteConfig({
+      projectRoot: dir,
+      command: "build",
+      mode: "production",
+    }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "VIFX_USER_VITE_CONFIG_CONFLICT" });
+    expect(String((error as { hint?: unknown }).hint)).toContain("npm install --save-dev vite");
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
+});
+
+test("loadUserViteConfig keeps the syntax hint when vite is not the problem", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "vifx-bridge-"));
+  try {
+    await writeFile(
+      path.join(dir, "vite.config.vifx.ts"),
+      'import plugin from "vite-plugin-that-is-not-installed";\nexport default { plugins: [plugin()] };\n',
+      "utf8",
+    );
+    const error = await loadUserViteConfig({
+      projectRoot: dir,
+      command: "build",
+      mode: "production",
+    }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "VIFX_USER_VITE_CONFIG_CONFLICT" });
+    expect(String((error as { hint?: unknown }).hint)).not.toContain("install --save-dev vite");
   } finally {
     await rm(dir, { force: true, recursive: true });
   }

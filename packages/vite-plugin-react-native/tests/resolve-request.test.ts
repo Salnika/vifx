@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { Plugin } from "vite";
+import type { Plugin } from "@voidzero-dev/vite-plus-core";
 import { expect, test } from "vite-plus/test";
 import type {
   VifxMetroResolution,

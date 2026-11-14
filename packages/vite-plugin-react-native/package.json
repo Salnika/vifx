@@ -45,9 +45,9 @@
     "@vifx/transform-cache": "workspace:*",
     "@vifx/types": "workspace:*",
     "@vifx/vite-config-bridge": "workspace:*",
+    "@voidzero-dev/vite-plus-core": "catalog:",
     "magic-string": "^1.4.5",
-    "react-refresh": "catalog:",
-    "vite": "catalog:"
+    "react-refresh": "catalog:"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",

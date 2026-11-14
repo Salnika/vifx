@@ -9,7 +9,7 @@ import {
   type InlineConfig,
   type Plugin,
   type TransformResult,
-} from "vite";
+} from "@voidzero-dev/vite-plus-core";
 import {
   collectAssetGroup,
   getAssetOutputDirectory,
@@ -2602,7 +2602,7 @@ function resolveProjectBabelVersion(projectRoot: string): string {
 
 /**
  * Builds a transform cache with the canonical version key for `projectRoot`
- * (cache-format + plugin + Vite + project Babel versions). Callers that want to
+ * (cache-format + plugin + Vite+ core + project Babel versions). Callers that want to
  * inject their own instance via `transformCacheInstance` must create it with
  * this helper so the version key — and therefore the on-disk entries and their
  * invalidation — stay byte-for-byte identical to the non-injected path.
@@ -2617,7 +2617,7 @@ export function createReactNativeTransformCache(
   const version = [
     TRANSFORM_CACHE_FORMAT,
     `plugin@${resolvePluginVersion()}`,
-    `vite@${resolveDependencyVersion("vite")}`,
+    `vite-plus-core@${resolveDependencyVersion("@voidzero-dev/vite-plus-core")}`,
     `babel@${resolveProjectBabelVersion(projectRoot)}`,
   ].join("|");
 

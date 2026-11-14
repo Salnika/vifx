@@ -1,5 +1,5 @@
 import path from "node:path";
-import { parseSync } from "vite";
+import { parseSync } from "@voidzero-dev/vite-plus-core";
 
 export interface AstNode {
   type: string;

@@ -59,7 +59,6 @@
     "@vifx/vite-plugin-expo": "workspace:*",
     "@vifx/vite-plugin-react-native": "workspace:*",
     "qrcode-terminal": "^0.12.0",
-    "vite": "catalog:",
     "ws": "catalog:"
   },
   "devDependencies": {
