@@ -1,12 +1,19 @@
 import { defineConfig } from "vitepress";
 
 const repositoryUrl = "https://github.com/Salnika/vifx";
+// GitHub Pages serves the site under /<repository>/ (set by the docs workflow).
+// `head` links are not rebased by VitePress, so they are prefixed with it here.
+const base = process.env.DOCS_BASE ?? "/";
 
 export default defineConfig({
   title: "Vifx",
   description: "A unified Vite + Rolldown toolchain that replaces Metro for React Native and Expo.",
-  // GitHub Pages serves the site under /<repository>/ (set by the docs workflow).
-  base: process.env.DOCS_BASE ?? "/",
+  base,
+  head: [
+    ["link", { rel: "icon", type: "image/png", href: `${base}favicon.png` }],
+    ["link", { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` }],
+    ["meta", { name: "theme-color", content: "#7c3aed" }],
+  ],
   lastUpdated: true,
   outDir: "./dist",
   // The workspace aliases `vite` to @voidzero-dev/vite-plus-core (rolldown-vite).
@@ -52,6 +59,7 @@ export default defineConfig({
     },
   },
   themeConfig: {
+    logo: { src: "/logo.png", alt: "" },
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Features", link: "/reference/features" },

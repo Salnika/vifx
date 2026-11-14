@@ -1,9 +1,21 @@
-# Vifx
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./apps/docs/public/logo-wordmark-dark.png" />
+    <img src="./apps/docs/public/logo-wordmark.png" alt="Vifx" width="360" />
+  </picture>
+</h1>
 
-[![ci](https://github.com/Salnika/vifx/actions/workflows/ci.yml/badge.svg)](https://github.com/Salnika/vifx/actions/workflows/ci.yml)
-[![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+<p align="center">
+  Vite and Rolldown bundling for React Native and Expo, without Metro.
+</p>
 
-Vite and Rolldown bundling for React Native and Expo, without Metro.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@vifx/cli"><img src="https://img.shields.io/npm/v/@vifx/cli?label=npm&color=7c3aed" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@vifx/cli"><img src="https://img.shields.io/npm/dm/@vifx/cli?color=7c3aed" alt="npm downloads" /></a>
+  <a href="https://github.com/Salnika/vifx/actions/workflows/ci.yml"><img src="https://github.com/Salnika/vifx/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI status" /></a>
+  <a href="https://salnika.github.io/vifx/"><img src="https://img.shields.io/badge/docs-salnika.github.io%2Fvifx-7c3aed" alt="Documentation" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Salnika/vifx?color=blue" alt="MIT license" /></a>
+</p>
 
 Vifx builds your iOS and Android bundles, serves an Expo Go dev server with Fast Refresh, and produces the release bundle and assets that Xcode and Gradle embed. Your app is a real Rolldown module graph, so any Vite or Rollup plugin can run against it through a `vite.config.vifx.ts`.
 

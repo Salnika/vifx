@@ -5,6 +5,9 @@ hero:
   name: Vifx
   text: One Vite engine for React Native and Expo
   tagline: Vite and Rolldown bundling for React Native and Expo, without Metro — native and web from one engine, any Vite or Rollup plugin, and an Expo Go dev server with Fast Refresh.
+  image:
+    src: /logo.png
+    alt: Vifx logo
   actions:
     - theme: brand
       text: Get Started
