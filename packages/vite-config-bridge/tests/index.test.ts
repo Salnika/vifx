@@ -1,8 +1,13 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { InlineConfig, Plugin, UserConfig } from "@voidzero-dev/vite-plus-core";
-import { expect, test } from "vite-plus/test";
+import {
+  type InlineConfig,
+  loadConfigFromFile,
+  type Plugin,
+  type UserConfig,
+} from "@voidzero-dev/vite-plus-core";
+import { expect, test, vi } from "vite-plus/test";
 import {
   allowedViteKeys,
   detectNativeResolutionConflicts,
@@ -15,6 +20,13 @@ import {
   reservedViteKeys,
   vifxResolveRequest,
 } from "../src/index.ts";
+
+// The real loader runs everywhere, behind a spy that lets one test fail it the
+// way Node does when a user config imports a `vite` the project lacks.
+vi.mock(import("@voidzero-dev/vite-plus-core"), async (importOriginal) => {
+  const original = await importOriginal();
+  return { ...original, loadConfigFromFile: vi.fn(original.loadConfigFromFile) };
+});
 
 function userResult(config: UserConfig): LoadedUserViteConfig {
   return { path: "/virtual/vite.config.vifx.ts", config };
@@ -354,12 +366,20 @@ test("loadUserViteConfig wraps a load failure as VIFX_USER_VITE_CONFIG_CONFLICT"
 test("loadUserViteConfig says to install vite when the user config cannot import it", async () => {
   // Vifx builds with its own Vite+ core and no longer provides `node_modules/vite`,
   // so a config importing `defineConfig` from "vite" needs the project's own vite.
+  // Node's error is simulated: inside the test runner, the config's "vite" can
+  // still resolve from this workspace, which has one for its own tooling (it
+  // does on Linux), whatever the code under test does.
   const dir = await mkdtemp(path.join(tmpdir(), "vifx-bridge-"));
   try {
     await writeFile(
       path.join(dir, "vite.config.vifx.ts"),
       'import { defineConfig } from "vite";\nexport default defineConfig({});\n',
       "utf8",
+    );
+    vi.mocked(loadConfigFromFile).mockRejectedValueOnce(
+      new Error(
+        `Cannot find package 'vite' imported from ${path.join(dir, "vite.config.vifx.ts")}`,
+      ),
     );
     const error = await loadUserViteConfig({
       projectRoot: dir,

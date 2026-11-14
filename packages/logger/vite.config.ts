@@ -8,6 +8,10 @@ export default defineConfig({
     // https://viteplus.dev/guide/vitest-v5#remove-unneeded-compatibility-settings
     // https://vitest.dev/guide/migration/#clearmocks-is-enabled-by-default
     clearMocks: false,
+    // chalk colors the logs when the terminal (or CI, through FORCE_COLOR)
+    // supports it, and not in a plain local run. Force colors so the tests see
+    // the same output everywhere.
+    env: { FORCE_COLOR: "1" },
   },
   resolve: {
     alias: {

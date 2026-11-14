@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import { expect, test } from "vite-plus/test";
 import { VifxError } from "@vifx/errors";
 import {
@@ -98,11 +99,13 @@ test("environment variables override defaults", () => {
     logger.debug("Debug message", { detail: "something" });
 
     expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toContain("debug");
-    expect(chunks[0]).toContain("vifx");
-    expect(chunks[0]).toContain("Debug message");
-    expect(chunks[0]).toContain("context {");
-    expect(chunks[0]).toContain('"detail": "something"');
+    // The labels are colored (see vite.config.ts): compare the text.
+    const output = stripVTControlCharacters(chunks[0] ?? "");
+    expect(output).toContain("debug");
+    expect(output).toContain("vifx");
+    expect(output).toContain("Debug message");
+    expect(output).toContain("context {");
+    expect(output).toContain('"detail": "something"');
   } finally {
     process.env.VIFX_VERBOSE = originalVerbose;
     process.env.VIFX_DEBUG = originalDebug;
