@@ -1,5 +1,5 @@
 import MagicString from "magic-string";
-import type { Plugin } from "vite";
+import type { Plugin } from "@voidzero-dev/vite-plus-core";
 
 // Direct `eval` used as a call: preceded by a non-member, non-identifier char
 // (so `foo.eval(` and `globalEval(` are left alone) and followed by `(`.

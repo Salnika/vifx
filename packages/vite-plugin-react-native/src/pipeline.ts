@@ -1,5 +1,5 @@
 import type { VifxBundleMode } from "@vifx/types";
-import type { Plugin } from "vite";
+import type { Plugin } from "@voidzero-dev/vite-plus-core";
 import { createIndirectEvalPlugin } from "./indirect-eval.ts";
 
 export interface BuildVifxPluginPipelineOptions {

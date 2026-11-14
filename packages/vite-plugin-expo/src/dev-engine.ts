@@ -1,8 +1,8 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { build, type InlineConfig, type Plugin } from "vite";
-import { dev } from "vite/rolldown/experimental";
+import { build, type InlineConfig, type Plugin } from "@voidzero-dev/vite-plus-core";
+import { dev } from "@voidzero-dev/vite-plus-core/rolldown/experimental";
 import { VifxError } from "@vifx/errors";
 import { buildVifxDevRuntimeSource } from "@vifx/vite-plugin-react-native";
 

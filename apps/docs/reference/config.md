@@ -193,6 +193,8 @@ export default defineConfig({
 });
 ```
 
+`vite` here is your project's own Vite: install it as a dev dependency (`npm install --save-dev vite`; `vifx vite init` adds it to `package.json`). Vifx builds with the Vite+ toolchain, `@voidzero-dev/vite-plus-core` (Vite 8 and Rolldown), which its plugins depend on under that name, so it never takes your project's `vite` slot. Your config and its plugins run inside that build.
+
 ### Detection and opt-out
 
 vifx auto-detects the file in this priority order under the project root:
@@ -245,7 +247,7 @@ All of these carry the `VIFX_USER_VITE_CONFIG_CONFLICT` code:
 - A user plugin with `enforce: "pre"` and a `resolveId` hook — vifx runs first, but same-`enforce` order is not contractually guaranteed by Vite, so the collision is flagged.
 - Setting any reserved top-level key, reserved `resolve.*` sub-key, or reserved `define` key.
 
-A user config that fails to load (a syntax or export error in `vite.config.vifx.*`) also throws `VIFX_USER_VITE_CONFIG_CONFLICT`, with the hint to fix the file or set `vite.userConfigFile: false`.
+A user config that fails to load (a syntax or export error in `vite.config.vifx.*`) also throws `VIFX_USER_VITE_CONFIG_CONFLICT`, with the hint to fix the file or set `vite.userConfigFile: false`. When the file imports `vite` and the project has none installed, the hint says to install it instead.
 
 ### The registry-format staging path
 

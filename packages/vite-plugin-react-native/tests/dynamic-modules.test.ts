@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
-import { build } from "vite";
+import { build } from "@voidzero-dev/vite-plus-core";
 import { expect, test } from "vite-plus/test";
 import { VifxError } from "@vifx/errors";
 import { transformDynamicImport } from "../src/dynamic/dynamic-import.ts";

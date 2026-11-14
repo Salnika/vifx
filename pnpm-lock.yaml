@@ -176,6 +176,9 @@ catalogs:
     '@types/ws':
       specifier: ^8.18.2
       version: 8.18.2
+    '@voidzero-dev/vite-plus-core':
+      specifier: 1.6.0
+      version: 1.6.0
     oxc-minify:
       specifier: ^0.158.0
       version: 0.158.0
@@ -435,9 +438,6 @@ importers:
       qrcode-terminal:
         specifier: ^0.12.0
         version: 0.12.0
-      vite:
-        specifier: 'catalog:'
-        version: '@voidzero-dev/vite-plus-core@1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(typescript@7.0.2)(yaml@2.9.1)'
       ws:
         specifier: 'catalog:'
         version: 8.22.2
@@ -777,9 +777,9 @@ importers:
       '@vifx/types':
         specifier: workspace:*
         version: link:../types
-      vite:
+      '@voidzero-dev/vite-plus-core':
         specifier: 'catalog:'
-        version: '@voidzero-dev/vite-plus-core@1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(typescript@7.0.2)(yaml@2.9.1)'
+        version: 1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(typescript@7.0.2)(yaml@2.9.1)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -817,9 +817,9 @@ importers:
       '@vifx/vite-plugin-react-native':
         specifier: workspace:*
         version: link:../vite-plugin-react-native
-      vite:
+      '@voidzero-dev/vite-plus-core':
         specifier: 'catalog:'
-        version: '@voidzero-dev/vite-plus-core@1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(typescript@7.0.2)(yaml@2.9.1)'
+        version: 1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(typescript@7.0.2)(yaml@2.9.1)
       ws:
         specifier: 'catalog:'
         version: 8.22.2
@@ -863,15 +863,15 @@ importers:
       '@vifx/vite-config-bridge':
         specifier: workspace:*
         version: link:../vite-config-bridge
+      '@voidzero-dev/vite-plus-core':
+        specifier: 'catalog:'
+        version: 1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(typescript@7.0.2)(yaml@2.9.1)
       magic-string:
         specifier: ^1.4.5
         version: 1.4.5
       react-refresh:
         specifier: 'catalog:'
         version: 0.14.2
-      vite:
-        specifier: 'catalog:'
-        version: '@voidzero-dev/vite-plus-core@1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(typescript@7.0.2)(yaml@2.9.1)'
     devDependencies:
       '@babel/core':
         specifier: ^7.29.7

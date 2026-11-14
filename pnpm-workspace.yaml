@@ -10,6 +10,11 @@ catalog:
   typescript: ^7
   # 0.25.0 is younger than pnpm's 24h minimumReleaseAge; bump once it clears.
   tsrs: 0.24.0-ts7.1.0-beta
+  # Published packages depend on the Vite+ core by its own name: a `vite` alias
+  # would take the `vite` slot of an app installed with npm, Yarn classic, Bun
+  # or pnpm's hoisted linker. The `vite` alias below is for this workspace's own
+  # tooling only. Keep both on the `vite-plus` version.
+  "@voidzero-dev/vite-plus-core": 1.6.0
   vite: npm:@voidzero-dev/vite-plus-core@1.6.0
   vite-plus: 1.6.0
   oxc-minify: ^0.158.0

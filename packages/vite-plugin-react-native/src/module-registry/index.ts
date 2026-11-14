@@ -1,7 +1,7 @@
 import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
-import { build, type InlineConfig, type Plugin } from "vite";
+import { build, type InlineConfig, type Plugin } from "@voidzero-dev/vite-plus-core";
 import { VifxError } from "@vifx/errors";
 import { planMetroEntryModule, type MetroEntryPlan } from "./ordering.ts";
 import {

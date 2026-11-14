@@ -9,7 +9,7 @@ import {
   mergeConfig,
   type Plugin,
   type UserConfig,
-} from "vite";
+} from "@voidzero-dev/vite-plus-core";
 
 /**
  * `@vifx/vite-config-bridge` — load & merge a user's `vite.config.vifx.ts` into
@@ -283,7 +283,9 @@ export async function loadUserViteConfig(
     throw new VifxError({
       code: "VIFX_USER_VITE_CONFIG_CONFLICT",
       message: `Failed to load the user Vite config at ${configFile}.`,
-      hint: "Fix the syntax/exports of your vite.config.vifx.* file, or set vite.userConfigFile: false to opt out.",
+      hint: isMissingViteImport(error)
+        ? `${path.basename(configFile)} imports "vite", which is not installed in this project. Install it as a dev dependency (npm install --save-dev vite); Vifx builds with its own Vite+ core and does not provide it.`
+        : "Fix the syntax/exports of your vite.config.vifx.* file, or set vite.userConfigFile: false to opt out.",
       docsPath: "/guide/vite-config",
       cause: error,
     });
@@ -294,6 +296,22 @@ export async function loadUserViteConfig(
   }
 
   return { path: loaded.path, config: loaded.config };
+}
+
+/**
+ * Whether a config load failed because the config imports `vite` (typically
+ * `defineConfig`) and the project has no `vite` of its own. Vifx depends on the
+ * Vite+ core by its own name, so it never provides `node_modules/vite`.
+ */
+function isMissingViteImport(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current instanceof Error && depth < 5; depth += 1) {
+    if (/Cannot find (?:package|module) ['"]vite['"]/u.test(current.message)) {
+      return true;
+    }
+    current = current.cause;
+  }
+  return false;
 }
 
 async function autodetectUserConfigFile(projectRoot: string): Promise<string | undefined> {

@@ -46,7 +46,7 @@
     "@vifx/types": "workspace:*",
     "@vifx/vite-config-bridge": "workspace:*",
     "@vifx/vite-plugin-react-native": "workspace:*",
-    "vite": "catalog:",
+    "@voidzero-dev/vite-plus-core": "catalog:",
     "ws": "catalog:"
   },
   "devDependencies": {

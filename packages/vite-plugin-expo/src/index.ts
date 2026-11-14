@@ -15,7 +15,7 @@ import {
   type InlineConfig,
   type Plugin,
   type ViteDevServer,
-} from "vite";
+} from "@voidzero-dev/vite-plus-core";
 import {
   collectAssetGroup,
   createAssetServerUrl,
@@ -125,7 +125,7 @@ export interface StartExpoDevServerOptions extends Omit<VifxExpoPluginOptions, "
    */
   onClientLog?: (log: { data: string[]; level: string }) => void;
   /** User Vite/Rollup plugins to append. Reserved for the plugin workstream. */
-  userPlugins?: import("vite").Plugin[];
+  userPlugins?: Plugin[];
   /** Use the incremental rebuild path. Reserved for the HMR PoC workstream. */
   incremental?: boolean;
   /**
