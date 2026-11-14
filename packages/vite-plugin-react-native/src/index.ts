@@ -261,7 +261,7 @@ export function renderUnresolvedGeneratedStub(specifier: string): string {
 }
 // Captured browser globals key used by the web-compat shims (e.g. FormData
 // re-export). Still consumed by renderCompat; the build-time preview runtime
-// that also referenced it was removed with __VIFX_WEB_RUNTIME__ (ADR-005).
+// that also referenced it was removed with __VIFX_WEB_RUNTIME__.
 const WEB_RUNTIME_BROWSER_GLOBALS_KEY = "__VIFX_BROWSER_GLOBALS__";
 const WEB_COMPAT_SPECIFIERS = new Set([
   "react-native",
@@ -3869,7 +3869,7 @@ export async function buildReactNativeBundle(
 
   // The shim-based browser preview (writeWebRuntimeArtifacts +
   // globalThis.__VIFX_WEB_RUNTIME__) was removed in favor of the real RNW +
-  // Vite dev server (`startExpoDevServer`); see ADR-005. The build no longer
+  // Vite dev server (`startExpoDevServer`). The build no longer
   // emits a preview artifact, so `runtime` is always null here. The
   // `reactNativeCompat: "web"` resolution mode itself still works — it rewires
   // the imports to react-native-web — but is consumed by the dev server, not a

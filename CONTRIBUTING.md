@@ -25,7 +25,6 @@ Packages import one another through their built `dist/` output, so run `vp run b
 | `apps/docs`         | The documentation site (VitePress).                                                          |
 | `apps/playground-*` | Small projects that exercise the CLI end to end (`pnpm playground:validate`).                |
 | `fixtures`          | Test projects, captured Metro output and synthetic library packages used by the test suites. |
-| `docs/adr`          | Architecture decision records.                                                               |
 | `docs/benchmarks`   | Benchmark reports; `scripts/bench` produces them.                                            |
 
 ## Checks

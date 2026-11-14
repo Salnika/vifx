@@ -293,7 +293,7 @@ test("buildReactNativeBundle can use the built-in react-native-web compat layer"
   expect(bundleSource).toContain("compat native modules");
   expect(bundleSource).toContain("compat turbo module");
   // The shim-based browser preview (writeWebRuntimeArtifacts + the static
-  // runtime.js/index.html + __VIFX_WEB_RUNTIME__) was removed (ADR-005). The
+  // runtime.js/index.html + __VIFX_WEB_RUNTIME__) was removed. The
   // compat layer now wraps the real react-native-web AppRegistry inside the
   // bundle itself, with no preview artifact and no global runtime shim.
   expect(bundle.runtime).toBeNull();
@@ -859,7 +859,7 @@ test("buildReactNativeBundle generates an Expo Router context with platform rout
     reactNativeCompat: "web",
   });
   // The web-preview artifact (runtime/bundle.js + index.html) was removed with
-  // the __VIFX_WEB_RUNTIME__ shim (ADR-005). The router context, platform route
+  // the __VIFX_WEB_RUNTIME__ shim. The router context, platform route
   // resolution, and require.context replacement are now asserted on the native
   // bundle directly — the same coverage without the dead preview path.
   const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
@@ -1450,7 +1450,7 @@ test("buildReactNativeBundle uses captured browser globals for Expo winter URL c
   );
 
   // Web resolution (resolvePlatform "web") is what triggers the browser-globals
-  // winter URL. With the preview artifact gone (ADR-005), this is now asserted
+  // winter URL. With the preview artifact gone, this is now asserted
   // on the web-resolved native bundle directly instead of runtime/bundle.js.
   const bundle = await buildReactNativeBundle({
     entry: "./index.js",

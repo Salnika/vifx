@@ -241,7 +241,7 @@ test("expo() injects EXPO_PUBLIC_ values as both import.meta.env and process.env
   await writeNativeReactNativePackage(projectRoot);
   await writeNativeExpoPackage(projectRoot);
   // Both forms must be inlined from the single define table (resolveDefines):
-  // import.meta.env.<k> AND process.env.<k> (native+web unification, ADR-005).
+  // import.meta.env.<k> AND process.env.<k>, for native and web alike.
   await writeFile(
     appPath,
     [
@@ -321,7 +321,7 @@ NETWORK_SERVER_TESTS("startExpoDevServer serves bounded dev HTML and Vite HMR cl
     expect(client).toContain("import.meta.hot.accept");
     expect(client).toContain("await import");
     // The dev client mounts via the real react-native-web AppRegistry, not the
-    // removed __VIFX_WEB_RUNTIME__ shim (ADR-005 native+web unification).
+    // removed __VIFX_WEB_RUNTIME__ shim.
     expect(client).toContain('AppRegistry.runApplication("main"');
     expect(client).not.toContain("__VIFX_WEB_RUNTIME__");
     expect(client).not.toContain("runtime.mount");

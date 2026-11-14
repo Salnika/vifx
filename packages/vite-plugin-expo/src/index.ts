@@ -980,7 +980,7 @@ export function expo(options: VifxExpoPluginOptions): Plugin[] {
         // and the mode/platform defines come from the single source of truth:
         // the reactNative plugin's config hook (`resolveDefines`), reached via
         // the `reactNative({ ...options })` spread below. This keeps one define
-        // table for native and web (ADR-005 / native+web unification).
+        // table for native and web.
         return {
           define: {
             __EXPO_APP_CONFIG_PATH__: JSON.stringify(path.relative(projectRoot, appConfigPath)),

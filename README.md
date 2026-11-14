@@ -109,8 +109,6 @@ The documentation site is at **[salnika.github.io/vifx](https://salnika.github.i
 - [CLI](https://salnika.github.io/vifx/reference/cli) and [configuration](https://salnika.github.io/vifx/reference/config) reference
 - [Vifx vs Metro](https://salnika.github.io/vifx/reference/comparisons) and the [library support matrix](https://salnika.github.io/vifx/reference/support-matrix)
 
-Architecture decisions are recorded in [`docs/adr`](./docs/adr).
-
 ## Packages
 
 | Package                                                                 | What it is                                                            |

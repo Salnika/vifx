@@ -359,8 +359,8 @@ test("resolveDefines honors a custom publicEnvPrefix", () => {
 });
 
 test("the web-compat build no longer emits a shim browser-preview runtime artifact", async () => {
-  // The __VIFX_WEB_RUNTIME__ shim + writeWebRuntimeArtifacts were removed
-  // (ADR-005): the web target is served by the real react-native-web + Vite
+  // The __VIFX_WEB_RUNTIME__ shim + writeWebRuntimeArtifacts were removed:
+  // the web target is served by the real react-native-web + Vite
   // dev server, not a static build artifact. reactNativeCompat: "web" still
   // resolves imports to react-native-web, but the build emits no preview.
   const projectRoot = await copyFixture("rn-bare-basic");

@@ -4,9 +4,9 @@ import { defineVifxConfig } from "@vifx/config";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
-// One config, one env, two targets (native + web). The define/env table is
-// unified through resolveDefines (ADR-005, native+web): every EXPO_PUBLIC_* var
-// is inlined as both import.meta.env.<k> and process.env.<k> on both sides.
+// One config, one env, two targets (native + web). Both share the define/env
+// table from resolveDefines: every EXPO_PUBLIC_* var is inlined as both
+// import.meta.env.<k> and process.env.<k> on both sides.
 export default defineVifxConfig({
   projectRoot,
   projectType: "expo",
