@@ -1,6 +1,6 @@
 {
   "name": "@vifx/compat-runner",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Runs Vifx and Metro over the compatibility fixtures and reports where they differ.",
   "keywords": [
     "compatibility",

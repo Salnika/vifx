@@ -1,6 +1,6 @@
 {
   "name": "@vifx/expo-export",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Expo export artifacts (bundles, source maps, assets, metadata) produced by Vifx.",
   "keywords": [
     "expo",

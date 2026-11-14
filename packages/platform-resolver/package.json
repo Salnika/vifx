@@ -1,6 +1,6 @@
 {
   "name": "@vifx/platform-resolver",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "React Native module resolution for Vifx: platform extensions, exports conditions, main fields and workspaces.",
   "keywords": [
     "react-native",
