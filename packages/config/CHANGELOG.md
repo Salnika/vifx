@@ -1,5 +1,23 @@
 # @vifx/config
 
+## 0.2.0
+
+### Minor Changes
+
+- f104cb2: `vifx doctor --fix` writes the settings it maps from `metro.config.js` into `vifx.config.ts`: source extensions (`resolver.extensions`), asset extensions (the new `resolver.assetExtensions` key) and module aliases (each `vite.targets` entry's `aliases`). The file is edited in place, so its comments and other keys are kept.
+  
+  `vifx doctor` now compares `metro.config.js` with the config `expo/metro-config` or `@react-native/metro-config` builds on its own, so Expo's and React Native's defaults (CSS source extensions, extra asset extensions, the default Babel transformer and serializer) are no longer reported as settings to port. It names Sentry's Metro serializer when it finds one. Its report, and `vifx setup`'s, are colored on a color terminal.
+  
+  `resolver.extensions` and `resolver.assetExtensions` from `vifx.config.ts` now reach every build and dev server; before, only `resolver.mainFields` did.
+
+### Patch Changes
+
+- 8b79fef: `resolver.conditions` from `vifx.config.ts` now reaches every build and dev server: extra package `exports` conditions, tried after `react-native` and the platform and before `import` and `default`. The conditions the bundler sets itself (`react-native`, `ios`, `android`, `browser`, `web`, `import`, `default`), and `require`, which it never sets, are dropped from the list. The `["react-native", "import", "require", "default"]` that `vifx setup` and `vifx init` used to write therefore changes nothing, and they no longer write it. An empty `conditions` list is now accepted.
+- Updated dependencies [f104cb2]
+- Updated dependencies [8b79fef]
+  - @vifx/types@0.2.0
+  - @vifx/errors@0.2.0
+
 ## 0.1.0
 
 ### Patch Changes

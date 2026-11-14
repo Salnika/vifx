@@ -1,5 +1,11 @@
 # @vifx/compat
 
+## 0.2.0
+
+### Patch Changes
+
+- @vifx/errors@0.2.0
+
 ## 0.1.0
 
 ### Patch Changes

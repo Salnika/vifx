@@ -1,6 +1,6 @@
 {
   "name": "@vifx/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Project inspection and readiness checks shared by the Vifx command line.",
   "keywords": [
     "expo",

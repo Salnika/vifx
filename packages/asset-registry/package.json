@@ -1,6 +1,6 @@
 {
   "name": "@vifx/asset-registry",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "React Native asset handling for Vifx: scale variants, image dimensions, hashing and production asset layouts.",
   "keywords": [
     "assets",
