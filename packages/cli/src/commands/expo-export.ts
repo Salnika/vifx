@@ -5,6 +5,7 @@ import { writeExpoExport } from "@vifx/expo-export";
 import { resolveExpoAppConfig } from "@vifx/vite-plugin-expo";
 import { parseFlags } from "../lib/args.ts";
 import { loadProjectEnvIntoProcess } from "../lib/env.ts";
+import { resolverBuildOptions } from "../lib/resolver-options.ts";
 import type { CliResult } from "../types.ts";
 import {
   type ExpoBuildResult,
@@ -94,7 +95,7 @@ export async function runExpoExportCommand(argv: string[], cwd: string): Promise
           ? { ...target, compatPreview: false, mode, reactNativeCompat: "none" }
           : { ...target, mode },
         loaded.config.projectRoot,
-        loaded.config.resolver.mainFields,
+        resolverBuildOptions(loaded.config.resolver),
       ),
     );
   }

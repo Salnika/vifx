@@ -280,9 +280,15 @@ Check project readiness. Reports project type, Node version, package manager, Re
 
 ```sh
 npx vifx doctor ./my-app --json
+npx vifx doctor ./my-app --fix
 ```
 
-`--json` emits pure JSON with no extra logs. Use `vifx doctor` to verify a project after migration.
+| Flag     | Purpose                                                                                                                                                                                              |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--fix`  | Write the settings mapped from `metro.config.js` into `vifx.config.ts`: source extensions, asset extensions and module aliases. The file is edited in place; what cannot be edited safely is listed. |
+| `--json` | Emit pure JSON with no extra logs; with `--fix`, it includes what was written.                                                                                                                       |
+
+The Metro section compares `metro.config.js` with the config `expo/metro-config` or `@react-native/metro-config` builds on its own, so it lists only your project's changes. The report is colored on a color terminal and plain otherwise (pipes, `NO_COLOR`). Use `vifx doctor` to verify a project after migration.
 
 ### `vifx inspect`
 

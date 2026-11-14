@@ -6,6 +6,7 @@ import type { VifxBundleMode } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
 import { loadProjectEnvIntoProcess } from "../lib/env.ts";
 import { parseBundleModeFlag } from "../lib/mode.ts";
+import { resolverBuildOptions } from "../lib/resolver-options.ts";
 import type { CliResult } from "../types.ts";
 
 const BUILD_HELP = `Usage: vifx build [path] [--platform ios|android|all] [--mode development|production] [--config <file>] [--verbose] [--json]
@@ -143,7 +144,7 @@ export async function runBuildCommand(argv: string[], cwd: string): Promise<CliR
       env: process.env,
       hermes: target.hermes,
       jsxInPackages: target.jsxInPackages,
-      mainFields: loaded.config.resolver.mainFields,
+      ...resolverBuildOptions(loaded.config.resolver),
       mode: requestedMode ?? target.mode,
       moduleFormat: target.moduleFormat,
       outDir: target.outDir,

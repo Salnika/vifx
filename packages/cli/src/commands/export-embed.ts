@@ -8,6 +8,7 @@ import type { VifxBundleArtifacts, VifxBundlePlatform, VifxBundleTargetConfig } 
 import { buildExpoBundle } from "@vifx/vite-plugin-expo";
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 import { loadProjectEnvIntoProcess } from "../lib/env.ts";
+import { resolverBuildOptions } from "../lib/resolver-options.ts";
 import type { CliResult } from "../types.ts";
 
 const EXPORT_EMBED_HELP = `Usage: vifx export:embed [path] --bundle-output <path> [options]
@@ -554,7 +555,7 @@ export async function runExportEmbedCommand(argv: string[], cwd: string): Promis
     env: process.env,
     hermes: false,
     jsxInPackages: target?.jsxInPackages,
-    mainFields: loaded.config.resolver.mainFields,
+    ...resolverBuildOptions(loaded.config.resolver),
     minify,
     mode,
     outDir,

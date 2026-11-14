@@ -7,6 +7,7 @@ import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 import { parseFlags } from "../lib/args.ts";
 import { loadProjectEnvIntoProcess } from "../lib/env.ts";
 import { startMetroDevServer, type VifxMetroDevServer } from "../lib/metro-server.ts";
+import { resolverBuildOptions } from "../lib/resolver-options.ts";
 import type { CliResult } from "../types.ts";
 
 const DEFAULT_DEV_HOST = "127.0.0.1";
@@ -224,7 +225,7 @@ export async function runDevCommand(argv: string[], cwd: string): Promise<CliRes
       env: process.env,
       hermes: target.hermes,
       jsxInPackages: target.jsxInPackages,
-      mainFields: loaded.config.resolver.mainFields,
+      ...resolverBuildOptions(loaded.config.resolver),
       outDir: target.outDir,
       platform: target.platform,
       projectRoot: loaded.config.projectRoot,

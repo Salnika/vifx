@@ -10,6 +10,7 @@ import type { VifxExpoDevServer, VifxExpoGoDevServer } from "@vifx/vite-plugin-e
 import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 import type { VifxBundlePlatform, VifxBundleTargetConfig, VifxRebuildReport } from "@vifx/types";
 import qrcodeTerminal from "qrcode-terminal";
+import type { ResolverBuildOptions } from "../lib/resolver-options.ts";
 
 export const EXPO_HELP = `Usage:
   vifx expo audit [path] [--export-root <dir>] [--supported-sdk <sdk>] [--json]
@@ -360,7 +361,7 @@ export function selectSingleExpoTarget(
 export async function buildExpoTarget(
   target: VifxBundleTargetConfig,
   projectRoot: string,
-  mainFields?: string[],
+  resolver?: ResolverBuildOptions,
 ): Promise<ExpoBuildResult> {
   const startedAt = Date.now();
   const result = await buildReactNativeBundle({
@@ -371,7 +372,7 @@ export async function buildExpoTarget(
     env: process.env,
     hermes: target.hermes,
     jsxInPackages: target.jsxInPackages,
-    mainFields,
+    ...resolver,
     mode: target.mode,
     moduleFormat: target.moduleFormat,
     outDir: target.outDir,

@@ -362,6 +362,11 @@ export interface VifxResolverConfig {
   extensions: string[];
   conditions: string[];
   mainFields: string[];
+  /**
+   * The file extensions bundled as assets (`require("./a.lottie")` returns an
+   * asset id). Replaces Vifx's default list; unset keeps it.
+   */
+  assetExtensions?: string[];
 }
 
 export interface VifxLoggerConfig {
@@ -492,10 +497,7 @@ export interface VifxReactNativePluginOptions {
   publicEnvPrefix?: string;
 }
 
-export interface VifxExpoPluginOptions extends Omit<
-  VifxReactNativePluginOptions,
-  "assetExtensions"
-> {
+export interface VifxExpoPluginOptions extends VifxReactNativePluginOptions {
   appConfigPath?: string;
   publicEnv?: Record<string, string>;
   publicEnvPrefix?: string;

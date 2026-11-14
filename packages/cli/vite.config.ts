@@ -65,5 +65,8 @@ export default defineConfig({
     // https://vitest.dev/guide/migration/#clearmocks-is-enabled-by-default
     clearMocks: false,
     include: ["tests/**/*.test.ts"],
+    // Command output is colored on a color terminal. Tests compare plain text,
+    // whatever the terminal or CI they run in.
+    env: { FORCE_COLOR: "0" },
   },
 });

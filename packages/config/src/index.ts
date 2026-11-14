@@ -85,7 +85,7 @@ const TOP_LEVEL_KEYS = new Set([
   "unifiedEnv",
 ]);
 
-const RESOLVER_KEYS = new Set(["extensions", "conditions", "mainFields"]);
+const RESOLVER_KEYS = new Set(["extensions", "conditions", "mainFields", "assetExtensions"]);
 const LOGGER_KEYS = new Set(["level", "json"]);
 const EXPO_OPTIONS_KEYS = new Set(["appConfigPath", "inspectExportPath", "publicEnvPrefix"]);
 const VITE_KEYS = new Set(["mode", "targets", "userConfigFile"]);
@@ -343,6 +343,10 @@ function parseResolverConfig(value: unknown, source: string) {
       resolver.mainFields === undefined
         ? undefined
         : normalizeStringList(resolver.mainFields, "resolver.mainFields", source),
+    assetExtensions:
+      resolver.assetExtensions === undefined
+        ? undefined
+        : normalizeStringList(resolver.assetExtensions, "resolver.assetExtensions", source),
   } satisfies Partial<VifxResolverConfig>;
 }
 
@@ -422,6 +426,16 @@ function normalizeResolverConfig(resolver: VifxConfigInput["resolver"]): VifxRes
       resolver?.mainFields ?? [...VIFX_DEFAULT_RESOLVER_MAIN_FIELDS],
       "resolver.mainFields",
     ),
+    // Only present when set, so configs without it keep their normalized shape;
+    // the bundler then uses its own default asset list.
+    ...(resolver?.assetExtensions === undefined
+      ? {}
+      : {
+          assetExtensions: normalizeStringList(
+            resolver.assetExtensions,
+            "resolver.assetExtensions",
+          ),
+        }),
   };
 }
 

@@ -144,13 +144,16 @@ Native is the primary target by design; web is a companion target set per-target
 
 ## `resolver`
 
-Controls module resolution order, shared by native and web. Exactly three sub-keys.
+Controls module resolution, shared by native and web. Four sub-keys.
 
-| Key          | Type       | Default                              | Purpose                                                         |
-| ------------ | ---------- | ------------------------------------ | --------------------------------------------------------------- |
-| `extensions` | `string[]` | `["tsx", "ts", "jsx", "js", "json"]` | File extensions tried during resolution.                        |
-| `conditions` | `string[]` | `[]`                                 | Extra package `exports` conditions (may be empty).              |
-| `mainFields` | `string[]` | `["react-native", "module", "main"]` | `package.json` entry fallback order after `exports` resolution. |
+| Key               | Type       | Default                              | Purpose                                                                                                                                                                                       |
+| ----------------- | ---------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `extensions`      | `string[]` | `["tsx", "ts", "jsx", "js", "json"]` | File extensions tried during resolution.                                                                                                                                                      |
+| `assetExtensions` | `string[]` | Vifx's asset list                    | Extensions bundled as assets: `require("./a.lottie")` returns an asset id. Replaces the default list, which covers images, video, audio, fonts, `pdf`, `html`, `db`, `xml`, `yaml` and `zip`. |
+| `conditions`      | `string[]` | `[]`                                 | Extra package `exports` conditions (may be empty).                                                                                                                                            |
+| `mainFields`      | `string[]` | `["react-native", "module", "main"]` | `package.json` entry fallback order after `exports` resolution.                                                                                                                               |
+
+`vifx doctor --fix` fills `extensions` and `assetExtensions` from your `metro.config.js` (see [Migration](../guide/migration#_3-map-your-metro-config-js)).
 
 List entries are trimmed, a leading `.` is stripped, and duplicates are deduped. `mainFields` controls the entry fallback order after `exports` resolution: the default tries `react-native`, then `module`, then `main`.
 

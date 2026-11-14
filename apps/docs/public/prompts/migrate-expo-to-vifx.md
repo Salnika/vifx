@@ -58,13 +58,19 @@ Make sure `.vifx/`, `dist/vite/` and `dist/expo/` are ignored by git (`git check
 
 ## 4. Port `metro.config.js`
 
-If there is no `metro.config.js`, or it only returns Expo's `getDefaultConfig(__dirname)`, skip this step. Otherwise port each customization, using the "Metro config migration" section `vifx doctor` printed:
+If there is no `metro.config.js`, or the "Metro config migration" section of `vifx doctor` reports no action, skip this step. Otherwise run:
+
+```sh
+npx vifx doctor . --fix
+```
+
+It writes the source extensions, asset extensions and module aliases into `vifx.config.ts` and prints what it wrote. Then port what it leaves, by hand:
 
 | `metro.config.js`                                       | In Vifx                                                                                                                         |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `resolver.sourceExts` additions                         | `resolver.extensions` in `vifx.config.ts`                                                                                       |
-| `resolver.extraNodeModules`                             | per-target `aliases` in `vifx.config.ts`                                                                                        |
-| `resolver.assetExts` additions                          | `assetExtensions` on the `reactNative()` plugin in `vite.config.vifx.ts`                                                        |
+| `resolver.sourceExts` additions                         | `resolver.extensions` in `vifx.config.ts` (written by `--fix`)                                                                  |
+| `resolver.extraNodeModules`                             | the `aliases` of each `vite.targets` entry in `vifx.config.ts` (written by `--fix`)                                             |
+| `resolver.assetExts` additions                          | `resolver.assetExtensions` in `vifx.config.ts` (written by `--fix`)                                                             |
 | `transformer.babelTransformerPath` (e.g. an SVG loader) | a Vite or Rollup plugin in `vite.config.vifx.ts`, e.g. `vite-plugin-svgr` for `react-native-svg-transformer`                    |
 | `resolver.resolveRequest`                               | `vifxResolveRequest(...)` from `@vifx/vite-config-bridge` in `vite.config.vifx.ts`, same signature and return values as Metro's |
 | `watchFolders`                                          | nothing to do: Vifx resolves workspace packages itself                                                                          |

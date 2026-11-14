@@ -13,6 +13,7 @@ import type {
 } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
 import { loadProjectEnvIntoProcess } from "../lib/env.ts";
+import { resolverBuildOptions } from "../lib/resolver-options.ts";
 import type { CliResult } from "../types.ts";
 import {
   DEFAULT_EXPO_DEV_HOST,
@@ -282,7 +283,7 @@ async function runExpoGoSmokeWithoutNetwork(options: {
   const build = await buildExpoTarget(
     options.target,
     options.loaded.config.projectRoot,
-    options.loaded.config.resolver.mainFields,
+    resolverBuildOptions(options.loaded.config.resolver),
   );
   const projectRoot = options.loaded.config.projectRoot;
   const bundlePath = path.resolve(projectRoot, build.result.bundle.path);
@@ -490,7 +491,7 @@ async function runExpoGoSmoke(options: {
       hermes: target.hermes,
       host: options.host,
       jsxInPackages: target.jsxInPackages,
-      mainFields: loaded.config.resolver.mainFields,
+      ...resolverBuildOptions(loaded.config.resolver),
       mode: "development",
       platform: target.platform,
       port: options.port,

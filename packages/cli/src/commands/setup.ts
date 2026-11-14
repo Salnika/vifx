@@ -4,6 +4,7 @@ import { applyPlannedChanges, planExpoSetup, type PlannedFileChange } from "@vif
 import { VifxError } from "@vifx/errors";
 import { parseFlags } from "../lib/args.ts";
 import { analyzeMetroConfig, type MetroConfigAnalysis } from "../lib/metro-config.ts";
+import { paint } from "../lib/style.ts";
 import type { CliResult, ExecuteCliOptions } from "../types.ts";
 
 export const SETUP_HELP = `Usage: vifx setup [path] [--yes] [--dry-run] [--json] [--force] [--expo-go] [--with-vite-config] [--experimental-embed]
@@ -47,23 +48,38 @@ function formatMetroMigrationNotes(analysis: MetroConfigAnalysis): string[] {
     return [];
   }
 
-  const lines = ["", "Metro config migration:", `  Detected ${analysis.path ?? "metro config"}.`];
+  const lines = [
+    "",
+    paint("bold", "Metro config migration:"),
+    `  Detected ${analysis.path ?? "metro config"}.`,
+  ];
 
   if (analysis.extraction === "static") {
-    lines.push("  (config could not be evaluated; notes come from a static scan)");
+    lines.push(paint("yellow", "  (config could not be evaluated; notes come from a static scan)"));
   }
 
   for (const feature of analysis.unsupported) {
-    lines.push(`  [unsupported] ${feature.source}: ${feature.suggestion}`);
+    lines.push(
+      `  ${paint(["bold", "magenta"], "[unsupported]")} ${paint("cyan", feature.source)}: ${feature.suggestion}`,
+    );
   }
 
   for (const hint of analysis.hints) {
     const target = hint.vifxConfigKey ? ` -> vifx.config.ts ${hint.vifxConfigKey}` : "";
-    lines.push(`  [${hint.severity}] ${hint.source}: ${hint.suggestion}${target}`);
+    const style = hint.severity === "info" ? "cyan" : "blue";
+    lines.push(
+      `  ${paint(["bold", style], `[${hint.severity}]`)} ${paint("cyan", hint.source)}: ${hint.suggestion}${target}`,
+    );
   }
 
   if (analysis.unsupported.length === 0 && analysis.hints.length === 0) {
     lines.push("  No migration actions detected.");
+  }
+
+  if (analysis.hints.some((hint) => hint.fixable)) {
+    lines.push(
+      `  Run ${paint(["bold", "green"], "vifx doctor --fix")} to write the extensions and aliases above into vifx.config.ts.`,
+    );
   }
 
   return lines;
@@ -150,8 +166,10 @@ function renderTerminalSetup(options: {
         ? "Setup complete. No Vifx-owned file changes were needed."
         : "Files written.";
 
+  const statusStyle = options.dryRun || options.wasCancelled ? "yellow" : "green";
+
   return [
-    "Vifx Setup",
+    paint(["bold", "magenta"], "Vifx Setup"),
     "",
     `Project root: ${options.projectRoot}`,
     `Target path: ${options.targetPath}`,
@@ -165,10 +183,10 @@ function renderTerminalSetup(options: {
     `Advanced Vite config: ${options.withViteConfig ? "requested" : "skipped"}`,
     `Native embed plugin: ${options.experimentalEmbed ? "requested (experimental)" : "skipped"}`,
     "",
-    "Planned changes:",
+    paint("bold", "Planned changes:"),
     ...formatChangeSummary(options.changes),
     "",
-    "Boundaries:",
+    paint("bold", "Boundaries:"),
     options.expoGo
       ? "  - This setup configures the Vifx Expo Go server (with Fast Refresh), not full Expo CLI parity."
       : "  - This setup does not configure the Expo Go server path unless --expo-go is passed.",
@@ -176,11 +194,11 @@ function renderTerminalSetup(options: {
     "  - This setup does not install native build or runtime parity.",
     "  - This setup does not install Expo Updates runtime support.",
     "",
-    statusLine,
+    paint(["bold", statusStyle], statusLine),
     ...options.metroNotes,
     "",
-    "Next commands:",
-    ...options.nextCommands.map((command) => `  ${command}`),
+    paint("bold", "Next commands:"),
+    ...options.nextCommands.map((command) => `  ${paint("cyan", command)}`),
   ].join("\n");
 }
 

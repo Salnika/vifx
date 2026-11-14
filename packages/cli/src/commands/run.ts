@@ -7,6 +7,7 @@ import { buildReactNativeBundle } from "@vifx/vite-plugin-react-native";
 import type { VifxBundleTargetConfig } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
 import { loadProjectEnvIntoProcess } from "../lib/env.ts";
+import { resolverBuildOptions } from "../lib/resolver-options.ts";
 import type { CliResult } from "../types.ts";
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -331,7 +332,7 @@ export async function runRunCommand(argv: string[], cwd: string): Promise<CliRes
       env: process.env,
       hermes: target.hermes,
       jsxInPackages: target.jsxInPackages,
-      mainFields: loaded.config.resolver.mainFields,
+      ...resolverBuildOptions(loaded.config.resolver),
       mode: target.mode,
       moduleFormat: target.moduleFormat,
       outDir: target.outDir,

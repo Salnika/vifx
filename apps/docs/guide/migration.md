@@ -111,37 +111,39 @@ vifx auto-detects `vite.config.vifx.{ts,mts,js,mjs}` under the project root and 
 
 ## 3. Map your `metro.config.js`
 
-vifx never rewrites `metro.config.js` automatically. It analyzes the file and prints severity-bucketed hints — surfaced by both `vifx doctor` and `vifx setup` — that you apply by hand. The mapping is:
+`vifx doctor` reads your `metro.config.js` and compares it with the config your framework builds on its own (`getDefaultConfig` from `expo/metro-config` or `@react-native/metro-config`), so it reports only what your project changed; `vifx setup` prints the same findings. The settings that have a `vifx.config.ts` equivalent are written for you:
 
-| `metro.config.js` field            | Where it goes in vifx                                            |
-| ---------------------------------- | ---------------------------------------------------------------- |
-| `resolver.sourceExts` (additions)  | `resolver.extensions` in `vifx.config.ts`                        |
-| `resolver.extraNodeModules`        | per-target `aliases` in `vifx.config.ts`                         |
-| `resolver.assetExts` (additions)   | `assetExtensions` on the Vite plugin in `vite.config.vifx.ts`    |
-| `transformer.babelTransformerPath` | Port to a Vite/Rollup plugin in `vite.config.vifx.ts`            |
-| `watchFolders`                     | No mapping needed — vifx resolves workspace packages natively    |
-| `resolver.resolveRequest`          | `vifxResolveRequest(...)` in `vite.config.vifx.ts` (see below)   |
-| `serializer` (custom hooks)        | No vifx equivalent — keep Metro for this path or remove the hook |
+```sh
+npx vifx doctor . --fix
+```
 
-A note on asset extensions: the Metro-config hint phrases the target as `assetExtensions`, which is a Vite **plugin** option, not a `vifx.config.ts` key. Set it on the plugin instance in your `vite.config.vifx.ts`:
+`--fix` edits `vifx.config.ts` in place, keeping its comments and other keys, and a second `vifx doctor` no longer reports what it wrote. It needs a `vifx.config.ts`, so run `vifx setup` (or `vifx init`) first. `metro.config.js` itself is never changed.
+
+| `metro.config.js` field            | Where it goes in vifx                                            | Written by `--fix` |
+| ---------------------------------- | ---------------------------------------------------------------- | ------------------ |
+| `resolver.sourceExts` (additions)  | `resolver.extensions` in `vifx.config.ts`                        | yes                |
+| `resolver.assetExts` (additions)   | `resolver.assetExtensions` in `vifx.config.ts`                   | yes                |
+| `resolver.extraNodeModules`        | the `aliases` of each `vite.targets` entry in `vifx.config.ts`   | yes                |
+| `transformer.babelTransformerPath` | Port to a Vite/Rollup plugin in `vite.config.vifx.ts`            | no                 |
+| `resolver.resolveRequest`          | `vifxResolveRequest(...)` in `vite.config.vifx.ts` (see below)   | no                 |
+| `watchFolders`                     | No mapping needed — vifx resolves workspace packages natively    | —                  |
+| `serializer` (custom hooks)        | No vifx equivalent — keep Metro for this path or remove the hook | —                  |
+
+Expo's and React Native's own settings are not reported: Expo's CSS source extensions, its extra asset extensions, its Babel transformer and its serializer. Neither are extensions Vifx already bundles, such as `heic`, `avif`, `xml` or `woff2` assets. Metro-only tuning such as `transformer.inlineRequires` or `resolver.useWatchman` has nothing to map: Vifx bundles are scope-hoisted, and it does not use Watchman.
+
+`resolver.assetExtensions` replaces Vifx's default asset list, so `--fix` writes the defaults followed by your additions:
 
 ```ts
-// vite.config.vifx.ts
-import { defineConfig } from "vite";
-import { reactNative } from "@vifx/vite-plugin-react-native";
-
-const platform = process.env.VIFX_PLATFORM === "android" ? "android" : "ios";
-
-export default defineConfig({
-  plugins: [
-    reactNative({
-      entry: "./index.js",
-      platform,
-      assetExtensions: ["lottie", "riv"],
-    }),
-  ],
-});
+// vifx.config.ts
+export default {
+  // …
+  resolver: {
+    assetExtensions: ["aac", "aiff", "avif" /* … the other defaults … */, "lottie", "riv"],
+  },
+};
 ```
+
+With Sentry's `getSentryExpoConfig` or `withSentryConfig`, `vifx doctor` reports `VIFX_UNSUPPORTED_METRO_SERIALIZER`: their Metro serializer adds a Debug ID to the bundle, and Vifx bundles have none. Upload source maps to Sentry another way, or keep Metro for release builds.
 
 A custom `babelTransformerPath` becomes an ordinary Vite/Rollup plugin. For example, `react-native-svg-transformer` maps to a standard SVG plugin:
 
@@ -155,7 +157,7 @@ export default defineConfig({ plugins: [svgr()] });
 
 A custom `serializer` is still a genuine boundary: it is reported with the stable `VIFX_UNSUPPORTED_METRO_SERIALIZER` code, so keep Metro for serializer-specific workflows or drop the hook before migrating. `resolver.resolveRequest`, by contrast, is supported — see below.
 
-`resolver.mainFields`, `resolver.conditions`, and `resolver.extensions` are first-class top-level keys in `vifx.config.ts`. The platform-extension resolution you rely on (`.ios` / `.android` / `.native` / `.web`) is built in — see [Features](/reference/features).
+`resolver.extensions`, `resolver.assetExtensions` and `resolver.mainFields` are keys of `vifx.config.ts` that every build and dev server uses (see [Config](/reference/config#resolver)). The platform-extension resolution you rely on (`.ios` / `.android` / `.native` / `.web`) is built in — see [Features](/reference/features).
 
 ### resolveRequest
 

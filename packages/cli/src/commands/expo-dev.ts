@@ -7,6 +7,7 @@ import type { VifxExpoGoDevServer } from "@vifx/vite-plugin-expo";
 import type { VifxRebuildReport } from "@vifx/types";
 import { parseFlags } from "../lib/args.ts";
 import { loadProjectEnvIntoProcess } from "../lib/env.ts";
+import { resolverBuildOptions } from "../lib/resolver-options.ts";
 import type { CliResult } from "../types.ts";
 import {
   DEFAULT_EXPO_DEV_HOST,
@@ -302,7 +303,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
       // Listen first, bundle in the background: the URLs print at once and the
       // first request waits for the bundle, like `expo start`.
       lazyStart: true,
-      mainFields: loaded.config.resolver.mainFields,
+      ...resolverBuildOptions(loaded.config.resolver),
       mode: "development",
       moduleFormat,
       // App console output, as `expo start` prints it. Kept out of --json
@@ -386,7 +387,7 @@ export async function runExpoDevCommand(argv: string[], cwd: string): Promise<Cl
     hermes: target.hermes,
     host,
     jsxInPackages: target.jsxInPackages,
-    mainFields: loaded.config.resolver.mainFields,
+    ...resolverBuildOptions(loaded.config.resolver),
     mode: "development",
     outDir: target.outDir,
     platform: target.platform,

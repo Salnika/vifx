@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
-import { analyzeMetroConfig } from "../src/lib/metro-config.ts";
+import { analyzeMetroConfig, pruneAppliedFixes } from "../src/lib/metro-config.ts";
 
 async function createProject(files: Record<string, string>): Promise<string> {
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-metro-config-"));
@@ -151,7 +151,10 @@ test("maps assetExts and sourceExts additions to vifx config hints", async () =>
   expect(analysis.extraction).toBe("evaluated");
 
   const assetHint = analysis.hints.find((entry) => entry.source.endsWith("resolver.assetExts"));
-  expect(assetHint?.vifxConfigKey).toBe("assetExtensions");
+  expect(assetHint?.vifxConfigKey).toBe("resolver.assetExtensions");
+  expect(assetHint?.fixable).toBe(true);
+  expect(analysis.fixes.assetExtensions).toEqual(["lottie", "kml"]);
+  expect(analysis.fixes.sourceExtensions).toEqual(["mdx"]);
   // Only the additions are surfaced, not the default `png`.
   expect(assetHint?.suggestion).toContain("lottie");
   expect(assetHint?.suggestion).toContain("kml");
@@ -176,9 +179,166 @@ test("maps extraNodeModules keys to alias hints", async () => {
   const analysis = await analyzeMetroConfig(projectRoot);
 
   const hint = analysis.hints.find((entry) => entry.source.endsWith("resolver.extraNodeModules"));
-  expect(hint?.vifxConfigKey).toBe("aliases");
+  expect(hint?.vifxConfigKey).toBe("vite.targets[].aliases");
   expect(hint?.suggestion).toContain("@app/core");
   expect(hint?.suggestion).toContain("crypto");
+  expect(analysis.fixes.aliases).toEqual({ "@app/core": "../core", crypto: "crypto-browserify" });
+});
+
+test("an absolute extraNodeModules path becomes a project-relative alias", async () => {
+  const projectRoot = await createProject({
+    "metro.config.js": [
+      'const path = require("node:path");',
+      "module.exports = {",
+      '  resolver: { extraNodeModules: { shared: path.resolve(__dirname, "..", "shared"), local: path.join(__dirname, "src", "lib") } },',
+      "};",
+      "",
+    ].join("\n"),
+  });
+
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  expect(analysis.fixes.aliases).toEqual({ local: "./src/lib", shared: "../shared" });
+});
+
+// A stand-in for expo/metro-config with the defaults that used to be reported as
+// customizations: Expo's extra asset and CSS source extensions, its Babel
+// transformer and its serializer.
+const EXPO_METRO_CONFIG_STUB = [
+  "exports.getDefaultConfig = (projectRoot) => ({",
+  "  resolver: {",
+  '    assetExts: ["png", "jpg", "ttf", "heic", "avif", "xml", "db"],',
+  '    sourceExts: ["ts", "tsx", "js", "jsx", "json", "cjs", "mjs", "css", "scss", "sass"],',
+  "  },",
+  "  transformer: {",
+  '    babelTransformerPath: projectRoot + "/node_modules/@expo/metro-config/build/babel-transformer.js",',
+  "  },",
+  "  serializer: {",
+  "    customSerializer: function expoSerializer(entryPoint) { return String(entryPoint); },",
+  "  },",
+  "});",
+  "",
+].join("\n");
+
+test("compares with expo/metro-config defaults, so Expo's own settings are not reported", async () => {
+  const projectRoot = await createProject({
+    "node_modules/expo/metro-config.js": EXPO_METRO_CONFIG_STUB,
+    "metro.config.js": [
+      'const { getDefaultConfig } = require("expo/metro-config");',
+      "const config = getDefaultConfig(__dirname);",
+      'config.resolver.sourceExts.push("cjs");',
+      'config.resolver.assetExts.push("lottie");',
+      "config.resolver.useWatchman = false;",
+      "config.transformer = { ...config.transformer, inlineRequires: true };",
+      "module.exports = config;",
+      "",
+    ].join("\n"),
+  });
+
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  expect(analysis.extraction).toBe("evaluated");
+  expect(analysis.baseline).toBe("expo");
+  expect(analysis.unsupported).toEqual([]);
+  expect(analysis.hints.map((hint) => hint.source)).toEqual(["metro.config.js:resolver.assetExts"]);
+  expect(analysis.fixes).toEqual({
+    aliases: {},
+    assetExtensions: ["lottie"],
+    sourceExtensions: [],
+  });
+});
+
+test("flags a serializer the project replaced, and names Sentry's", async () => {
+  const projectRoot = await createProject({
+    "node_modules/expo/metro-config.js": EXPO_METRO_CONFIG_STUB,
+    "metro.config.js": [
+      'const { getDefaultConfig } = require("expo/metro-config");',
+      "const config = getDefaultConfig(__dirname);",
+      "config.serializer.customSerializer = function sentrySerializer(entryPoint) {",
+      '  return "//# debugId=" + String(entryPoint);',
+      "};",
+      "module.exports = config;",
+      "",
+    ].join("\n"),
+  });
+
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  expect(analysis.unsupported).toHaveLength(1);
+  expect(analysis.unsupported[0]?.code).toBe("VIFX_UNSUPPORTED_METRO_SERIALIZER");
+  expect(analysis.unsupported[0]?.suggestion).toContain("Sentry");
+  expect(analysis.unsupported[0]?.suggestion).toContain("customSerializer");
+});
+
+test("flags getSentryExpoConfig, which keeps Expo's serializer function", async () => {
+  const projectRoot = await createProject({
+    "node_modules/expo/metro-config.js": EXPO_METRO_CONFIG_STUB,
+    // Like Sentry's: Debug ID plugins go to Expo's getDefaultConfig as an option,
+    // so the serializer function stays Expo's own.
+    "node_modules/@sentry/react-native/metro.js": [
+      'const { getDefaultConfig } = require("expo/metro-config");',
+      "exports.getSentryExpoConfig = (projectRoot) =>",
+      "  getDefaultConfig(projectRoot, { unstable_beforeAssetSerializationPlugins: [] });",
+      "",
+    ].join("\n"),
+    "metro.config.js": [
+      'const { getSentryExpoConfig } = require("@sentry/react-native/metro");',
+      "module.exports = getSentryExpoConfig(__dirname);",
+      "",
+    ].join("\n"),
+  });
+
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  expect(analysis.baseline).toBe("expo");
+  expect(analysis.hints).toEqual([]);
+  expect(analysis.unsupported).toHaveLength(1);
+  expect(analysis.unsupported[0]?.suggestion).toContain("Sentry");
+});
+
+test("does not report the default Expo or React Native Babel transformer", async () => {
+  const projectRoot = await createProject({
+    "metro.config.js": [
+      "module.exports = {",
+      '  transformer: { babelTransformerPath: "/app/node_modules/@expo/metro-config/build/babel-transformer.js" },',
+      "};",
+      "",
+    ].join("\n"),
+  });
+
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  expect(analysis.hints).toEqual([]);
+});
+
+test("pruneAppliedFixes keeps only what vifx.config.ts does not have yet", async () => {
+  const projectRoot = await createProject({
+    "metro.config.js": [
+      "module.exports = {",
+      '  resolver: { sourceExts: ["js", "mdx", "svg"], assetExts: ["lottie"], extraNodeModules: { shared: "../shared" } },',
+      "};",
+      "",
+    ].join("\n"),
+  });
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  const pruned = pruneAppliedFixes(analysis, {
+    extensions: ["tsx", "ts", "jsx", "js", "json", "mdx"],
+    assetExtensions: ["png", "lottie"],
+    targetAliases: [{ shared: "../shared" }, undefined],
+  });
+
+  expect(pruned.fixes).toEqual({
+    aliases: { shared: "../shared" },
+    assetExtensions: [],
+    sourceExtensions: ["svg"],
+  });
+  expect(pruned.hints.map((hint) => hint.source)).toEqual([
+    "metro.config.js:resolver.sourceExts",
+    "metro.config.js:resolver.extraNodeModules",
+  ]);
+  expect(pruned.hints[0]?.suggestion).toContain("svg");
+  expect(pruned.hints[0]?.suggestion).not.toContain("mdx");
 });
 
 test("falls back to a conservative static scan when the config is unparseable", async () => {

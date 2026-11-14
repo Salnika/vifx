@@ -222,4 +222,16 @@ test("normalizeVifxConfig keeps its exact shape when the reserved keys are absen
   const config = normalizeVifxConfig({ platforms: ["ios"] });
   expect(Object.hasOwn(config, "unifiedEnv")).toBe(false);
   expect(Object.hasOwn(config.vite, "userConfigFile")).toBe(false);
+  expect(Object.hasOwn(config.resolver, "assetExtensions")).toBe(false);
+});
+
+test("validateVifxConfig accepts resolver.assetExtensions and deduplicates it", () => {
+  const config = validateVifxConfig({
+    resolver: { assetExtensions: ["png", "lottie", "png"] },
+  });
+  expect(config.resolver.assetExtensions).toEqual(["png", "lottie"]);
+
+  expect(() => validateVifxConfig({ resolver: { assetExtensions: "lottie" } })).toThrowError(
+    /resolver\.assetExtensions/,
+  );
 });

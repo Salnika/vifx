@@ -1101,8 +1101,83 @@ test("doctor renders a Metro config migration section with mapped hints", async 
   expect(result.exitCode).toBe(0);
   expect(result.stdout).toContain("Metro config migration:");
   expect(result.stdout).toContain("metro.config.js:resolver.assetExts");
-  expect(result.stdout).toContain("vifx.config.ts: assetExtensions");
+  expect(result.stdout).toContain("vifx.config.ts: resolver.assetExtensions");
   expect(result.stdout).toContain("metro.config.js:resolver.extraNodeModules");
+  expect(result.stdout).toContain("vifx doctor --fix");
+});
+
+test("doctor --fix writes the Metro mapping into vifx.config.ts, and a second run is clean", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-doctor-fix-"));
+  const targetPath = path.join(tempRoot, "rn-bare-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "metro.config.js"),
+    [
+      "module.exports = {",
+      "  resolver: {",
+      '    assetExts: ["png", "lottie"],',
+      '    sourceExts: ["js", "ts", "mdx"],',
+      '    extraNodeModules: { "@app/core": "../core" },',
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(targetPath, "vifx.config.ts"),
+    [
+      "// Kept as written by doctor --fix.",
+      "export default {",
+      '  projectType: "react-native",',
+      "  vite: {",
+      '    mode: "react-native",',
+      "    targets: [",
+      '      { platform: "ios", entry: "./index.js", hermes: false },',
+      '      { platform: "android", entry: "./index.js", hermes: false },',
+      "    ],",
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
+
+  const fixed = await executeCli(["doctor", targetPath, "--fix"]);
+
+  expect(fixed.exitCode).toBe(0);
+  expect(fixed.stdout).toContain("Applied to vifx.config.ts:");
+  expect(fixed.stdout).toContain("FIXED  resolver.extensions: + mdx");
+  expect(fixed.stdout).toContain("FIXED  resolver.assetExtensions: + lottie");
+  expect(fixed.stdout).toContain("FIXED  vite.targets[].aliases: + @app/core");
+
+  const vifxConfig = await readFile(path.join(targetPath, "vifx.config.ts"), "utf8");
+  expect(vifxConfig).toContain("// Kept as written by doctor --fix.");
+  expect(vifxConfig).toContain('extensions: ["tsx", "ts", "jsx", "js", "json", "mdx"]');
+  expect(vifxConfig).toMatch(/assetExtensions: \[[^\]]*"lottie"\]/u);
+  expect(vifxConfig.match(/aliases: \{ "@app\/core": "\.\.\/core" \}/gu)).toHaveLength(2);
+
+  const again = await executeCli(["doctor", targetPath]);
+  expect(again.exitCode).toBe(0);
+  expect(again.stdout).not.toContain("metro.config.js:resolver.sourceExts");
+  expect(again.stdout).not.toContain("metro.config.js:resolver.assetExts");
+  expect(again.stdout).not.toContain("metro.config.js:resolver.extraNodeModules");
+  expect(again.stdout).toContain("No migration actions detected");
+});
+
+test("doctor --fix needs a vifx.config.ts", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-doctor-fix-missing-"));
+  const targetPath = path.join(tempRoot, "rn-bare-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "rn-bare-basic"), targetPath, { recursive: true });
+  await writeFile(
+    path.join(targetPath, "metro.config.js"),
+    'module.exports = { resolver: { sourceExts: ["js", "mdx"] } };\n',
+  );
+
+  const result = await executeCli(["doctor", targetPath, "--fix"]);
+
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr).toContain("Run `vifx setup` first");
 });
 
 test("doctor omits the Metro config migration section when no metro config exists", async () => {
