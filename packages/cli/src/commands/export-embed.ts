@@ -26,7 +26,7 @@ Options:
   --sourcemap-output <path>  File path to write the bundle source map to.
   --assets-dest <dir>        Directory that receives the production asset layout
                              (Android drawable-<density>/ and raw/, iOS assets/) plus assetmap.json.
-  --minify <true|false>      Request bundle minification. Default: matches --dev.
+  --minify <true|false>      Minify the bundle. Default: the opposite of --dev (minified with --dev false).
   --reset-cache              Accepted for Metro compatibility. No-op.
   --config <path>            Use a specific Vifx config file.
   --verbose                  Show detailed diagnostic information.
@@ -399,9 +399,51 @@ async function writeBundleOutputs(options: {
     }
 
     await mkdir(path.dirname(options.sourcemapOutput), { recursive: true });
-    const mapContents = await readFile(path.resolve(options.projectRoot, sourceMapPath));
-    await writeFile(options.sourcemapOutput, mapContents);
+    const builtSourceMapPath = path.resolve(options.projectRoot, sourceMapPath);
+    await writeFile(
+      options.sourcemapOutput,
+      rebaseSourceMapSources(
+        await readFile(builtSourceMapPath, "utf8"),
+        path.dirname(builtSourceMapPath),
+        path.dirname(options.sourcemapOutput),
+      ),
+      "utf8",
+    );
   }
+}
+
+const URL_SCHEME = /^[a-z][a-z\d+.-]*:/iu;
+
+/**
+ * Source map `sources` are relative to the map file. The build writes its map
+ * under `.vifx/export-embed/<platform>/`, so once copied to --sourcemap-output
+ * they must be re-relativized, or symbolication tools open the wrong files.
+ */
+export function rebaseSourceMapSources(
+  contents: string,
+  fromDirectory: string,
+  toDirectory: string,
+): string {
+  const map = JSON.parse(contents) as { sourceRoot?: unknown; sources?: unknown };
+  const sourceRoot = typeof map.sourceRoot === "string" ? map.sourceRoot : "";
+  if (!Array.isArray(map.sources) || URL_SCHEME.test(sourceRoot) || fromDirectory === toDirectory) {
+    return contents;
+  }
+
+  map.sources = map.sources.map((source: unknown) =>
+    typeof source !== "string" ||
+    source === "" ||
+    URL_SCHEME.test(source) ||
+    path.isAbsolute(source)
+      ? source
+      : path
+          .relative(toDirectory, path.resolve(fromDirectory, sourceRoot, source))
+          .split(path.sep)
+          .join("/"),
+  );
+  delete map.sourceRoot;
+
+  return JSON.stringify(map);
 }
 
 async function writeAssetsDest(options: {
@@ -411,19 +453,28 @@ async function writeAssetsDest(options: {
   result: VifxBundleArtifacts;
 }) {
   // The build already computed each asset's Metro http server location, name,
-  // type, and scales, and emitted the canonical file at emittedPath. Reuse
-  // that metadata directly (like @vifx/expo-export does) instead of
-  // re-deriving the location from the copied file, which would otherwise leak
-  // the intermediate out dir into the production layout.
+  // type, and scales, and emitted one file per scale (`files`). Reuse that
+  // metadata directly (like @vifx/expo-export does) instead of re-deriving the
+  // location from the copied files, which would otherwise leak the
+  // intermediate out dir into the production layout. Each scale is copied from
+  // its own file: an @3x image written from the 1x file would ship blurry.
   const inputs: ProdLayoutAssetInput[] = options.result.assets.map((asset) => {
-    const sourceFilePath = path.resolve(options.projectRoot, asset.emittedPath);
-    const scales = asset.scales.length > 0 ? asset.scales : [1];
+    const variants =
+      asset.files && asset.files.length > 0
+        ? asset.files.map((file) => ({
+            filePath: path.resolve(options.projectRoot, file.path),
+            scale: file.scale,
+          }))
+        : (asset.scales.length > 0 ? asset.scales : [1]).map((scale) => ({
+            filePath: path.resolve(options.projectRoot, asset.emittedPath),
+            scale,
+          }));
 
     return {
       httpServerLocation: asset.httpServerLocation,
       name: asset.name,
       type: asset.type,
-      variants: scales.map((scale) => ({ filePath: sourceFilePath, scale })),
+      variants,
     };
   });
 
@@ -504,6 +555,7 @@ export async function runExportEmbedCommand(argv: string[], cwd: string): Promis
     hermes: false,
     jsxInPackages: target?.jsxInPackages,
     mainFields: loaded.config.resolver.mainFields,
+    minify,
     mode,
     outDir,
     platform,

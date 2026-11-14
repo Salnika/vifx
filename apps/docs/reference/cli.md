@@ -162,11 +162,14 @@ Build configured Expo targets and write an Expo artifact directory with bundles,
 npx vifx expo export ./my-expo-app --platform all --out-dir dist/expo
 ```
 
-| Flag                           | Default     | Effect                         |
-| ------------------------------ | ----------- | ------------------------------ |
-| `--platform ios\|android\|all` | `all`       | Select the platform target(s). |
-| `--config <file>`              | —           | Use a specific config file.    |
-| `--out-dir <dir>`              | `dist/expo` | Output directory.              |
+| Flag                           | Default     | Effect                                                        |
+| ------------------------------ | ----------- | ------------------------------------------------------------- |
+| `--platform ios\|android\|all` | `all`       | Select the platform target(s).                                |
+| `--config <file>`              | —           | Use a specific config file.                                   |
+| `--out-dir <dir>`              | `dist/expo` | Output directory.                                             |
+| `--dev`                        | off         | Export development bundles (unminified, `__DEV__` is `true`). |
+
+Like `npx expo export`, the export is a production build unless `--dev` is passed. A production export never includes Vifx's Expo Go compatibility mocks (`compatPreview`), because the app that runs it ships the real native modules.
 
 `vifx expo export` produces bundle artifacts. It serves the Expo bundling path and covers bundles, source maps, assets, and manifests; Expo Updates runtime manifests, signed Updates responses, and EAS metadata are a separate concern.
 
@@ -235,11 +238,13 @@ npx vifx export:embed ./my-app \
 | `--platform ios\|android`   | `ios`                        | Select the platform target.                                                        |
 | `--dev <true\|false>`       | `true`                       | `--dev false` requests production semantics (`mode: production`).                  |
 | `--minify <true\|false>`    | matches `!dev`               | Minify with the OXC minifier.                                                      |
-| `--sourcemap-output <path>` | —                            | Output source map path.                                                            |
+| `--sourcemap-output <path>` | —                            | Output source map path. Its `sources` are relative to this path.                   |
 | `--assets-dest <dir>`       | —                            | Writes Android `drawable-<density>/` + `raw/`, iOS `assets/`, and `assetmap.json`. |
 | `--config <path>`           | —                            | Use a specific config file.                                                        |
 
 Boolean flags accept a following `0/1/true/false` token or an inline `=value`. The command auto-detects Expo vs bare React Native projects and routes to the matching bundler.
+
+The asset layout follows Metro's: platform variants (`icon.ios.png`) replace the generic file, iOS keeps the 1x to 3x scales, Android names resources after their directory (`assets_images_icon`) and writes `raw/keep.xml` so resource shrinking keeps them. Vifx adds `assetmap.json`. React Native 0.88's opt-in asset catalog (`RCTUseAssetCatalog`, `--asset-catalog-dest`) is not supported: the flag is ignored and assets are copied as files.
 
 Wire it into the Gradle bundle task in `android/app/build.gradle` with:
 

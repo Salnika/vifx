@@ -12,6 +12,8 @@ import {
 } from "vite";
 import {
   collectAssetGroup,
+  getAssetOutputDirectory,
+  getScaledAssetFileName,
   isSupportedAssetFile,
   supportedAssetExtensions,
 } from "@vifx/asset-registry";
@@ -150,11 +152,23 @@ const REANIMATED_VALIDATE_WORKLETS_VERSION_ID =
   "react-native-reanimated/scripts/validate-worklets-version";
 const REACT_NATIVE_WORKLETS_BUNDLE_UNPACKER_ID = "react-native-worklets/src/bundleUnpacker";
 const REACT_NATIVE_WORKLETS_RUNTIME_ENTRY_ID = "react-native-worklets/src/workletRuntimeEntry";
-const NATIVE_ASSET_REGISTRY_SPECIFIER = "@react-native/assets-registry/registry";
+// Where React Native keeps the asset registry, newest first: the
+// `react-native/asset-registry` entry point Metro's `assetRegistryPath` names
+// since `@react-native/assets-registry` was folded into react-native (it no
+// longer exists in React Native 0.88), then that package for older versions.
+const NATIVE_ASSET_REGISTRY_SPECIFIERS = [
+  "react-native/asset-registry",
+  "@react-native/assets-registry/registry",
+] as const;
+const NATIVE_ASSET_REGISTRY_SPECIFIER = NATIVE_ASSET_REGISTRY_SPECIFIERS[0];
 const NATIVE_SINGLETON_PACKAGES = ["react", "react-native"] as const;
 const NATIVE_SINGLETON_PACKAGE_SET = new Set<string>(NATIVE_SINGLETON_PACKAGES);
 const SHIM_PREFIX = "\0vifx:shim:";
-const TRANSFORM_PREFIX = "\0vifx:transformed:";
+// The NUL byte keeps these ids out of every id filter (`createFilter`, the Babel
+// pipeline's `includes("\0")` check), but must not lead: Rolldown drops the
+// source map of a module whose id starts with "\0", and those modules would
+// then vanish from the bundle source map.
+const TRANSFORM_PREFIX = "vifx:\0transformed:";
 const ASSET_PREFIX = "\0vifx:asset:";
 // Virtual id for a `resolveRequest` hook returning `{ type: "empty" }` (Metro's
 // "stub this import out"). Loaded as an ESM module that default-exports an empty
@@ -268,7 +282,7 @@ const EXPO_ROUTER_PLATFORM_EXTENSIONS = new Set(["android", "ios", "native", "we
  * captured by a tool version (e.g. a change to the OXC option defaults). Mixed
  * into every transform cache key so stale entries are ignored automatically.
  */
-const TRANSFORM_CACHE_FORMAT = "1";
+const TRANSFORM_CACHE_FORMAT = "2";
 
 type OxcTransformLang = "js" | "jsx" | "ts" | "tsx";
 
@@ -305,6 +319,8 @@ interface ReactNativePluginState {
    */
   publicEnv: Record<string, string>;
   reactNativeCompat: NonNullable<VifxReactNativePluginOptions["reactNativeCompat"]>;
+  /** Project Babel tells babel-preset-expo to apply the React Compiler. */
+  reactCompiler: boolean;
   resolvePlatform: VifxPlatform;
   reuseResolverCaches: boolean;
   /** Project modules are instrumented for the Rolldown dev engine's Fast Refresh. */
@@ -536,16 +552,54 @@ function createTransformId(filePath: string) {
   return `${TRANSFORM_PREFIX}${filePath}`;
 }
 
+const URL_SCHEME = /^[a-z][a-z\d+.-]*:/iu;
+
+/**
+ * Babel names a module's sources relative to the file: its basename, or the
+ * paths of the package's own source map that it merges (expo-router's
+ * `build/index.js.map` points at `../src/index.ts`). The bundler resolves them
+ * against the module id, which a virtual id (TRANSFORM_PREFIX) cannot anchor.
+ * Absolute sources resolve from any id.
+ */
+function resolveSourceMapSources<SourceMap>(map: SourceMap, filePath: string): SourceMap {
+  if (map === null || typeof map !== "object") {
+    return map;
+  }
+
+  const { sourceRoot, sources } = map as { sourceRoot?: unknown; sources?: unknown };
+  if (!Array.isArray(sources) || (typeof sourceRoot === "string" && URL_SCHEME.test(sourceRoot))) {
+    return map;
+  }
+
+  const baseDirectory = path.resolve(
+    path.dirname(filePath),
+    typeof sourceRoot === "string" ? sourceRoot : "",
+  );
+
+  return {
+    ...map,
+    sourceRoot: undefined,
+    sources: sources.map((source: unknown) =>
+      typeof source !== "string" ||
+      source === "" ||
+      URL_SCHEME.test(source) ||
+      path.isAbsolute(source)
+        ? source
+        : path.resolve(baseDirectory, source),
+    ),
+  };
+}
+
 function createAssetId(filePath: string) {
   return `${ASSET_PREFIX}${filePath}`;
 }
 
 /**
- * Native asset modules register through `@react-native/assets-registry`, a
- * react-native dependency present in every real RN/Expo app. When it cannot be
- * resolved (e.g. a bundle with no react-native installed), we keep Vite's URL
- * string so the build still succeeds instead of failing on an unresolved import.
- * The result is cached on the plugin state.
+ * Native asset modules register through React Native's asset registry (see
+ * NATIVE_ASSET_REGISTRY_SPECIFIERS), present in every real RN/Expo app. When it
+ * cannot be resolved (e.g. a bundle with no react-native installed), we keep
+ * Vite's URL string so the build still succeeds instead of failing on an
+ * unresolved import, and say so. The result is cached on the plugin state.
  */
 async function isNativeAssetRegistryAvailable(
   state: Pick<
@@ -584,23 +638,56 @@ async function resolveNativeAssetRegistryImport(
     return state.assetRegistryImport;
   }
 
-  try {
-    await resolveReactNativeModule({
-      conditions: state.conditions,
-      extensions: state.extensions,
-      fromFile: path.join(state.projectRoot, "index.js"),
-      mainFields: state.mainFields,
-      platform: state.resolvePlatform,
-      projectRoot: state.projectRoot,
-      specifier: NATIVE_ASSET_REGISTRY_SPECIFIER,
-    });
-    state.assetRegistryImport = NATIVE_ASSET_REGISTRY_SPECIFIER;
-  } catch {
-    const resolved = resolveFromProject(state.projectRoot, NATIVE_ASSET_REGISTRY_SPECIFIER);
-    state.assetRegistryImport = resolved === null ? null : toPosixPath(resolved);
+  // Asset imports resolve concurrently: they all wait for the same lookup, so
+  // none of them sees a result before it is known.
+  let lookup = pendingAssetRegistryLookups.get(state);
+  if (!lookup) {
+    lookup = findNativeAssetRegistryImport(state);
+    pendingAssetRegistryLookups.set(state, lookup);
   }
 
-  return state.assetRegistryImport;
+  const registryImport = await lookup;
+  state.assetRegistryImport = registryImport;
+  return registryImport;
+}
+
+const pendingAssetRegistryLookups = new WeakMap<object, Promise<string | null>>();
+
+async function findNativeAssetRegistryImport(
+  state: Pick<
+    ReactNativePluginState,
+    "conditions" | "extensions" | "mainFields" | "projectRoot" | "resolvePlatform"
+  >,
+): Promise<string | null> {
+  for (const specifier of NATIVE_ASSET_REGISTRY_SPECIFIERS) {
+    try {
+      await resolveReactNativeModule({
+        conditions: state.conditions,
+        extensions: state.extensions,
+        fromFile: path.join(state.projectRoot, "index.js"),
+        mainFields: state.mainFields,
+        platform: state.resolvePlatform,
+        projectRoot: state.projectRoot,
+        specifier,
+      });
+      return specifier;
+    } catch {
+      const resolved = resolveFromProject(state.projectRoot, specifier);
+      if (resolved !== null) {
+        return toPosixPath(resolved);
+      }
+    }
+  }
+
+  if (state.resolvePlatform !== "web") {
+    console.warn(
+      "[vifx] React Native's asset registry was not found (react-native/asset-registry, or " +
+        "@react-native/assets-registry on older React Native versions), so images and fonts are " +
+        "bundled as URLs that the app cannot load. Check that react-native is installed in the project.",
+    );
+  }
+
+  return null;
 }
 
 /**
@@ -610,9 +697,11 @@ async function resolveNativeAssetRegistryImport(
  * by `AssetRegistry.registerAsset(...)`, which `<Image source>` and
  * `Font.loadAsync` expect. Vite's default asset handling instead emits a URL
  * string, which is only valid for the web `<img>`/`<link>` runtime. For native
- * targets we therefore emit every scale variant flat under `assets/` (matching
- * the dev server's flat serving and `collectBuildAssets`'s stat path) and return
- * a module that registers the asset, mirroring Metro's asset modules.
+ * targets we therefore return a module that registers the asset, mirroring
+ * Metro's asset modules, and emit every scale variant where React Native looks
+ * for it: under the asset's Metro location (`assets/<directory>/`), named
+ * `<name>@<scale>x.<type>`. The dev server serves that tree and `export:embed`
+ * copies it into the native projects.
  */
 async function renderNativeAssetModule(options: {
   assetExtensions: readonly string[];
@@ -620,20 +709,23 @@ async function renderNativeAssetModule(options: {
   /** Content hash of each asset file already emitted, by output file name. */
   emittedFileNames: Map<string, string>;
   filePath: string;
+  /** The platform being bundled: `icon@2x.ios.png` variants replace `icon@2x.png`. */
+  platform: string;
   projectRoot: string;
   /** Specifier the registry is imported through (see resolveNativeAssetRegistryImport). */
   registryImport: string;
 }) {
   const group = await collectAssetGroup({
     filePath: options.filePath,
+    platform: options.platform,
     projectRoot: options.projectRoot,
     supportedExtensions: options.assetExtensions,
     onWarning: warnDuplicateAssetScale,
   });
+  const directory = getAssetOutputDirectory(group.httpServerLocation);
 
   for (const variant of group.variants) {
-    const scaleSuffix = variant.scale > 1 ? `@${variant.scale}x` : "";
-    const fileName = `assets/${group.name}${scaleSuffix}.${group.type}`;
+    const fileName = `${directory}/${getScaledAssetFileName(group, variant.scale)}`;
     // Emitted once per content: a long-lived build (the dev engine) loads this
     // module again when the image itself was edited, and must emit it again.
     if (options.emittedFileNames.get(fileName) === variant.hash) {
@@ -653,7 +745,7 @@ async function renderNativeAssetModule(options: {
     fileHashes: group.variants.map((variant) => variant.hash),
     hash: group.hash,
     height: group.height,
-    httpServerLocation: "/assets",
+    httpServerLocation: group.httpServerLocation,
     name: group.name,
     scales: [...group.scales],
     type: group.type,
@@ -964,8 +1056,10 @@ function selectExpoRouterRouteFile(
   return candidates.find((candidate) => candidate.platform === null) ?? null;
 }
 
+// Expo CLI's order (getRouterDirectory): `src/app` when it exists, else `app`.
+// The SDK 55+ templates keep their routes in `src/app`.
 async function resolveExpoRouterAppRoot(projectRoot: string) {
-  for (const candidate of ["app", "src/app"]) {
+  for (const candidate of ["src/app", "app"]) {
     if (await pathExists(path.join(projectRoot, candidate))) {
       return candidate;
     }
@@ -1789,16 +1883,20 @@ async function renderCompat(
               "",
             ]
           : []),
+        // Only a found server is cached: an empty script URL can mean that the
+        // Expo manifest is not readable yet (see NativeSourceCode).
         "  if (cachedDevServerURL === undefined) {",
         "    const scriptURL = SourceCode.getConstants().scriptURL ?? '';",
         "    const match = scriptURL.match(/^https?:\\/\\/.*?\\//);",
-        "    cachedDevServerURL = match ? match[0] : null;",
-        "    cachedFullBundleURL = match ? scriptURL : null;",
+        "    if (match) {",
+        "      cachedDevServerURL = match[0];",
+        "      cachedFullBundleURL = scriptURL;",
+        "    }",
         "  }",
         "",
         "  return {",
-        "    bundleLoadedFromServer: cachedDevServerURL !== null,",
-        "    fullBundleUrl: cachedFullBundleURL,",
+        "    bundleLoadedFromServer: cachedDevServerURL !== undefined,",
+        "    fullBundleUrl: cachedFullBundleURL ?? null,",
         "    url: cachedDevServerURL ?? '',",
         "  };",
         "}",
@@ -1812,16 +1910,30 @@ async function renderCompat(
     case "react-native/Libraries/NativeModules/specs/NativeSourceCode":
       if (state.resolvePlatform !== "web") {
         return [
-          'import Constants from "expo-constants";',
-          "",
           `const platform = ${JSON.stringify(state.platform)};`,
           "",
+          "let Constants;",
+          "",
+          // React Native's InitializeCore imports this module (through
+          // getDevServer) before any app code. expo-constants throws while
+          // loading when globalThis.expo is missing ("Cannot read property
+          // 'EventEmitter' of undefined"), and a module that threw stays
+          // half-initialized for good, so read it on first use, once that
+          // global exists.
+          "function readConstants() {",
+          "  if (Constants === undefined && globalThis.expo !== undefined) {",
+          '    Constants = require("expo-constants").default;',
+          "  }",
+          "  return Constants;",
+          "}",
+          "",
           "function readManifest() {",
-          "  return Constants.__unsafeNoWarnManifest2 ?? Constants.manifest2 ?? null;",
+          "  const constants = readConstants();",
+          "  return constants?.__unsafeNoWarnManifest2 ?? constants?.manifest2 ?? null;",
           "}",
           "",
           "function readExpoClient(manifest) {",
-          "  return Constants.expoConfig ?? manifest?.extra?.expoClient ?? null;",
+          "  return readConstants()?.expoConfig ?? manifest?.extra?.expoClient ?? null;",
           "}",
           "",
           "function readHostUri(manifest) {",
@@ -2375,24 +2487,29 @@ function shouldResolveFromProjectRoot(specifier: string) {
 }
 
 function applyAliases(source: string, aliases: Record<string, string>, projectRoot: string) {
-  for (const [from, to] of Object.entries(aliases)) {
-    if (source !== from && !source.startsWith(`${from}/`)) {
-      continue;
-    }
+  // The longest matching alias wins, as with TypeScript `paths` (which Expo's
+  // Metro honors), whatever order the map was given in: the SDK 55+ template
+  // maps `@/*` to `./src/*` and `@/assets/*` to `./assets/*`, and
+  // `@/assets/x.png` must take the second.
+  const [match] = Object.entries(aliases)
+    .filter(([from]) => source === from || source.startsWith(`${from}/`))
+    .sort(([left], [right]) => right.length - left.length);
 
-    const suffix = source === from ? "" : source.slice(from.length);
-    const candidate = joinSpecifier(to, suffix);
-
-    if (isPathLikeSpecifier(candidate)) {
-      const absolutePath = path.resolve(projectRoot, candidate);
-      const relativePath = relativeFrom(projectRoot, absolutePath);
-      return relativePath === "." ? "./" : `./${relativePath}`;
-    }
-
-    return candidate;
+  if (!match) {
+    return null;
   }
 
-  return null;
+  const [from, to] = match;
+  const suffix = source === from ? "" : source.slice(from.length);
+  const candidate = joinSpecifier(to, suffix);
+
+  if (isPathLikeSpecifier(candidate)) {
+    const absolutePath = path.resolve(projectRoot, candidate);
+    const relativePath = relativeFrom(projectRoot, absolutePath);
+    return relativePath === "." ? "./" : `./${relativePath}`;
+  }
+
+  return candidate;
 }
 
 function shouldTransformExpoPackageSource(
@@ -2618,6 +2735,10 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       babelrc: false,
       caller: {
         bundler: "metro",
+        // Native bundles run on Hermes; Expo CLI passes `transform.engine=hermes`
+        // to Metro, and babel-preset-expo picks its Hermes profile from it
+        // (hermes-v1 on SDK 56+, which keeps native classes).
+        ...(state.resolvePlatform === "web" ? {} : { engine: "hermes" }),
         isDev,
         isHMREnabled: false,
         isNodeModule: decision.isNodeModule,
@@ -2625,6 +2746,8 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         platform: state.resolvePlatform,
         projectRoot: state.projectRoot,
         supportsStaticESM: !decision.isNodeModule,
+        // Expo CLI's `transform.reactCompiler`, from `experiments.reactCompiler`.
+        ...(state.reactCompiler ? { supportsReactCompiler: true } : {}),
       },
       // What Metro's Babel transformer sets through BABEL_ENV.
       envName: isDev ? "development" : "production",
@@ -2686,6 +2809,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         isNodeModule: decision.isNodeModule,
         platform: state.resolvePlatform,
         presetPath: runtime.presetPath ?? null,
+        ...(state.reactCompiler ? { reactCompiler: true } : {}),
       },
       cacheRelativeId(id),
     ] as const;
@@ -2717,7 +2841,10 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       return null;
     }
 
-    return transformed satisfies TransformResult;
+    return {
+      code: transformed.code,
+      map: resolveSourceMapSources(transformed.map, stripQuery(id)),
+    } satisfies TransformResult;
   };
 
   /** First successful resolution with a framework host package as importer. */
@@ -2750,7 +2877,14 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
     // Honor the user's vifx `aliases` (Metro's default resolver folds in
     // `extraNodeModules` the same way), so a delegating hook sees aliased specs.
     const aliasedSource = applyAliases(moduleName, state.aliases, state.projectRoot);
-    const specifier = aliasedSource && aliasedSource !== moduleName ? aliasedSource : moduleName;
+    const aliased = aliasedSource !== null && aliasedSource !== moduleName;
+    const specifier = aliased ? aliasedSource : moduleName;
+    // An alias target is relative to the project root, wherever the importer
+    // is: `@/assets/logo.png` from `src/app/index.tsx` is `<root>/assets/logo.png`.
+    const originModulePath =
+      aliased && isPathLikeSpecifier(specifier)
+        ? path.join(state.projectRoot, "package.json")
+        : context.originModulePath;
     const resolveFrom = (fromFile: string) =>
       resolveReactNativeModule({
         conditions: state.conditions,
@@ -2764,7 +2898,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
 
     let resolved: Awaited<ReturnType<typeof resolveFrom>>;
     try {
-      resolved = await resolveFrom(context.originModulePath);
+      resolved = await resolveFrom(originModulePath);
     } catch (error) {
       // Tooling writes these imports into files that never declared them
       // (Babel helpers into app code, the Metro runtime into the router entry).
@@ -2946,6 +3080,7 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
           },
           emittedFileNames: state.emittedAssetFileNames,
           filePath: id.slice(ASSET_PREFIX.length),
+          platform: state.resolvePlatform,
           projectRoot: state.projectRoot,
           // Asset ids are only created once the registry resolved, so the
           // fallback is never emitted; it keeps the type total.
@@ -3304,26 +3439,56 @@ function profilePluginHooks(plugin: Plugin): Plugin {
 
 async function collectBuildAssets(options: {
   assetFilePaths: string[];
+  /** The files the native asset modules emitted (renderNativeAssetModule). */
+  emittedAssetFileNames: ReadonlyMap<string, string>;
   outDir: string;
+  platform: VifxPlatform;
   projectRoot: string;
 }): Promise<VifxBuildAssetArtifact[]> {
   const assets: VifxBuildAssetArtifact[] = [];
+  const native = options.platform !== "web";
 
   for (const sourceFilePath of options.assetFilePaths) {
     const descriptor = await collectAssetGroup({
       filePath: sourceFilePath,
+      ...(native ? { platform: options.platform } : {}),
       projectRoot: options.projectRoot,
       onWarning: warnDuplicateAssetScale,
     });
-    const emittedFilePath = path.join(
-      options.outDir,
-      "assets",
-      `${descriptor.name}.${descriptor.type}`,
-    );
+    // A native asset module emitted each variant under the asset's location
+    // (see renderNativeAssetModule). Anything else went through Vite's own flat
+    // `assets/[name][extname]`: web, or a project with no asset registry.
+    const nativeFileName = (scale: number) =>
+      `${getAssetOutputDirectory(descriptor.httpServerLocation)}/${getScaledAssetFileName(descriptor, scale)}`;
+    const registered =
+      native &&
+      descriptor.variants.some((variant) =>
+        options.emittedAssetFileNames.has(nativeFileName(variant.scale)),
+      );
+    const outputFilePath = (scale: number) =>
+      path.join(
+        options.outDir,
+        ...(registered
+          ? nativeFileName(scale)
+          : `assets/${descriptor.name}.${descriptor.type}`
+        ).split("/"),
+      );
+    const canonicalScale =
+      descriptor.variants.find((variant) => variant.filePath === descriptor.canonicalFilePath)
+        ?.scale ?? 1;
+    const emittedFilePath = outputFilePath(canonicalScale);
     const sizeBytes = (await stat(emittedFilePath)).size;
 
     assets.push({
       emittedPath: relativeFrom(options.projectRoot, emittedFilePath),
+      ...(registered
+        ? {
+            files: descriptor.variants.map((variant) => ({
+              path: relativeFrom(options.projectRoot, outputFilePath(variant.scale)),
+              scale: variant.scale,
+            })),
+          }
+        : {}),
       hash: descriptor.hash,
       height: descriptor.height,
       httpServerLocation: descriptor.httpServerLocation,
@@ -3393,6 +3558,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
     projectRoot,
     publicEnv: resolvePublicEnvFromOptions(options),
     reactNativeCompat: options.reactNativeCompat ?? "none",
+    reactCompiler: options.reactCompiler === true,
     resolvePlatform: options.resolvePlatform ?? options.platform,
     shimJsxRuntime: options.shimJsxRuntime ?? true,
     shimReact: options.shimReact ?? true,
@@ -3445,7 +3611,17 @@ function warnUserViteConfigDiagnostic(diagnostic: VifxDiagnosticData): void {
  * failing the build. Wired into `collectAssetGroup` so the dedupe is visible
  * without aborting.
  */
-function warnDuplicateAssetScale(warning: { message: string }): void {
+function warnDuplicateAssetScale(warning: {
+  conflict: { keptFilePath: string };
+  message: string;
+}): void {
+  // A library's own packaging (expo-router ships `clear-icon.png` beside a
+  // different `clear-icon@1x.png`) is nothing the app can change: as with
+  // Metro, only the project's own assets are reported.
+  if (warning.conflict.keptFilePath.split(path.sep).includes("node_modules")) {
+    return;
+  }
+
   console.warn(`[vifx] ${warning.message}`);
 }
 
@@ -3487,6 +3663,7 @@ export async function buildReactNativeBundle(
     projectRoot,
     publicEnv: resolvePublicEnvFromOptions(options),
     reactNativeCompat: options.reactNativeCompat ?? "none",
+    reactCompiler: options.reactCompiler === true,
     resolvePlatform: options.resolvePlatform ?? options.platform,
     shimJsxRuntime: options.shimJsxRuntime ?? true,
     shimReact: options.shimReact ?? true,
@@ -3549,7 +3726,9 @@ export async function buildReactNativeBundle(
     const bundleStats = await stat(registry.bundlePath);
     const assets = await collectBuildAssets({
       assetFilePaths: [...state.assetFiles].sort(),
+      emittedAssetFileNames: state.emittedAssetFileNames,
       outDir: absoluteOutDir,
+      platform: state.resolvePlatform,
       projectRoot,
     });
 
@@ -3562,6 +3741,7 @@ export async function buildReactNativeBundle(
         cwd: projectRoot,
         env: options.env,
         inputBundlePath: registry.bundlePath,
+        optimize: mode === "production",
         outputBytecodePath: path.join(absoluteOutDir, "index.hbc"),
       });
       hbcMs = performance.now() - hermesStartedAt;
@@ -3612,7 +3792,7 @@ export async function buildReactNativeBundle(
       assetsInlineLimit: 0,
       cssCodeSplit: false,
       emptyOutDir: true,
-      minify: resolveBuildMinify(mode),
+      minify: resolveBuildMinify(mode, options.minify),
       outDir,
       rollupOptions: {
         input: inputEntry,
@@ -3661,7 +3841,9 @@ export async function buildReactNativeBundle(
   const bundleStats = await stat(bundlePath);
   const assets = await collectBuildAssets({
     assetFilePaths: [...state.assetFiles].sort(),
+    emittedAssetFileNames: state.emittedAssetFileNames,
     outDir: absoluteOutDir,
+    platform: state.resolvePlatform,
     projectRoot,
   });
 
@@ -3678,6 +3860,8 @@ export async function buildReactNativeBundle(
       cwd: projectRoot,
       env: options.env,
       inputBundlePath: bundlePath,
+      // Release bytecode is optimized, as React Native's build scripts do it.
+      optimize: mode === "production",
       outputBytecodePath: path.join(absoluteOutDir, "index.hbc"),
     });
     hermesBytecodePath = relativeFrom(projectRoot, hermesResult.outputBytecodePath);

@@ -20,30 +20,30 @@ export const EXPO_SDK_SUPPORT: Record<string, VifxExpoSdkSupportEntry> = {
   "55": {
     notes: [
       "React Native 0.83. New Architecture only.",
-      "Experimental tier: static analysis and fixtures only; dev-server protocols are not device-validated.",
+      "Experimental tier: fixtures, and release bundles of the default template compared with Metro; dev-server protocols are not device-validated.",
     ],
     tier: "experimental",
   },
   "56": {
     notes: [
       "React Native 0.85. Hermes V1 is the default engine.",
-      "Experimental tier: static analysis and fixtures only; not device-validated.",
+      "Experimental tier: fixtures, and release bundles of the default template compared with Metro; not device-validated.",
     ],
     tier: "experimental",
   },
   "57": {
     notes: [
       "React Native 0.86.",
-      "Experimental tier: static analysis and fixtures only; not device-validated.",
+      "Experimental tier: fixtures, and release bundles of the default template compared with Metro; not device-validated.",
     ],
     tier: "experimental",
   },
   "58": {
     notes: [
       "React Native 0.88, React 19.3. Current Expo SDK.",
-      "Experimental tier: static analysis and fixtures only; not device-validated.",
+      "Validated tier: the default template runs in Expo Go on iOS and Android with Fast Refresh, and its release bundles match Metro's asset layout. Native release builds are not device-validated.",
     ],
-    tier: "experimental",
+    tier: "validated",
   },
 };
 

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { clearProjectRequireChainCache } from "@vifx/platform-resolver";
 import { afterEach, expect, test } from "vite-plus/test";
-import { resolveExpoAppConfig } from "../src/index.ts";
+import { createAnonymousScopeKey, resolveExpoAppConfig } from "../src/index.ts";
 import { canListenOnLocalhost, createExpoGoTestProject, startTestServer } from "./harness.ts";
 
 const projectRoots: string[] = [];
@@ -155,7 +155,14 @@ test.runIf(await canListenOnLocalhost())(
       expect(manifest.extra.expoClient.extra?.channel).toBe("preview");
       // Values the dynamic config kept from app.json survive.
       expect(manifest.extra.expoClient.slug).toBe("dynamic-app");
-      expect(manifest.extra.scopeKey).toBe("@vifx/dynamic-app");
+      // Expo Go for Android only installs Expo modules for an anonymous
+      // (`@anonymous/...`) development manifest.
+      expect(manifest.extra.scopeKey).toMatch(
+        /^@anonymous\/dynamic-app-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      expect(manifest.extra.scopeKey).toBe(
+        createAnonymousScopeKey("dynamic-app", project.projectRoot),
+      );
       expect(manifest.extra.eas.projectId).toBe("project-42");
       // The scheme now comes from the dynamic config, so a dev-client URL exists.
       expect(handle.server.devClientUrl).toContain("dynamicapp://");

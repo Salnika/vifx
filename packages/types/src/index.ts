@@ -147,6 +147,12 @@ export interface VifxBuildAssetArtifact {
   width?: number;
   height?: number;
   hash?: string;
+  /**
+   * Every emitted variant, one per scale, relative to the project root. A
+   * production layout copies each scale from its own file; `emittedPath` is the
+   * canonical (1x when there is one) variant.
+   */
+  files?: Array<{ path: string; scale: number }>;
 }
 
 export interface VifxTransformCacheStats {
@@ -416,12 +422,23 @@ export interface VifxReactNativePluginOptions {
   hermesCompilerPath?: string;
   jsxInPackages?: string[];
   mainFields?: string[];
+  /**
+   * Minify the bundle. Defaults to the mode: production bundles are minified,
+   * development bundles are not (`export:embed --minify` overrides it).
+   */
+  minify?: boolean;
   mode?: VifxBundleMode;
   moduleFormat?: VifxModuleFormat;
   outDir?: string;
   platform: VifxBundlePlatform;
   projectRoot?: string;
   reactNativeCompat?: VifxReactNativeCompatMode;
+  /**
+   * Compile project modules with the React Compiler, as Expo's
+   * `experiments.reactCompiler` does: babel-preset-expo applies it when its
+   * Babel caller says so. The Expo builds read it from the app config.
+   */
+  reactCompiler?: boolean;
   resolvePlatform?: VifxPlatform;
   shimJsxRuntime?: boolean;
   shimReact?: boolean;

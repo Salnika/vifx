@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { access, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import {
   createServer as createHttpServer,
@@ -322,12 +322,37 @@ function readBooleanExperiment(exp: VifxJsonObject, name: string) {
   return experiments[name] === true;
 }
 
-function resolveRouterRoot(projectRoot: string, entry: string) {
+/**
+ * The app config's `experiments.reactCompiler`, unless the caller decided.
+ * Expo CLI passes it to Metro as `transform.reactCompiler`, which turns on the
+ * React Compiler in babel-preset-expo; the native builds pass it on the same way.
+ */
+async function resolveReactCompiler(projectRoot: string, options: VifxExpoPluginOptions) {
+  if (options.reactCompiler !== undefined) {
+    return options.reactCompiler;
+  }
+
+  try {
+    const { exp } = await readExpoAppManifest(projectRoot, options.appConfigPath);
+    return readBooleanExperiment(exp, "reactCompiler");
+  } catch {
+    return false;
+  }
+}
+
+// Expo CLI's order (getRouterDirectory): `src/app` when it exists, else `app`.
+async function resolveRouterRoot(projectRoot: string, entry: string) {
   if (entry !== "expo-router/entry") {
     return null;
   }
 
-  return pathExists(path.join(projectRoot, "app")).then((exists) => (exists ? "app" : null));
+  for (const candidate of ["src/app", "app"]) {
+    if (await pathExists(path.join(projectRoot, candidate))) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 export async function createExpoGoBundleUrlPath(options: {
@@ -671,7 +696,7 @@ function buildManifest(options: {
           dev: true,
         },
       },
-      scopeKey: `@vifx/${slug}`,
+      scopeKey: createAnonymousScopeKey(slug, options.projectRoot),
     },
     id: randomUUID(),
     launchAsset: {
@@ -689,6 +714,27 @@ function buildManifest(options: {
   };
 
   return manifest;
+}
+
+/**
+ * Expo Go only trusts an unsigned development manifest when its scope key is
+ * anonymous (`@anonymous/...`, as Expo CLI sends for a logged-out user). Any
+ * other scope key marks it unverified, and Expo Go for Android then starts the
+ * app without Expo modules (`globalThis.expo` is never installed). The key also
+ * scopes the app's storage in Expo Go, so it is derived from the project root
+ * to stay the same across restarts.
+ */
+export function createAnonymousScopeKey(slug: string, projectRoot: string) {
+  const hex = createHash("sha256").update(path.resolve(projectRoot)).digest("hex");
+  const id = [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    `4${hex.slice(13, 16)}`,
+    `${((Number.parseInt(hex.slice(16, 17), 16) & 0x3) | 0x8).toString(16)}${hex.slice(17, 20)}`,
+    hex.slice(20, 32),
+  ].join("-");
+
+  return `@anonymous/${slug}-${id}`;
 }
 
 function renderExpoDevHtml() {
@@ -1023,9 +1069,12 @@ async function collectEmittedExpoAssets(options: {
       continue;
     }
 
+    // The emitted tree mirrors the assets' locations (`assets/<directory>/`, see
+    // renderNativeAssetModule) with platform-free names, so grouping relative to
+    // the emitted `assets/` directory gives back each asset's location.
     const descriptor = await collectAssetGroup({
       filePath: emittedAssetPath,
-      projectRoot: options.absoluteOutDir,
+      projectRoot: emittedAssetsRoot,
       onWarning: warnDuplicateAssetScale,
     });
     const assetKey = `${descriptor.httpServerLocation}/${descriptor.name}.${descriptor.type}`;
@@ -1034,15 +1083,15 @@ async function collectEmittedExpoAssets(options: {
     }
 
     seenAssetKeys.add(assetKey);
-    const emittedPath = path.join(
-      options.absoluteOutDir,
-      descriptor.httpServerLocation.replace(/^\/assets\/?/u, "assets/"),
-      `${descriptor.name}.${descriptor.type}`,
-    );
+    const emittedPath = descriptor.canonicalFilePath;
     const assetStats = await stat(emittedPath);
 
     assets.push({
       emittedPath: relativeFrom(options.projectRoot, emittedPath),
+      files: descriptor.variants.map((variant) => ({
+        path: relativeFrom(options.projectRoot, variant.filePath),
+        scale: variant.scale,
+      })),
       hash: descriptor.hash,
       height: descriptor.height,
       httpServerLocation: descriptor.httpServerLocation,
@@ -1079,10 +1128,21 @@ async function createExpoBuildInputEntry(projectRoot: string, outDir: string, en
   // order. `console` routes console.* to the native log (Xcode, logcat) and
   // marks it as polyfilled, which is what makes React Native forward logs to
   // the dev server; without it they only reach an attached debugger.
-  const preludeSpecifiers = resolveProjectImportSpecifiers(projectRoot, [
-    "@react-native/js-polyfills/console",
-    "@react-native/js-polyfills/error-guard",
-  ]);
+  // Then the modules Expo's Metro config runs before the app
+  // (getModulesRunBeforeMainModule), in its order: React Native's environment
+  // setup, Expo's WinterCG runtime, and @expo/metro-runtime.
+  const reactNativeSetup = resolveProjectImportSpecifiers(projectRoot, [
+    "react-native/setup-env",
+    "react-native/Libraries/Core/InitializeCore",
+  ]).slice(0, 1);
+  const preludeSpecifiers = [
+    ...resolveProjectImportSpecifiers(projectRoot, [
+      "@react-native/js-polyfills/console",
+      "@react-native/js-polyfills/error-guard",
+    ]),
+    ...reactNativeSetup,
+    ...resolveProjectImportSpecifiers(projectRoot, ["expo/build/winter", "@expo/metro-runtime"]),
+  ];
 
   await mkdir(path.dirname(inputPath), { recursive: true });
   await writeFile(
@@ -1181,6 +1241,7 @@ export async function buildExpoBundle(
             ...options,
             entry,
             projectRoot,
+            reactCompiler: await resolveReactCompiler(projectRoot, options),
             transformCacheInstance: transformCache,
             userResolveRequest,
           }),
@@ -1377,7 +1438,7 @@ async function createHoistedExpoViteConfig(input: {
       assetsInlineLimit: 0,
       cssCodeSplit: false,
       emptyOutDir: true,
-      minify: resolveBuildMinify(mode),
+      minify: resolveBuildMinify(mode, options.minify),
       outDir,
       rollupOptions: {
         input: inputEntry,
@@ -1404,6 +1465,7 @@ async function createHoistedExpoViteConfig(input: {
           ...options,
           entry,
           projectRoot,
+          reactCompiler: await resolveReactCompiler(projectRoot, options),
           userResolveRequest,
         }),
       ],

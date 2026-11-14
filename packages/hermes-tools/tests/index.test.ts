@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -20,6 +20,43 @@ test("detectHermesCompiler reports unavailable when no compiler can be found", a
 
   expect(result.available).toBe(false);
   expect(result.path).toBe(null);
+});
+
+test("detectHermesCompiler finds the hermes-compiler that react-native depends on", async () => {
+  // React Native 0.88 ships hermesc in the hermes-compiler package, not in
+  // react-native/sdks/hermesc, and puts nothing in node_modules/.bin.
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-hermes-rn-"));
+  const platformDirectory = { darwin: "osx-bin", linux: "linux64-bin", win32: "win64-bin" }[
+    process.platform as "darwin" | "linux" | "win32"
+  ];
+  const binaryName = process.platform === "win32" ? "hermesc.exe" : "hermesc";
+  const compilerDirectory = path.join(
+    projectRoot,
+    "node_modules",
+    "hermes-compiler",
+    "hermesc",
+    platformDirectory,
+  );
+  await mkdir(path.join(projectRoot, "node_modules", "react-native"), { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "node_modules", "react-native", "package.json"),
+    '{"name":"react-native","version":"0.88.1"}',
+  );
+  await mkdir(compilerDirectory, { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "node_modules", "hermes-compiler", "package.json"),
+    '{"name":"hermes-compiler"}',
+  );
+  await writeFile(path.join(compilerDirectory, binaryName), "#!/bin/sh\n");
+  await chmod(path.join(compilerDirectory, binaryName), 0o755);
+
+  const result = await detectHermesCompiler({ cwd: projectRoot, env: { PATH: "" } });
+
+  expect(result).toEqual({
+    available: true,
+    path: path.join(await realpath(compilerDirectory), binaryName),
+    source: "react-native",
+  });
 });
 
 test("compileHermesBytecode fails gracefully without a Hermes compiler", async () => {
@@ -79,4 +116,14 @@ test("compileHermesBytecode uses a provided Hermes compiler and writes bytecode 
   expect(await readFile(outputPath, "utf8")).toContain("HBC:");
   expect(await readFile(sourceMapPath, "utf8")).toContain('"version":3');
   expect(formatHermesCompileResult(result)).toContain("Vifx Hermes Compile");
+  expect(result.command).not.toContain("-O");
+
+  // Release bytecode is optimized, as React Native's own build scripts do it.
+  const optimized = await compileHermesBytecode({
+    compilerPath,
+    inputBundlePath: path.join(FIXTURE_ROOT, "input.bundle.js"),
+    optimize: true,
+    outputBytecodePath: outputPath,
+  });
+  expect(optimized.command).toContain("-O");
 });

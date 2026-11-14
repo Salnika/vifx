@@ -1,4 +1,4 @@
-import { readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import { buildExpoBundle } from "../src/index.ts";
@@ -58,6 +58,54 @@ test("buildExpoBundle: production minifies to an IIFE; development is unchanged"
     for (const code of [devCode, prodCode]) {
       expect(/^\s*(?:import|export)\s/m.test(code)).toBe(false);
     }
+  } finally {
+    await rm(project.projectRoot, { force: true, recursive: true });
+  }
+});
+
+test("buildExpoBundle applies the app config's experiments.reactCompiler, as Expo CLI does", async () => {
+  const project = await createExpoGoTestProject({ slug: "compiler-app" });
+  const babelCoreRoot = path.join(project.projectRoot, "node_modules", "@babel", "core");
+  const babelPresetRoot = path.join(project.projectRoot, "node_modules", "babel-preset-expo");
+
+  try {
+    await mkdir(babelCoreRoot, { recursive: true });
+    await mkdir(babelPresetRoot, { recursive: true });
+    // Records what babel-preset-expo would read from its caller.
+    await writeFile(
+      path.join(babelCoreRoot, "index.js"),
+      [
+        "exports.transformAsync = async function transformAsync(code, options) {",
+        "  const enabled = options.caller.supportsReactCompiler === true;",
+        "  return { code: `globalThis.reactCompiler = ${enabled};\\n${code}`, map: null };",
+        "};",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      path.join(babelPresetRoot, "index.js"),
+      "module.exports = function preset() {};\n",
+    );
+
+    const build = async (experiments: Record<string, boolean>, outDir: string) => {
+      await writeFile(
+        path.join(project.projectRoot, "app.json"),
+        JSON.stringify({ expo: { experiments, name: "Compiler", slug: "compiler-app" } }),
+      );
+      await buildExpoBundle({
+        entry: "./index.js",
+        outDir,
+        platform: "ios",
+        projectRoot: project.projectRoot,
+        reactNativeCompat: "none",
+      });
+      return readBundle(project.projectRoot, outDir);
+    };
+
+    expect(await build({ reactCompiler: true }, ".vifx/compiler-on/ios")).toContain(
+      "globalThis.reactCompiler = true",
+    );
+    expect(await build({}, ".vifx/compiler-off/ios")).toContain("globalThis.reactCompiler = false");
   } finally {
     await rm(project.projectRoot, { force: true, recursive: true });
   }

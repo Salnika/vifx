@@ -76,6 +76,7 @@ export default defineConfig({
           items: [
             { text: "Getting Started", link: "/guide/getting-started" },
             { text: "Migration", link: "/guide/migration" },
+            { text: "Migrate with an AI Agent", link: "/guide/agent-migration" },
             { text: "Dev Server and Fast Refresh", link: "/guide/dev-server" },
             { text: "Architecture", link: "/guide/architecture" },
             { text: "Compatibility Philosophy", link: "/guide/compatibility-philosophy" },

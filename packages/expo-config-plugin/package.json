@@ -28,6 +28,7 @@
       "require": "./dist/index.cjs"
     },
     "./app.plugin": "./app.plugin.js",
+    "./app.plugin.js": "./app.plugin.js",
     "./package.json": "./package.json"
   },
   "publishConfig": {

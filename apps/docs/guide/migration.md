@@ -2,7 +2,7 @@
 
 Migrate a Metro/Expo project to vifx without giving up Expo CLI, EAS, or your existing app scripts. Migration is additive: vifx writes its own config alongside your project, moves bundling to the Vite/Rolldown engine, and optionally repoints native build phases at `vifx export:embed`. Nothing in your Expo or Metro setup is deleted or rewritten in place.
 
-For an Expo project, the entry point is [`vifx setup`](#expo-projects). For a bare React Native project, the entry point is [`vifx init`](#bare-react-native-projects).
+For an Expo project, the entry point is [`vifx setup`](#expo-projects). For a bare React Native project, the entry point is [`vifx init`](#bare-react-native-projects). To have a coding agent run these steps on an Expo app, give it the prompt in [Migrate with an AI Agent](/guide/agent-migration).
 
 ## What carries over vs. what changes
 
@@ -306,7 +306,7 @@ npx vifx expo audit <expo-project-path> --json
 npx vifx expo audit <expo-project-path> --export-root dist/expo
 ```
 
-The Expo SDK support table covers majors 54 to 58. SDK 54 is the validated tier; 55 to 58 are an experimental tier (fixtures, audits and doctor detection, with no real app validated yet). Outside that table, `vifx doctor` reports `VIFX_PROJECT_UNSUPPORTED_EXPO_VERSION`. See [Project Status](/guide/status) for what has been validated.
+The Expo SDK support table covers majors 54 to 58. SDK 54 and 58 are the validated tier (58 with the default template only); 55 to 57 are an experimental tier (fixtures, audits, doctor detection and release bundles compared with Metro's, not run on a device). Outside that table, `vifx doctor` reports `VIFX_PROJECT_UNSUPPORTED_EXPO_VERSION`. See [Project Status](/guide/status) for what has been validated.
 
 ## Scope
 

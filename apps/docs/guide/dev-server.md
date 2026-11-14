@@ -212,7 +212,7 @@ The browser preview uses Vite's own update mechanism; the Fast Refresh described
 
 - Stack frames inside a hot-patched module are not yet symbolicated against the patch's own source map.
 - `/symbolicate` returns frames only, without a code frame, so LogBox shows no source snippet for a runtime error.
-- The dev engine was validated in Expo Go on an iOS simulator with one app. Android was not exercised.
+- The dev engine was validated in Expo Go on an iOS simulator with a production SDK 54 app, and on an iOS simulator and an Android emulator with the SDK 58 default template.
 - Expo Go was seen crashing on some full reloads of an app that opens an expo-sqlite database with an FTS5 table (a native crash in expo-sqlite's `closeDatabase`). Whether the same reloads crash under Metro has not been checked yet.
 - One server serves one platform, and there is no tunnel and no key to open a simulator.
 

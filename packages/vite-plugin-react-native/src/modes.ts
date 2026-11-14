@@ -185,8 +185,9 @@ export function resolveOutputOptions(
 /**
  * Resolves the Vite `build.minify` setting for a bundle mode. Production
  * bundles are minified with the Oxc minifier built into this Vite/Rolldown
- * toolchain, which also composes the minified source map natively.
+ * toolchain, which also composes the minified source map natively. An explicit
+ * `minify` (Metro's `--minify`) wins over the mode.
  */
-export function resolveBuildMinify(mode: VifxBundleMode): "oxc" | false {
-  return mode === "production" ? "oxc" : false;
+export function resolveBuildMinify(mode: VifxBundleMode, minify?: boolean): "oxc" | false {
+  return (minify ?? mode === "production") ? "oxc" : false;
 }

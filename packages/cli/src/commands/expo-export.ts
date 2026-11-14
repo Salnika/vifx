@@ -13,7 +13,7 @@ import {
   validateRequestedPlatform,
 } from "./expo-shared.ts";
 
-const EXPO_EXPORT_HELP = `Usage: vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--json]
+const EXPO_EXPORT_HELP = `Usage: vifx expo export [path] [--platform ios|android|all] [--config <file>] [--out-dir <dir>] [--dev] [--json]
 
 Builds configured Expo Vifx targets and writes an Expo artifact directory with bundles, source maps, assets, manifest, and metadata.
 
@@ -21,13 +21,14 @@ Options:
   --platform  Restrict the export to one platform. Default: all configured targets.
   --config    Use a specific Vifx config file.
   --out-dir   Export output directory. Default: dist/expo.
+  --dev       Export development bundles (unminified, __DEV__ true). Default: production bundles, as npx expo export does.
   --json      Output machine-readable generation results.
   --help      Show this message.
 `;
 
 export async function runExpoExportCommand(argv: string[], cwd: string): Promise<CliResult> {
   const parsed = parseFlags(argv, {
-    booleanFlags: ["help", "json"],
+    booleanFlags: ["dev", "help", "json"],
     stringFlags: ["config", "out-dir", "platform"],
     aliases: {
       "-h": "--help",
@@ -79,12 +80,22 @@ export async function runExpoExportCommand(argv: string[], cwd: string): Promise
     });
   }
 
-  await loadProjectEnvIntoProcess(loaded.config.projectRoot, targets[0]?.mode);
+  // Like `npx expo export`, the export is a release artifact unless --dev is
+  // passed. A release build never ships Vifx's Expo Go compat mocks: the real
+  // native modules are in the app binary that runs it (as with export:embed).
+  const mode = parsed.flags.dev ? ("development" as const) : ("production" as const);
+  await loadProjectEnvIntoProcess(loaded.config.projectRoot, mode);
 
   const builds: ExpoBuildResult[] = [];
   for (const target of targets) {
     builds.push(
-      await buildExpoTarget(target, loaded.config.projectRoot, loaded.config.resolver.mainFields),
+      await buildExpoTarget(
+        mode === "production"
+          ? { ...target, compatPreview: false, mode, reactNativeCompat: "none" }
+          : { ...target, mode },
+        loaded.config.projectRoot,
+        loaded.config.resolver.mainFields,
+      ),
     );
   }
 
@@ -109,6 +120,7 @@ export async function runExpoExportCommand(argv: string[], cwd: string): Promise
       stdout: JSON.stringify(
         {
           builds,
+          bundleMode: mode,
           configFile: loaded.filePath,
           export: exportResult,
           mode: loaded.config.vite.mode,
@@ -128,6 +140,7 @@ export async function runExpoExportCommand(argv: string[], cwd: string): Promise
       "",
       `Config: ${loaded.filePath ?? "inline config"}`,
       `Project root: ${loaded.config.projectRoot}`,
+      `Mode: ${mode}`,
       `Export root: ${exportResult.exportRoot}`,
       `Bundles: ${exportResult.bundles.length}`,
       `Assets: ${exportResult.assets.length}`,

@@ -153,7 +153,7 @@ EXPO_PUBLIC_API_URL=https://api.example.com \
 
 ### Export an Expo artifact directory
 
-`vifx expo export` builds the configured Expo targets and writes bundles, source maps, assets, `manifest.json`, and `metadata.json` to an output directory:
+`vifx expo export` builds the configured Expo targets and writes production bundles (development ones with `--dev`), source maps, assets, `manifest.json`, and `metadata.json` to an output directory:
 
 ```sh
 npx vifx expo export . --platform all --out-dir dist/expo
@@ -176,4 +176,5 @@ Set `hermes: true` on a target to compile the release `.bundle` to `.hbc`. In pr
 - [CLI](/reference/cli) — every command and flag, including the platform value sets per command.
 - [Features](/reference/features) — the engine, transform cache, Fast Refresh, and platform resolution in depth.
 - [Migration](/guide/migration) — moving an Expo or React Native app off Metro, including `metro.config.js` interop hints.
+- [Migrate with an AI Agent](/guide/agent-migration) — a prompt to give your coding agent so it migrates an Expo project and reports back.
 - [Project Status](/guide/status) — what has been validated, known gaps, and benchmark results.

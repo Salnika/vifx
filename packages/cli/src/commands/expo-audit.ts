@@ -78,7 +78,7 @@ export async function runExpoAuditCommand(argv: string[], cwd: string): Promise<
       `Expo: ${report.expoVersion ?? "missing"}`,
       `React Native: ${report.reactNativeVersion ?? "missing"}`,
       `Expo Router: ${report.expoRouter ? "detected" : "missing"}`,
-      `app/ directory: ${report.appDirectory ? "detected" : "missing"}`,
+      `Routes directory (src/app or app): ${report.appDirectory ? "detected" : "missing"}`,
       "",
       "Warnings:",
       report.warnings.length > 0

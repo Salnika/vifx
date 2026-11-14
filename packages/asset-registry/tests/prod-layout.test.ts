@@ -6,6 +6,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import {
   PROD_ASSET_MAP_FILE_NAME,
   collectAssetGroup,
+  filterPlatformAssetScales,
   getAndroidDensitySuffix,
   getAndroidResourceIdentifier,
   getAssetDestPathAndroid,
@@ -121,25 +122,34 @@ test("writes the Android production layout from the rn-bare-assets fixture", asy
 
   const result = await writeProdAssets(assets, { assetsDest, platform: "android" });
 
+  // Metro's names: `assets/icon.png` lives at `/assets/assets`, whose resource
+  // identifier is `assets_icon` once the leading `assets_` is stripped.
   expect(await listFilesRecursively(assetsDest)).toEqual([
     "assetmap.json",
-    "drawable-mdpi/icon.png",
-    "drawable-mdpi/logo.svg",
+    "drawable-mdpi/assets_icon.png",
+    "drawable-mdpi/assets_logo.svg",
     "drawable-mdpi/src_assets_icon.png",
-    "drawable-xhdpi/icon.png",
+    "drawable-xhdpi/assets_icon.png",
     "drawable-xhdpi/src_assets_icon.png",
-    "drawable-xxhdpi/icon.png",
+    "drawable-xxhdpi/assets_icon.png",
     "drawable-xxhdpi/src_assets_icon.png",
-    "raw/font.ttf",
+    "raw/assets_font.ttf",
+    "raw/keep.xml",
     "raw/src_assets_display.ttf",
   ]);
 
   expect(result.platform).toBe("android");
   expect(result.assets).toHaveLength(5);
-  expect(result.writtenFiles).toContain("drawable-xxhdpi/icon.png");
+  expect(result.writtenFiles).toContain("drawable-xxhdpi/assets_icon.png");
   expect(result.writtenFiles).toContain(PROD_ASSET_MAP_FILE_NAME);
+  // Every asset is kept from resource shrinking, as Metro and Expo CLI do.
+  expect(await readFile(path.join(assetsDest, "raw", "keep.xml"), "utf8")).toBe(
+    '<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="' +
+      "@raw/assets_font,@drawable/assets_icon,@drawable/assets_logo," +
+      '@raw/src_assets_display,@drawable/src_assets_icon" />',
+  );
 
-  const copied = await readFile(path.join(assetsDest, "drawable-xhdpi", "icon.png"));
+  const copied = await readFile(path.join(assetsDest, "drawable-xhdpi", "assets_icon.png"));
   const original = await readFile(path.join(FIXTURE_ROOT, "assets", "icon@2x.png"));
   expect(copied.equals(original)).toBe(true);
 });
@@ -152,11 +162,11 @@ test("writes the iOS production layout from the rn-bare-assets fixture", async (
 
   expect(await listFilesRecursively(assetsDest)).toEqual([
     "assetmap.json",
-    "assets/font.ttf",
-    "assets/icon.png",
-    "assets/icon@2x.png",
-    "assets/icon@3x.png",
-    "assets/logo.svg",
+    "assets/assets/font.ttf",
+    "assets/assets/icon.png",
+    "assets/assets/icon@2x.png",
+    "assets/assets/icon@3x.png",
+    "assets/assets/logo.svg",
     "assets/src/assets/display.ttf",
     "assets/src/assets/icon.png",
     "assets/src/assets/icon@2x.png",
@@ -165,9 +175,41 @@ test("writes the iOS production layout from the rn-bare-assets fixture", async (
 
   expect(result.platform).toBe("ios");
 
-  const copied = await readFile(path.join(assetsDest, "assets", "icon@3x.png"));
+  const copied = await readFile(path.join(assetsDest, "assets", "assets", "icon@3x.png"));
   const original = await readFile(path.join(FIXTURE_ROOT, "assets", "icon@3x.png"));
   expect(copied.equals(original)).toBe(true);
+});
+
+test("ships only the 1x to 3x scales on iOS, like Metro", async () => {
+  const assetsDest = await createTemporaryDirectory();
+  const variant = (scale: number) => ({
+    filePath: path.join(FIXTURE_ROOT, "assets", "icon.png"),
+    scale,
+  });
+
+  await writeProdAssets(
+    [
+      {
+        httpServerLocation: "/assets/img",
+        name: "icon",
+        type: "png",
+        variants: [variant(1), variant(2), variant(3), variant(4)],
+      },
+      // No scale iOS uses: the smallest larger one stands in, as with Metro.
+      { httpServerLocation: "/assets/img", name: "hero", type: "png", variants: [variant(4)] },
+    ],
+    { assetsDest, platform: "ios" },
+  );
+
+  expect(await listFilesRecursively(assetsDest)).toEqual([
+    "assetmap.json",
+    "assets/img/hero@4x.png",
+    "assets/img/icon.png",
+    "assets/img/icon@2x.png",
+    "assets/img/icon@3x.png",
+  ]);
+  expect(filterPlatformAssetScales("android", [1, 2, 3, 4])).toEqual([1, 2, 3, 4]);
+  expect(filterPlatformAssetScales("ios", [0.5, 4, 5])).toEqual([4]);
 });
 
 test("describes every written file in assetmap.json", async () => {
@@ -193,15 +235,15 @@ test("describes every written file in assetmap.json", async () => {
   expect(assetMap.assets).toHaveLength(5);
 
   const icon = assetMap.assets.find(
-    (asset) => asset.name === "icon" && asset.httpServerLocation === "/assets",
+    (asset) => asset.name === "icon" && asset.httpServerLocation === "/assets/assets",
   );
   expect(icon).toEqual({
     files: [
-      { path: "drawable-mdpi/icon.png", scale: 1 },
-      { path: "drawable-xhdpi/icon.png", scale: 2 },
-      { path: "drawable-xxhdpi/icon.png", scale: 3 },
+      { path: "drawable-mdpi/assets_icon.png", scale: 1 },
+      { path: "drawable-xhdpi/assets_icon.png", scale: 2 },
+      { path: "drawable-xxhdpi/assets_icon.png", scale: 3 },
     ],
-    httpServerLocation: "/assets",
+    httpServerLocation: "/assets/assets",
     name: "icon",
     scales: [1, 2, 3],
     type: "png",

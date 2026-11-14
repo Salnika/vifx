@@ -4,6 +4,7 @@ import { collectAssetGroup } from "@vifx/asset-registry";
 import type { PackageManager, ProjectType } from "@vifx/compat";
 import { VIFX_CONFIG_FILENAMES } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
+import { detectHermesCompiler } from "@vifx/hermes-tools";
 import { resolveReactNativeModule } from "@vifx/platform-resolver";
 import type { VifxVitePluginMode } from "@vifx/types";
 import type { AssetGroup, Diagnostic, ProjectInspection } from "./types.ts";
@@ -43,7 +44,7 @@ const VITE_CONFIG_FILENAMES = [
 // built after this package and therefore cannot be imported here. The CLI test
 // suite asserts that this mirror stays in sync with the canonical table.
 export const SUPPORTED_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [54, 55, 56, 57, 58];
-export const EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [55, 56, 57, 58];
+export const EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS: readonly number[] = [55, 56, 57];
 const VALIDATED_EXPO_SDK_MAJOR_VERSIONS: readonly number[] =
   SUPPORTED_EXPO_SDK_MAJOR_VERSIONS.filter(
     (majorVersion) => !EXPERIMENTAL_EXPO_SDK_MAJOR_VERSIONS.includes(majorVersion),
@@ -414,7 +415,11 @@ async function buildDiagnostics(
       level: "warn",
       code: "VIFX_CONFIG_MISSING",
       summary: "No supported Vifx config file found.",
-      hint: `Run: vifx init to create ${VIFX_CONFIG_FILENAMES[0]}.`,
+      // `vifx setup` onboards Expo projects; `vifx init` is for bare React Native.
+      hint:
+        inspection.projectType === "expo"
+          ? `Run: vifx setup . --yes to create ${VIFX_CONFIG_FILENAMES[0]}.`
+          : `Run: vifx init to create ${VIFX_CONFIG_FILENAMES[0]}.`,
       docsPath: "/cli/doctor#vifx-config",
     });
   }
@@ -511,11 +516,9 @@ export async function inspectProject(projectRoot: string): Promise<ProjectInspec
   const viteConfigPath = await findConfigFile(resolvedProjectRoot, VITE_CONFIG_FILENAMES);
   const vitePluginMode = await detectVitePluginMode(viteConfigPath);
   const vifxConfigPath = await findConfigFile(resolvedProjectRoot, VIFX_CONFIG_FILENAMES);
-  const hermesCompilerPath =
-    (await findConfigFile(resolvedProjectRoot, ["node_modules/.bin/hermesc"])) ??
-    (workspaceRoot !== resolvedProjectRoot
-      ? await findConfigFile(workspaceRoot, ["node_modules/.bin/hermesc"])
-      : null);
+  // The compiler the project's React Native builds with (hermes-compiler or
+  // react-native/sdks/hermesc), else a hermesc in node_modules/.bin or on PATH.
+  const hermesCompilerPath = (await detectHermesCompiler({ cwd: resolvedProjectRoot })).path;
 
   const baseInspection = {
     projectRoot: resolvedProjectRoot,

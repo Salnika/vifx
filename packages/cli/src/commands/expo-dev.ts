@@ -29,7 +29,7 @@ Starts a Vite-powered Expo dev server. By default this serves the bounded browse
 Options:
   --platform  Restrict the dev server to one platform target.
   --expo-go   Serve an Expo Go compatible native manifest and Vifx bundle URL.
-  --fast-refresh  Serve a Metro-format bundle with state-preserving Fast Refresh over /hot (experimental). Requires --expo-go.
+  --fast-refresh  Use the older Metro-format (module registry) bundle for Fast Refresh instead of the default Rolldown dev engine, which already has Fast Refresh (experimental). Requires --expo-go.
   --config    Use a specific Vifx config file.
   --host      Hostname to bind the local dev server to. Default: 127.0.0.1, or 0.0.0.0 with --expo-go.
   --public-host  Hostname or LAN IP emitted in Expo Go URLs when it differs from --host.

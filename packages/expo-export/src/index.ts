@@ -1,6 +1,12 @@
+import { createHash } from "node:crypto";
 import { access, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { collectAssetGroup, isSupportedAssetFile } from "@vifx/asset-registry";
+import {
+  collectAssetGroup,
+  getAssetOutputDirectory,
+  getScaledAssetFileName,
+  isSupportedAssetFile,
+} from "@vifx/asset-registry";
 import { loadVifxConfig } from "@vifx/config";
 import { VifxError } from "@vifx/errors";
 import { validateSourceMap } from "@vifx/source-map-tools";
@@ -310,7 +316,9 @@ export async function inspectExpoExport(
   const assetSourcePaths = files.filter(
     (filePath) => isSupportedAssetFile(filePath) && !filePath.endsWith(".json"),
   );
-  const assets = await Promise.all(
+  // One entry per asset, not per file: the other scales are files of the
+  // canonical (1x when there is one) variant's group.
+  const groupedAssets = await Promise.all(
     assetSourcePaths.map(async (assetPath) => {
       const descriptor = await collectAssetGroup({
         filePath: assetPath,
@@ -319,6 +327,9 @@ export async function inspectExpoExport(
         // surfacing a warning rather than aborting the export.
         onWarning: ({ message }) => warnings.push(message),
       });
+      if (path.resolve(assetPath) !== descriptor.canonicalFilePath) {
+        return null;
+      }
       const assetStats = await stat(assetPath);
 
       return {
@@ -335,6 +346,7 @@ export async function inspectExpoExport(
       };
     }),
   );
+  const assets = groupedAssets.filter((asset) => asset !== null);
 
   if (bundles.length === 0) {
     warnings.push(
@@ -394,6 +406,7 @@ export async function writeExpoExport(
   const bundleMetadata: Record<string, string> = {};
   const sourceMapMetadata: Record<string, string> = {};
   const assetMetadata = new Map<string, VifxJsonObject>();
+  const writtenAssetHashes = new Map<string, string>();
 
   await rm(exportRoot, { force: true, recursive: true });
   await mkdir(exportRoot, { recursive: true });
@@ -425,15 +438,53 @@ export async function writeExpoExport(
     }
 
     for (const asset of bundle.assets) {
-      const assetOutputPath = path.join(exportRoot, "assets", path.basename(asset.emittedPath));
-      const assetRelativePath = relativeFrom(exportRoot, assetOutputPath);
+      // Every scale keeps its own file, under the asset's location, so that
+      // two assets with the same name in different directories never meet.
+      const directory = getAssetOutputDirectory(asset.httpServerLocation).split("/");
+      const sources =
+        asset.files && asset.files.length > 0
+          ? asset.files.map((file) => ({
+              fileName: getScaledAssetFileName(asset, file.scale),
+              path: file.path,
+            }))
+          : [{ fileName: path.basename(asset.emittedPath), path: asset.emittedPath }];
+      let canonicalOutputPath: string | null = null;
 
+      for (const source of sources) {
+        const contents = await readFile(resolveProjectFile(projectRoot, source.path));
+        const contentHash = createHash("sha1").update(contents).digest("hex");
+        // iOS and Android can ship different files under one name (platform
+        // variants such as `icon@2x.ios.png`): the platform written second
+        // keeps its copy under `<platform>/` instead of replacing the first.
+        let assetOutputPath = path.join(exportRoot, ...directory, source.fileName);
+        const writtenHash = writtenAssetHashes.get(assetOutputPath);
+        if (writtenHash !== undefined && writtenHash !== contentHash) {
+          assetOutputPath = path.join(exportRoot, bundle.platform, ...directory, source.fileName);
+        }
+
+        if (source.path === asset.emittedPath || canonicalOutputPath === null) {
+          canonicalOutputPath = assetOutputPath;
+        }
+
+        if (writtenAssetHashes.has(assetOutputPath)) {
+          continue;
+        }
+
+        writtenAssetHashes.set(assetOutputPath, contentHash);
+        await mkdir(path.dirname(assetOutputPath), { recursive: true });
+        await writeFile(assetOutputPath, contents);
+        generatedFiles.push({
+          kind: "asset",
+          path: relativeFrom(projectRoot, assetOutputPath),
+          platform: bundle.platform,
+        });
+      }
+
+      const assetRelativePath = relativeFrom(exportRoot, canonicalOutputPath ?? exportRoot);
       if (assetMetadata.has(assetRelativePath)) {
         continue;
       }
 
-      await mkdir(path.dirname(assetOutputPath), { recursive: true });
-      await copyFile(resolveProjectFile(projectRoot, asset.emittedPath), assetOutputPath);
       assetMetadata.set(assetRelativePath, {
         hash: asset.hash ?? null,
         height: asset.height ?? null,
@@ -443,11 +494,6 @@ export async function writeExpoExport(
         scales: asset.scales,
         type: asset.type,
         width: asset.width ?? null,
-      });
-      generatedFiles.push({
-        kind: "asset",
-        path: relativeFrom(projectRoot, assetOutputPath),
-        platform: bundle.platform,
       });
     }
   }
@@ -538,7 +584,10 @@ export async function evaluateExpoNoMetroContract(
   const expoVersion = readDependency(packageJson, "expo");
   const reactNativeVersion = readDependency(packageJson, "react-native");
   const expoRouterVersion = readDependency(packageJson, "expo-router");
-  const appDirectory = await pathExists(path.join(projectRoot, "app"));
+  // Expo Router's routes directory: `src/app` (the SDK 55+ templates) or `app`.
+  const appDirectory =
+    (await pathExists(path.join(projectRoot, "src", "app"))) ||
+    (await pathExists(path.join(projectRoot, "app")));
   const hasVifxConfig = await hasAnyFile(projectRoot, VIFX_CONFIG_NAMES);
   const hasViteConfig = await hasAnyFile(projectRoot, VITE_CONFIG_NAMES);
   const configuredExpoSupport = await inspectConfiguredExpoSupport(projectRoot);
@@ -596,7 +645,7 @@ export async function evaluateExpoNoMetroContract(
         ...(expoVersion ? [`Expo dependency detected: ${expoVersion}.`] : []),
         ...(reactNativeVersion ? [`React Native dependency detected: ${reactNativeVersion}.`] : []),
         ...(expoRouterVersion ? [`expo-router dependency detected: ${expoRouterVersion}.`] : []),
-        ...(appDirectory ? ["Expo app/ directory detected."] : []),
+        ...(appDirectory ? ["Expo Router routes directory (src/app or app) detected."] : []),
         ...(hasVifxConfig ? ["Vifx config detected."] : []),
         ...(hasViteConfig ? ["Vifx-owned Vite config detected."] : []),
       ],

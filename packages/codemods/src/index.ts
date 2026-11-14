@@ -41,6 +41,7 @@ export interface SetupPlan {
 interface PackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  main?: string;
   name?: string;
   packageManager?: string;
   scripts?: Record<string, string>;
@@ -621,6 +622,56 @@ async function detectTypeScriptPathAliases(projectRoot: string) {
   return Object.keys(aliases).length > 0 ? aliases : undefined;
 }
 
+const ENTRY_EXTENSIONS = ["", ".ts", ".tsx", ".js", ".jsx"] as const;
+
+/**
+ * The entry Expo CLI bundles: package.json `main` — `expo-router/entry` in the
+ * router templates, `index.ts` in the blank TypeScript one — read as a project
+ * file when one exists at that path and as a module otherwise, then an `index`
+ * file at the root.
+ */
+async function resolveExpoEntry(
+  projectRoot: string,
+  packageJson: PackageJson,
+  expoRouterApp: boolean,
+): Promise<string> {
+  const main = packageJson.main?.trim();
+  if (main) {
+    const relativeMain = main.replace(/^\.\//u, "");
+    for (const extension of ENTRY_EXTENSIONS) {
+      if (await isFile(path.join(projectRoot, `${relativeMain}${extension}`))) {
+        return `./${relativeMain}${extension}`;
+      }
+    }
+
+    return main;
+  }
+
+  for (const extension of ENTRY_EXTENSIONS.slice(1)) {
+    if (await isFile(path.join(projectRoot, `index${extension}`))) {
+      return `./index${extension}`;
+    }
+  }
+
+  if (expoRouterApp) {
+    return "expo-router/entry";
+  }
+
+  // No `main` and no index file: Expo CLI registers the root `App` component
+  // through `expo/AppEntry`.
+  for (const extension of ENTRY_EXTENSIONS.slice(1)) {
+    if (await isFile(path.join(projectRoot, `App${extension}`))) {
+      return "expo/AppEntry";
+    }
+  }
+
+  return "./index.js";
+}
+
+async function isFile(filePath: string) {
+  return (await fs.stat(filePath).catch(() => null))?.isFile() ?? false;
+}
+
 async function detectExpoSetupTemplateOptions(
   projectRoot: string,
 ): Promise<ExpoSetupTemplateOptions> {
@@ -630,7 +681,10 @@ async function detectExpoSetupTemplateOptions(
     ...packageJson.data.devDependencies,
   };
   const expoRouter = Boolean(dependencies["expo-router"]);
-  const appDirectory = await pathExists(path.join(projectRoot, "app"));
+  // Expo Router's routes: `src/app` (the SDK 55+ templates) or `app`.
+  const appDirectory =
+    (await pathExists(path.join(projectRoot, "src", "app"))) ||
+    (await pathExists(path.join(projectRoot, "app")));
   const iosHostPresent = await pathExists(path.join(projectRoot, "ios"));
   const webPreviewConfigured = expoRouter && appDirectory;
   const babelInPackages = [
@@ -651,7 +705,7 @@ async function detectExpoSetupTemplateOptions(
     aliases: await detectTypeScriptPathAliases(projectRoot),
     appDirectory,
     babelInPackages,
-    entry: webPreviewConfigured ? "expo-router/entry" : "./index.js",
+    entry: await resolveExpoEntry(projectRoot, packageJson.data, webPreviewConfigured),
     expoRouter,
     iosHostPresent,
     jsxInPackages,

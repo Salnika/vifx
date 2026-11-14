@@ -419,15 +419,101 @@ test("buildReactNativeBundle registers native assets via AssetRegistry with scal
   // like Metro — not Vite's default URL string, which breaks <Image>/font loading.
   expect(bundleSource).toContain("registerAsset");
   expect(bundleSource).toContain('"__packager_asset": true');
-  expect(bundleSource).toContain('"httpServerLocation": "/assets"');
+  // Metro's location: `/assets` followed by the file's directory.
+  expect(bundleSource).toContain('"httpServerLocation": "/assets/assets"');
   expect(bundleSource).not.toContain('"/assets/icon.png"');
   expect(bundleSource).not.toContain('"/assets/font.ttf"');
 
-  // Every scale variant is emitted flat under assets/ for the dev server + RN.
-  const assetsDir = path.join(projectRoot, ".vifx/helper-ios-assets/assets");
+  // Every scale variant is emitted under that location, where the dev server
+  // serves it and React Native looks for it next to a release bundle.
+  const assetsDir = path.join(projectRoot, ".vifx/helper-ios-assets/assets/assets");
   for (const name of ["icon.png", "icon@2x.png", "icon@3x.png", "font.ttf"]) {
     expect((await stat(path.join(assetsDir, name))).isFile()).toBe(true);
   }
+  expect(bundle.assets.find((asset) => asset.name === "icon")?.files).toEqual([
+    { path: ".vifx/helper-ios-assets/assets/assets/icon.png", scale: 1 },
+    { path: ".vifx/helper-ios-assets/assets/assets/icon@2x.png", scale: 2 },
+    { path: ".vifx/helper-ios-assets/assets/assets/icon@3x.png", scale: 3 },
+  ]);
+});
+
+test("buildReactNativeBundle registers assets through react-native/asset-registry (React Native 0.88)", async () => {
+  const projectRoot = await copyFixture("rn-bare-assets");
+
+  // React Native 0.88 has no @react-native/assets-registry package: the
+  // registry is the `react-native/asset-registry` entry point.
+  const reactNativeRoot = path.join(projectRoot, "node_modules", "react-native");
+  await mkdir(path.join(reactNativeRoot, "src"), { recursive: true });
+  await writeFile(
+    path.join(reactNativeRoot, "package.json"),
+    JSON.stringify(
+      {
+        exports: { "./asset-registry": "./src/asset-registry.js" },
+        name: "react-native",
+        version: "0.88.1",
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    path.join(reactNativeRoot, "src", "asset-registry.js"),
+    ["let nextId = 1;", "export function registerAsset(asset) { return nextId++; }", ""].join("\n"),
+  );
+  // Through the template's aliases, from a file below the project root, and
+  // with platform variants beside the generic image, as expo-router ships them
+  // (Metro resolves the generic file, then groups the platform's variants).
+  await mkdir(path.join(projectRoot, "src", "screens"), { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "assets", "badge.png"),
+    await readFile(path.join(projectRoot, "assets", "icon.png")),
+  );
+  await writeFile(
+    path.join(projectRoot, "assets", "badge@2x.ios.png"),
+    await readFile(path.join(projectRoot, "assets", "icon@2x.png")),
+  );
+  await writeFile(
+    path.join(projectRoot, "assets", "badge@2x.android.png"),
+    await readFile(path.join(projectRoot, "assets", "icon@3x.png")),
+  );
+  await writeFile(
+    path.join(projectRoot, "src", "screens", "Home.js"),
+    [
+      'export const icon = require("@/assets/icon.png");',
+      'export const badge = require("@/assets/badge.png");',
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import { badge, icon } from "@/screens/Home";',
+      "globalThis.__assetCheck = { badge, icon };",
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    aliases: { "@": "./src", "@/assets": "./assets" },
+    entry: "./index.js",
+    outDir: ".vifx/helper-ios-rn088",
+    platform: "ios",
+    projectRoot,
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+
+  const sandbox: { __assetCheck?: { badge: unknown; icon: unknown } } = {};
+  runInNewContext(bundleSource, Object.assign(sandbox, { globalThis: sandbox }));
+  expect(sandbox.__assetCheck).toEqual({ badge: 2, icon: 1 });
+
+  // The iOS build takes `badge@2x.ios.png` (Metro's platform variant rule).
+  const badge = bundle.assets.find((asset) => asset.name === "badge");
+  expect(badge).toMatchObject({ httpServerLocation: "/assets/assets", scales: [2] });
+  expect(
+    (
+      await readFile(path.join(projectRoot, ".vifx/helper-ios-rn088/assets/assets/badge@2x.png"))
+    ).equals(await readFile(path.join(projectRoot, "assets", "icon@2x.png"))),
+  ).toBe(true);
 });
 
 test("buildReactNativeBundle makes require() of an asset the asset id, like an import", async () => {
@@ -471,6 +557,66 @@ test("buildReactNativeBundle makes require() of an asset the asset id, like an i
   expect(sandbox.__assetCheck?.imported).toBe(1);
   expect(sandbox.__assetCheck?.required).toBe(1);
   expect(sandbox.__assetCheck?.font).toBe(2);
+});
+
+test("getDevServer reads the Expo manifest only once globalThis.expo exists", async () => {
+  const projectRoot = await copyFixture("rn-bare-basic");
+
+  // Like the real package: expo-constants throws while loading without
+  // globalThis.expo, and React Native's InitializeCore runs getDevServer first.
+  const expoConstantsRoot = path.join(projectRoot, "node_modules", "expo-constants");
+  await mkdir(expoConstantsRoot, { recursive: true });
+  await writeFile(
+    path.join(expoConstantsRoot, "package.json"),
+    JSON.stringify({ main: "index.js", name: "expo-constants" }),
+  );
+  await writeFile(
+    path.join(expoConstantsRoot, "index.js"),
+    [
+      "if (globalThis.expo === undefined) {",
+      "  throw new TypeError(\"Cannot read property 'EventEmitter' of undefined\");",
+      "}",
+      "exports.__esModule = true;",
+      "exports.default = {",
+      "  __unsafeNoWarnManifest2: {",
+      "    launchAsset: { url: 'http://127.0.0.1:8091/expo-router/entry.bundle?platform=android' },",
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    [
+      'import getDevServer from "react-native/Libraries/Core/Devtools/getDevServer";',
+      "globalThis.__early = getDevServer();",
+      "globalThis.__whenReady = () => {",
+      "  globalThis.expo = {};",
+      "  return getDevServer();",
+      "};",
+      "",
+    ].join("\n"),
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    outDir: ".vifx/helper-android-dev-server",
+    platform: "android",
+    projectRoot,
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+
+  const sandbox: {
+    __early?: { bundleLoadedFromServer: boolean; url: string };
+    __whenReady?: () => { bundleLoadedFromServer: boolean; url: string };
+  } = {};
+  runInNewContext(bundleSource, Object.assign(sandbox, { globalThis: sandbox }));
+
+  expect(sandbox.__early).toMatchObject({ bundleLoadedFromServer: false, url: "" });
+  expect(sandbox.__whenReady?.()).toMatchObject({
+    bundleLoadedFromServer: true,
+    url: "http://127.0.0.1:8091/",
+  });
 });
 
 test("buildReactNativeBundle uses native Reanimated compat for Expo Go bundles when compatPreview is enabled", async () => {
@@ -1254,10 +1400,13 @@ test("buildReactNativeBundle keeps the Expo Router native bootstrap aligned with
   expect(bundleSource).toContain("SQLiteContext.Provider");
   expect(bundleSource).toContain("databaseRef.current = database");
   expect(bundleSource).toContain("loading || !databaseRef.current");
-  expect(bundleSource.indexOf("vifx:transformed:")).toBeGreaterThan(-1);
+  // Rolldown prints the transformed module's id (`vifx:\0transformed:...`) in
+  // its region comment with the NUL byte replaced.
+  const transformedModuleIndex = bundleSource.search(/vifx:.?transformed:/u);
+  expect(transformedModuleIndex).toBeGreaterThan(-1);
   expect(bundleSource.indexOf("expo-sqlite/build/SQLiteDatabase.js")).toBeGreaterThan(-1);
   expect(bundleSource.indexOf("vifx:compat:expo-sqlite/build/SQLiteDatabase")).toBeGreaterThan(
-    bundleSource.indexOf("vifx:transformed:"),
+    transformedModuleIndex,
   );
   expect(bundleSource).toContain("vifx:compat:react-native-worklets/src/bundleUnpacker");
   expect(bundleSource).toContain("vifx:compat:react-native-worklets/src/workletRuntimeEntry");
@@ -1485,6 +1634,124 @@ test("buildReactNativeBundle applies project Babel to native node_modules transi
   expect(bundleSource).toContain("babel:node:true");
   expect(bundleSource).toContain("babel:project:false");
   expect(bundleSource).not.toContain("class NativeDependency");
+});
+
+test("buildReactNativeBundle keeps package sources of Babel-transformed node_modules in the bundle map", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-rn-plugin-babel-map-"));
+  const babelCoreRoot = path.join(projectRoot, "node_modules", "@babel", "core");
+  const babelPresetRoot = path.join(projectRoot, "node_modules", "@react-native", "babel-preset");
+  const dependencyRoot = path.join(projectRoot, "node_modules", "vifx-mapped-package");
+
+  await mkdir(babelCoreRoot, { recursive: true });
+  await mkdir(babelPresetRoot, { recursive: true });
+  await mkdir(path.join(dependencyRoot, "build"), { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify({ dependencies: { "vifx-mapped-package": "1.0.0" }, name: "babel-map" }),
+  );
+  // Stands in for Babel merging the package's own `build/widget.js.map`: the
+  // merged map names the TypeScript source relative to the built file, and
+  // the caller tells which engine the preset targets.
+  await writeFile(
+    path.join(babelCoreRoot, "index.js"),
+    [
+      "exports.transformAsync = async function transformAsync(code, options) {",
+      "  const lines = code.split('\\n');",
+      "  return {",
+      "    code: `globalThis.engine = ${JSON.stringify(options.caller.engine ?? 'none')};\\n${code}`,",
+      "    map: {",
+      "      mappings: ';' + lines.map((_, index) => (index === 0 ? 'AAAA' : 'AACA')).join(';'),",
+      "      names: [],",
+      "      sources: ['../src/widget.ts'],",
+      "      sourcesContent: [code],",
+      "      version: 3,",
+      "    },",
+      "  };",
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(babelPresetRoot, "index.js"),
+    "module.exports = function preset() {};\n",
+  );
+  await writeFile(
+    path.join(dependencyRoot, "package.json"),
+    JSON.stringify({ main: "build/widget.js", name: "vifx-mapped-package" }),
+  );
+  await writeFile(
+    path.join(dependencyRoot, "build", "widget.js"),
+    'export const widget = "mapped widget";\n',
+  );
+  await writeFile(
+    path.join(projectRoot, "index.js"),
+    'import { widget } from "vifx-mapped-package";\nconsole.log(widget);\n',
+  );
+
+  const bundle = await buildReactNativeBundle({
+    entry: "./index.js",
+    jsxInPackages: ["vifx-mapped-package"],
+    outDir: ".vifx/helper-ios-babel-map",
+    platform: "ios",
+    projectRoot,
+    transformCache: false,
+  });
+  const bundleSource = await readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+  const sourceMap = JSON.parse(
+    await readFile(path.join(projectRoot, bundle.sourceMap?.path ?? ""), "utf8"),
+  ) as { sources: string[] };
+
+  // Native bundles run on Hermes, so babel-preset-expo gets Metro's engine.
+  expect(bundleSource).toContain('globalThis.engine = "hermes"');
+  // The package module is loaded through a virtual id and still maps back to
+  // the source its own map names.
+  expect(
+    sourceMap.sources.some((source) =>
+      source.endsWith("node_modules/vifx-mapped-package/src/widget.ts"),
+    ),
+  ).toBe(true);
+});
+
+test("buildReactNativeBundle tells babel-preset-expo to apply the React Compiler when enabled", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-rn-plugin-react-compiler-"));
+  const babelCoreRoot = path.join(projectRoot, "node_modules", "@babel", "core");
+  const babelPresetRoot = path.join(projectRoot, "node_modules", "babel-preset-expo");
+
+  await mkdir(babelCoreRoot, { recursive: true });
+  await mkdir(babelPresetRoot, { recursive: true });
+  await writeFile(path.join(projectRoot, "package.json"), JSON.stringify({ name: "compiler" }));
+  // babel-preset-expo reads `supportsReactCompiler` from its caller, which
+  // Expo CLI sets from `experiments.reactCompiler`.
+  await writeFile(
+    path.join(babelCoreRoot, "index.js"),
+    [
+      "exports.transformAsync = async function transformAsync(code, options) {",
+      "  const enabled = options.caller.supportsReactCompiler === true;",
+      "  return { code: `globalThis.reactCompiler = ${enabled};\\n${code}`, map: null };",
+      "};",
+      "",
+    ].join("\n"),
+  );
+  await writeFile(
+    path.join(babelPresetRoot, "index.js"),
+    "module.exports = function preset() {};\n",
+  );
+  await writeFile(path.join(projectRoot, "index.js"), 'console.log("compiled");\n');
+
+  const readBundle = async (reactCompiler: boolean) => {
+    const bundle = await buildReactNativeBundle({
+      entry: "./index.js",
+      outDir: `.vifx/helper-react-compiler-${String(reactCompiler)}`,
+      platform: "ios",
+      projectRoot,
+      reactCompiler,
+    });
+    return readFile(path.join(projectRoot, bundle.bundle.path), "utf8");
+  };
+
+  expect(await readBundle(true)).toContain("globalThis.reactCompiler = true");
+  // The transform cache keeps the two apart.
+  expect(await readBundle(false)).toContain("globalThis.reactCompiler = false");
 });
 
 test("buildReactNativeBundle can opt out of React and React Native shims", async () => {

@@ -168,6 +168,8 @@ export async function applyReactRefreshTransform(
       babelrc: false,
       caller: {
         bundler: "metro",
+        // Same Hermes profile as the main project-Babel transform.
+        ...(input.platform === "web" ? {} : { engine: "hermes" }),
         isDev: true,
         isHMREnabled: true,
         isNodeModule: false,

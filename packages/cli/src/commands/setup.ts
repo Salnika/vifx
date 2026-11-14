@@ -159,7 +159,7 @@ function renderTerminalSetup(options: {
     `Expo: ${options.detectedExpoVersion ?? "missing"}`,
     `React Native: ${options.detectedReactNativeVersion ?? "missing"}`,
     `Expo Router: ${options.expoRouter ? "detected" : "missing"}`,
-    `app/ directory: ${options.appDirectory ? "detected" : "missing"}`,
+    `Routes directory (src/app or app): ${options.appDirectory ? "detected" : "missing"}`,
     `iOS host: ${options.iosHostPresent ? "present" : "missing"}`,
     `Expo Go server: ${options.expoGo ? "requested" : "skipped"}`,
     `Advanced Vite config: ${options.withViteConfig ? "requested" : "skipped"}`,
@@ -170,9 +170,8 @@ function renderTerminalSetup(options: {
     "",
     "Boundaries:",
     options.expoGo
-      ? "  - This setup configures the early Vifx Expo Go server path, not full Expo CLI parity."
+      ? "  - This setup configures the Vifx Expo Go server (with Fast Refresh), not full Expo CLI parity."
       : "  - This setup does not configure the Expo Go server path unless --expo-go is passed.",
-    "  - This setup does not install React Native Fast Refresh parity.",
     "  - This setup does not install EAS parity.",
     "  - This setup does not install native build or runtime parity.",
     "  - This setup does not install Expo Updates runtime support.",

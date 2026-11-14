@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -107,6 +107,37 @@ test("planExpoSetup detects Expo Router browser preview targets and opt-in Vite 
   expect(vifxConfigChange?.after).toContain('entry: "expo-router/entry"');
   expect(vifxConfigChange?.after).toContain('reactNativeCompat: "web"');
   expect(viteConfigChange?.after).toContain('entry: "expo-router/entry"');
+});
+
+test("planExpoSetup takes the entry Expo bundles, with routes in src/app (SDK 55+ templates)", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-codemods-sdk58-"));
+  await mkdir(path.join(projectRoot, "src", "app"), { recursive: true });
+  await writeFile(path.join(projectRoot, "src", "app", "index.tsx"), "export default null;\n");
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify({
+      dependencies: { expo: "~58.0.25", "expo-router": "~58.0.31", "react-native": "0.88.1" },
+      main: "expo-router/entry",
+      name: "sdk58",
+    }),
+  );
+
+  const router = await planExpoSetup(projectRoot, { expoGo: true });
+  expect(router.appDirectory).toBe(true);
+  expect(router.changes.find((change) => change.path === "vifx.config.ts")?.after).toContain(
+    'entry: "expo-router/entry"',
+  );
+
+  // The blank TypeScript template: `main` names a project file.
+  await writeFile(
+    path.join(projectRoot, "package.json"),
+    JSON.stringify({ dependencies: { expo: "~58.0.25" }, main: "index.ts", name: "blank" }),
+  );
+  await writeFile(path.join(projectRoot, "index.ts"), "export {};\n");
+  const blank = await planExpoSetup(projectRoot, { expoGo: true });
+  expect(blank.changes.find((change) => change.path === "vifx.config.ts")?.after).toContain(
+    'entry: "./index.ts"',
+  );
 });
 
 test("planExpoSetup --expo-go opts native targets into the gated compat preview", async () => {

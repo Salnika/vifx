@@ -22,6 +22,13 @@ export interface AssetScaleConflict {
 
 export interface CollectAssetGroupOptions {
   filePath: string;
+  /**
+   * The platform being bundled. As with Metro, files named for it
+   * (`icon@2x.ios.png`) replace the generic variants (`icon@2x.png`) when the
+   * directory has any, and files named for another platform are never part of
+   * the group.
+   */
+  platform?: string | null;
   projectRoot: string;
   supportedExtensions?: readonly string[];
   /**
@@ -51,6 +58,8 @@ export interface NormalizedAssetDescriptor {
 
 export interface ParsedAssetPath {
   name: string;
+  /** Set when the file name carries the requested platform (`icon@2x.ios.png`). */
+  platform?: string;
   scale: number;
   type: string;
 }
@@ -60,17 +69,46 @@ interface AssetDimensions {
   width: number;
 }
 
+// Metro's default `assetExts` plus the ones Expo's Metro config adds (woff and
+// woff2 fonts, heic and avif for expo-image, db for expo-sqlite), so a file
+// Metro bundles as an asset is one here too: expo-router 58, for instance,
+// requires Android vector drawables (`.xml`). `json` is listed for asset-group
+// tooling only; the bundlers treat JSON as source, like Metro.
 const DEFAULT_SUPPORTED_ASSET_EXTENSIONS = [
+  "aac",
+  "aiff",
+  "avif",
+  "bmp",
+  "caf",
+  "db",
   "gif",
+  "heic",
+  "html",
   "jpeg",
   "jpg",
   "json",
+  "m4a",
+  "m4v",
+  "mov",
+  "mp3",
   "mp4",
+  "mpeg",
+  "mpg",
   "otf",
+  "pdf",
   "png",
+  "psd",
   "svg",
   "ttf",
+  "wav",
+  "webm",
   "webp",
+  "woff",
+  "woff2",
+  "xml",
+  "yaml",
+  "yml",
+  "zip",
 ] as const;
 
 export const supportedAssetExtensions = [...DEFAULT_SUPPORTED_ASSET_EXTENSIONS];
@@ -90,7 +128,7 @@ export async function collectAssetGroup(
     });
   }
 
-  const parsedInput = parseAssetPath(filePath, options.supportedExtensions);
+  const parsedInput = parseAssetPath(filePath, options.supportedExtensions, options.platform);
 
   if (!parsedInput) {
     throw new VifxError({
@@ -108,34 +146,48 @@ export async function collectAssetGroup(
 
   const directory = path.dirname(filePath);
   const entries = await readdir(directory, { withFileTypes: true });
+  const candidates = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(directory, entry.name))
+    .map((candidatePath) => ({
+      filePath: candidatePath,
+      parsed: parseAssetPath(candidatePath, options.supportedExtensions, options.platform),
+    }))
+    .filter(
+      (entry): entry is { filePath: string; parsed: ParsedAssetPath } =>
+        entry.parsed !== undefined &&
+        entry.parsed.name === parsedInput.name &&
+        entry.parsed.type === parsedInput.type,
+    );
+  // Metro's rule: the platform's own files form the group when there are any;
+  // otherwise the generic ones do. They are never mixed.
+  const platformCandidates = candidates.filter((entry) => entry.parsed.platform !== undefined);
+  const groupCandidates =
+    platformCandidates.length > 0
+      ? platformCandidates
+      : candidates.filter((entry) => entry.parsed.platform === undefined);
   const variants = await Promise.all(
-    entries
-      .filter((entry) => entry.isFile())
-      .map((entry) => path.join(directory, entry.name))
-      .map((candidatePath) => ({
-        filePath: candidatePath,
-        parsed: parseAssetPath(candidatePath, options.supportedExtensions),
-      }))
-      .filter(
-        (entry): entry is { filePath: string; parsed: ParsedAssetPath } =>
-          entry.parsed !== undefined &&
-          entry.parsed.name === parsedInput.name &&
-          entry.parsed.type === parsedInput.type,
-      )
-      .map(async ({ filePath: variantPath, parsed }) => {
-        assertValidAssetScale(parsed.scale, variantPath);
-        const buffer = await readFile(variantPath);
-        return {
-          filePath: variantPath,
-          hash: createSha1(buffer),
-          scale: parsed.scale,
-          size: buffer.byteLength,
-        } satisfies AssetVariantDescriptor;
-      }),
+    groupCandidates.map(async ({ filePath: variantPath, parsed }) => {
+      assertValidAssetScale(parsed.scale, variantPath);
+      const buffer = await readFile(variantPath);
+      return {
+        filePath: variantPath,
+        hash: createSha1(buffer),
+        scale: parsed.scale,
+        size: buffer.byteLength,
+      } satisfies AssetVariantDescriptor;
+    }),
   );
 
+  // Within a scale, a file that names it (`icon@1x.png`) comes before one that
+  // does not (`icon.png`), so it is the one kept: expo-router ships a 4x copy as
+  // `clear-icon.png` next to the real `clear-icon@1x.png`, and a Metro release
+  // build ends up with the latter too.
   variants.sort(
-    (left, right) => left.scale - right.scale || left.filePath.localeCompare(right.filePath),
+    (left, right) =>
+      left.scale - right.scale ||
+      Number(hasScaleSuffix(right.filePath)) - Number(hasScaleSuffix(left.filePath)) ||
+      left.filePath.localeCompare(right.filePath),
   );
   const dedupedVariants = dedupeAssetScales(variants, filePath, options.onWarning);
 
@@ -172,6 +224,23 @@ export async function collectAssetGroup(
   };
 }
 
+/**
+ * The directory of a build's output that holds an asset's files: its
+ * `httpServerLocation` without the leading slash. React Native looks for an
+ * embedded asset at that path, next to the bundle.
+ */
+export function getAssetOutputDirectory(httpServerLocation: string): string {
+  return httpServerLocation.replace(/^\/+/u, "") || "assets";
+}
+
+/** `<name>@<scale>x.<type>`, with no suffix at 1x, as Metro and React Native name a scaled file. */
+export function getScaledAssetFileName(
+  asset: { name: string; type: string },
+  scale: number,
+): string {
+  return `${asset.name}${scale === 1 ? "" : `@${String(scale)}x`}.${asset.type}`;
+}
+
 export function createAssetServerUrl(options: {
   baseUrl?: string;
   descriptor: Pick<NormalizedAssetDescriptor, "hash" | "httpServerLocation" | "name" | "type">;
@@ -205,8 +274,9 @@ export function isSupportedAssetFile(
 export function parseAssetPath(
   filePath: string,
   supportedExtensions: readonly string[] = supportedAssetExtensions,
+  platform?: string | null,
 ): ParsedAssetPath | undefined {
-  const parsed = parseScaleFromAssetFileName(filePath, supportedExtensions);
+  const parsed = parseScaleFromAssetFileName(filePath, supportedExtensions, platform);
 
   if (!parsed) {
     return undefined;
@@ -214,32 +284,53 @@ export function parseAssetPath(
 
   return {
     name: parsed.name,
+    ...(parsed.platform === undefined ? {} : { platform: parsed.platform }),
     scale: parsed.scale,
     type: parsed.extension,
   };
 }
 
+// Metro's asset file names: `<name>[@<scale>x][.<platform>].<extension>`. The
+// segment before the extension is a platform suffix only when it names the
+// platform being bundled; otherwise it stays part of the name, so
+// `icon@2x.android.png` is a different asset (named `icon@2x.android`) when
+// bundling for iOS.
+const ASSET_FILE_NAME = /^(?<base>.+?)(?:\.(?<suffix>[^.]+))?\.(?<extension>[^.]+)$/u;
+const ASSET_SCALE_SUFFIX = /^(?<name>.+?)(?:@(?<scale>\d+(?:\.\d+)?)x)?$/u;
+
+function hasScaleSuffix(filePath: string) {
+  return /@\d+(?:\.\d+)?x(?:\.[^.]+)?\.[^.]+$/u.test(path.basename(filePath));
+}
+
 export function parseScaleFromAssetFileName(
   filePath: string,
   supportedExtensions: readonly string[] = supportedAssetExtensions,
-): { extension: string; name: string; scale: number } | null {
+  platform?: string | null,
+): { extension: string; name: string; platform?: string; scale: number } | null {
   if (!isSupportedAssetFile(filePath, supportedExtensions)) {
     return null;
   }
 
-  const extension = path.extname(filePath).slice(1).toLowerCase();
-  const fileName = path.basename(filePath, path.extname(filePath));
-  const match = fileName.match(/^(?<name>.+?)(?:@(?<scale>\d+(?:\.\d+)?)x)?$/u);
-  const name = match?.groups?.name;
+  const groups = ASSET_FILE_NAME.exec(path.basename(filePath))?.groups;
+  if (!groups?.base || !groups.extension) {
+    return null;
+  }
+
+  const { base, suffix } = groups;
+  const platformSuffix = suffix !== undefined && suffix === platform ? suffix : undefined;
+  const baseName = suffix === undefined || platformSuffix ? base : `${base}.${suffix}`;
+  const scaleGroups = ASSET_SCALE_SUFFIX.exec(baseName)?.groups;
+  const name = scaleGroups?.name;
 
   if (!name) {
     return null;
   }
 
   return {
-    extension,
+    extension: groups.extension.toLowerCase(),
     name,
-    scale: match?.groups?.scale ? Number(match.groups.scale) : 1,
+    ...(platformSuffix === undefined ? {} : { platform: platformSuffix }),
+    scale: scaleGroups.scale ? Number(scaleGroups.scale) : 1,
   };
 }
 
@@ -266,9 +357,12 @@ function createAssetGroupHash(
  * tolerates an asset group declaring the same scale more than once (e.g. a
  * suffix-less `icon.png` next to an explicit `icon@1x.png`), so vifx does too:
  * the first variant per scale wins and the rest are dropped. The input is
- * pre-sorted by scale then path, so "first" is deterministic and the resulting
- * bundle stays byte-stable. Each dropped scale is reported through `onWarning`
- * for callers that wire a logger; with no callback the de-dup is silent.
+ * pre-sorted by scale, then files that name their scale first, then path, so
+ * "first" is deterministic and the resulting bundle stays byte-stable. A
+ * dropped variant whose content differs from the
+ * kept one is reported through `onWarning` for callers that wire a logger; an
+ * identical copy under another name (expo-router ships `clear-icon.png` next to
+ * `clear-icon@1x.png`) is not a conflict and is dropped silently.
  */
 function dedupeAssetScales(
   variants: readonly AssetVariantDescriptor[],
@@ -279,10 +373,13 @@ function dedupeAssetScales(
   const droppedByScale = new Map<number, string[]>();
 
   for (const variant of variants) {
-    if (keptByScale.has(variant.scale)) {
-      const dropped = droppedByScale.get(variant.scale) ?? [];
-      dropped.push(variant.filePath);
-      droppedByScale.set(variant.scale, dropped);
+    const kept = keptByScale.get(variant.scale);
+    if (kept) {
+      if (kept.hash !== variant.hash) {
+        const dropped = droppedByScale.get(variant.scale) ?? [];
+        dropped.push(variant.filePath);
+        droppedByScale.set(variant.scale, dropped);
+      }
       continue;
     }
 
@@ -322,6 +419,15 @@ function assertValidAssetScale(scale: number, filePath: string) {
   });
 }
 
+/**
+ * Metro's location: `/assets` followed by the asset's directory relative to the
+ * project root, so `assets/images/logo.png` is served from
+ * `/assets/assets/images` and two files with the same name in different
+ * directories never meet. For a directory outside the project root (a hoisted
+ * monorepo dependency), Metro keeps the `../` segments and React Native turns
+ * each into `_` when it loads the asset next to the bundle; Vifx writes the `_`
+ * form directly, so dev-server URLs never carry `..` either.
+ */
 function createHttpServerLocation(projectRoot: string, directory: string): string {
   const relativeDirectory = toPosixPath(path.relative(projectRoot, directory));
 
@@ -329,7 +435,8 @@ function createHttpServerLocation(projectRoot: string, directory: string): strin
     return "/assets";
   }
 
-  return relativeDirectory === "assets" ? "/assets" : `/assets/${relativeDirectory}`;
+  const location = `${relativeDirectory}/`.replaceAll("../", "_").replace(/\/$/u, "");
+  return `/assets/${location}`;
 }
 
 function createSha1(buffer: Uint8Array): string {

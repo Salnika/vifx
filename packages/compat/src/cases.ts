@@ -250,7 +250,8 @@ export const compatCases: CompatCase[] = [
       assetPath: "assets/logo.svg",
       fileCount: 1,
       height: 32,
-      httpServerLocation: "/assets",
+      // Metro: `/assets` followed by the file's directory (`assets/`).
+      httpServerLocation: "/assets/assets",
       name: "logo",
       scales: [1],
       type: "svg",

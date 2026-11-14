@@ -507,6 +507,9 @@ importers:
       '@vifx/errors':
         specifier: workspace:*
         version: link:../errors
+      '@vifx/hermes-tools':
+        specifier: workspace:*
+        version: link:../hermes-tools
       '@vifx/metro-inspect':
         specifier: workspace:*
         version: link:../metro-inspect

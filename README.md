@@ -8,7 +8,7 @@ Vite and Rolldown bundling for React Native and Expo, without Metro.
 Vifx builds your iOS and Android bundles, serves an Expo Go dev server with Fast Refresh, and produces the release bundle and assets that Xcode and Gradle embed. Your app is a real Rolldown module graph, so any Vite or Rollup plugin can run against it through a `vite.config.vifx.ts`.
 
 > [!WARNING]
-> Vifx is pre-1.0 and experimental. It is validated on one production Expo SDK 54 app (about 2,000 modules) on iOS and Android; Expo SDK 55 to 58 are experimental. Expect rough edges, and keep Metro around for anything Vifx does not cover yet. See [Project status](https://salnika.github.io/vifx/guide/status).
+> Vifx is pre-1.0 and experimental. It is validated on one production Expo SDK 54 app (about 2,000 modules) and on the Expo SDK 58 default template, on iOS and Android; Expo SDK 55 to 57 are experimental. Expect rough edges, and keep Metro around for anything Vifx does not cover yet. See [Project status](https://salnika.github.io/vifx/guide/status).
 
 ## Features
 
@@ -70,6 +70,8 @@ To make `expo prebuild` route the Xcode and Gradle bundle phases through Vifx, a
 
 For a bare React Native project, `vifx init . --write` writes the config and `vifx dev . --platform ios` serves the Metro-compatible dev server the React Native CLI expects.
 
+To let an AI coding agent do the migration, give it the [migration prompt](https://salnika.github.io/vifx/guide/agent-migration): it sets Vifx up, compares its release bundle with Metro's, runs the app in Expo Go and reports what is left.
+
 ## Configuration
 
 `vifx.config.ts` (also `.mts`, `.js`, `.mjs`) is optional; without it Vifx runs from defaults rooted at the current directory.
@@ -102,7 +104,7 @@ export default defineConfig({ plugins: [svgr()] });
 
 The documentation site is at **[salnika.github.io/vifx](https://salnika.github.io/vifx/)** (sources in [`apps/docs`](./apps/docs)):
 
-- [Getting started](https://salnika.github.io/vifx/guide/getting-started) and [migrating from Metro](https://salnika.github.io/vifx/guide/migration)
+- [Getting started](https://salnika.github.io/vifx/guide/getting-started), [migrating from Metro](https://salnika.github.io/vifx/guide/migration), and [migrating with an AI agent](https://salnika.github.io/vifx/guide/agent-migration)
 - [Dev server and Fast Refresh](https://salnika.github.io/vifx/guide/dev-server)
 - [CLI](https://salnika.github.io/vifx/reference/cli) and [configuration](https://salnika.github.io/vifx/reference/config) reference
 - [Vifx vs Metro](https://salnika.github.io/vifx/reference/comparisons) and the [library support matrix](https://salnika.github.io/vifx/reference/support-matrix)

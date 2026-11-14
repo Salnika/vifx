@@ -16,7 +16,7 @@ export interface DetectHermesCompilerOptions {
 export interface HermesCompilerDetection {
   available: boolean;
   path: string | null;
-  source: "cwd" | "env" | "explicit" | "path" | "unavailable";
+  source: "cwd" | "env" | "explicit" | "path" | "react-native" | "unavailable";
 }
 
 export interface CompileHermesBytecodeOptions {
@@ -24,6 +24,11 @@ export interface CompileHermesBytecodeOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   inputBundlePath: string;
+  /**
+   * Optimize the bytecode (`-O`), as React Native's release builds do. Off by
+   * default, which keeps hermesc's own default.
+   */
+  optimize?: boolean;
   outputBytecodePath: string;
   sourceMapPath?: string;
 }
@@ -85,6 +90,68 @@ async function findInWorkingTree(startDirectory: string) {
   }
 }
 
+// hermesc's directory for this machine in the npm packages that ship it.
+const HERMESC_PLATFORM_DIRECTORIES: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: "osx-bin",
+  linux: "linux64-bin",
+  win32: "win64-bin",
+};
+
+async function findPackageDirectory(fromDirectory: string, packageName: string) {
+  let currentDirectory = path.resolve(fromDirectory);
+
+  while (true) {
+    const candidate = path.join(currentDirectory, "node_modules", packageName);
+    if (await fileExists(path.join(candidate, "package.json"))) {
+      // The real path, so that a dependency of the package is found next to it
+      // on an isolated install (pnpm).
+      return await fs.realpath(candidate);
+    }
+
+    const parentDirectory = path.dirname(currentDirectory);
+    if (parentDirectory === currentDirectory) {
+      return null;
+    }
+
+    currentDirectory = parentDirectory;
+  }
+}
+
+/**
+ * The compiler the project's React Native compiles its release bundles with,
+ * found the way its Xcode and Gradle scripts look for it: the `hermes-compiler`
+ * package that react-native depends on (current versions), then
+ * `react-native/sdks/hermesc` (older ones). Its bytecode is the version the
+ * app's Hermes runs, which a hermesc found on PATH does not guarantee.
+ */
+async function findReactNativeHermesCompiler(startDirectory: string) {
+  const platformDirectory = HERMESC_PLATFORM_DIRECTORIES[process.platform];
+  const reactNativeDirectory = await findPackageDirectory(startDirectory, "react-native");
+  if (!platformDirectory || !reactNativeDirectory) {
+    return null;
+  }
+
+  const binaryName = process.platform === "win32" ? "hermesc.exe" : "hermesc";
+  const hermesCompilerDirectory = await findPackageDirectory(
+    reactNativeDirectory,
+    "hermes-compiler",
+  );
+  const candidates = [
+    ...(hermesCompilerDirectory
+      ? [path.join(hermesCompilerDirectory, "hermesc", platformDirectory, binaryName)]
+      : []),
+    path.join(reactNativeDirectory, "sdks", "hermesc", platformDirectory, binaryName),
+  ];
+
+  for (const candidate of candidates) {
+    if (await isExecutable(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 export async function detectHermesCompiler(
   options: DetectHermesCompilerOptions = {},
 ): Promise<HermesCompilerDetection> {
@@ -110,6 +177,15 @@ export async function detectHermesCompiler(
       available: true,
       path: environmentCompiler,
       source: "env",
+    };
+  }
+
+  const reactNativeCompiler = await findReactNativeHermesCompiler(options.cwd ?? process.cwd());
+  if (reactNativeCompiler) {
+    return {
+      available: true,
+      path: reactNativeCompiler,
+      source: "react-native",
     };
   }
 
@@ -172,7 +248,13 @@ export async function compileHermesBytecode(
   }
 
   await fs.mkdir(path.dirname(outputBytecodePath), { recursive: true });
-  const command = [compiler.path, "-emit-binary", "-out", outputBytecodePath];
+  const command = [
+    compiler.path,
+    "-emit-binary",
+    ...(options.optimize ? ["-O"] : []),
+    "-out",
+    outputBytecodePath,
+  ];
 
   if (sourceMapPath) {
     command.push("-output-source-map");

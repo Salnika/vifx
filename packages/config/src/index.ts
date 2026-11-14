@@ -1,5 +1,5 @@
-import { access } from "node:fs/promises";
-import { resolve } from "node:path";
+import { access, copyFile, readFile, rm } from "node:fs/promises";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { VIFX_DOCS_BASE_URL, VifxError, toVifxError } from "@vifx/errors";
 import type {
@@ -272,11 +272,57 @@ async function importConfigModule(filePath: string, cwd: string) {
   }
 
   try {
-    return await import(`${pathToFileURL(filePath).href}?t=${Date.now()}`);
+    return await importConfigFile(filePath);
   } finally {
     if (shouldRestoreCwd) {
       process.chdir(previousCwd);
     }
+  }
+}
+
+/**
+ * Node reads a `.ts` file outside a `"type": "module"` package as CommonJS
+ * first, then warns (MODULE_TYPELESS_PACKAGE_JSON) and reads it again as ESM.
+ * Every Expo app hits that: its package.json has no `type`. A `.mts` copy next
+ * to the config is ESM from the start and keeps the config's relative imports.
+ */
+async function importConfigFile(filePath: string) {
+  const source = extname(filePath) === ".ts" ? await readFile(filePath, "utf8") : "";
+  const esmSyntax = /^\s*(?:import|export)\s/mu.test(source);
+  if (!esmSyntax || (await isInModulePackage(filePath))) {
+    return await import(`${pathToFileURL(filePath).href}?t=${Date.now()}`);
+  }
+
+  const copyPath = join(
+    dirname(filePath),
+    `.${basename(filePath, ".ts")}.${String(process.pid)}.${String(Date.now())}.mts`,
+  );
+  await copyFile(filePath, copyPath);
+  try {
+    return await import(pathToFileURL(copyPath).href);
+  } finally {
+    await rm(copyPath, { force: true });
+  }
+}
+
+async function isInModulePackage(filePath: string) {
+  let directory = dirname(resolve(filePath));
+
+  while (true) {
+    const manifest = await readFile(join(directory, "package.json"), "utf8").catch(() => null);
+    if (manifest !== null) {
+      try {
+        return (JSON.parse(manifest) as { type?: unknown }).type === "module";
+      } catch {
+        return false;
+      }
+    }
+
+    const parent = dirname(directory);
+    if (parent === directory) {
+      return false;
+    }
+    directory = parent;
   }
 }
 

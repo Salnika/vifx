@@ -26,6 +26,11 @@ test("detects supported assets and parses scale suffixes", () => {
   expect(isSupportedAssetFile("/app/assets/icon.png")).toBe(true);
   expect(isSupportedAssetFile("/app/assets/Inter.ttf")).toBe(true);
   expect(isSupportedAssetFile("/app/assets/notes.txt")).toBe(false);
+  // Metro's and Expo's defaults: Android vector drawables (expo-router 58
+  // requires them), audio, documents, web fonts and expo-sqlite databases.
+  for (const asset of ["arrow.xml", "ding.mp3", "terms.pdf", "Inter.woff2", "seed.db"]) {
+    expect(isSupportedAssetFile(`/app/assets/${asset}`)).toBe(true);
+  }
 
   expect(parseAssetPath("/app/assets/icon@2x.png")).toEqual({
     name: "icon",
@@ -59,7 +64,8 @@ test("groups scaled PNG assets into a deterministic normalized descriptor", asyn
 
   expect(firstDescriptor).toMatchObject({
     canonicalFilePath: path.join(projectRoot, "assets/icon.png"),
-    httpServerLocation: "/assets",
+    // Metro's location: `/assets` followed by the file's directory.
+    httpServerLocation: "/assets/assets",
     height: 12,
     name: "icon",
     scales: [1, 2, 3],
@@ -106,20 +112,40 @@ test("tolerates duplicate scale variants by de-duping and warning (matches Metro
   });
 
   // Both files resolve to scale 1x; only one variant survives, deterministically
-  // the first by sorted path ("icon.png" sorts before "icon@1x.png").
+  // the one that names its scale ("icon@1x.png"), as in a Metro release build.
   expect(descriptor.scales).toEqual([1]);
   expect(descriptor.variants).toHaveLength(1);
-  expect(descriptor.filePaths).toEqual([path.join(projectRoot, "assets/icon.png")]);
-  expect(descriptor.canonicalFilePath).toBe(path.join(projectRoot, "assets/icon.png"));
+  expect(descriptor.filePaths).toEqual([path.join(projectRoot, "assets/icon@1x.png")]);
+  expect(descriptor.canonicalFilePath).toBe(path.join(projectRoot, "assets/icon@1x.png"));
 
   // The duplicate is reported, not thrown.
   expect(warnings).toHaveLength(1);
   expect(warnings[0]?.conflict).toMatchObject({
-    keptFilePath: path.join(projectRoot, "assets/icon.png"),
-    droppedFilePaths: [path.join(projectRoot, "assets/icon@1x.png")],
+    keptFilePath: path.join(projectRoot, "assets/icon@1x.png"),
+    droppedFilePaths: [path.join(projectRoot, "assets/icon.png")],
     scale: 1,
   });
   expect(warnings[0]?.message).toContain("scale 1x");
+});
+
+test("drops an identical copy of a variant without a warning", async () => {
+  const projectRoot = await createTempProject();
+
+  // expo-router ships clear-icon.png next to a byte-identical clear-icon@1x.png.
+  await writeBinaryFiles(projectRoot, {
+    "assets/clear-icon.png": createPngHeader(10, 12),
+    "assets/clear-icon@1x.png": createPngHeader(10, 12),
+  });
+
+  const warnings: { conflict: AssetScaleConflict; message: string }[] = [];
+  const descriptor = await collectAssetGroup({
+    filePath: path.join(projectRoot, "assets/clear-icon.png"),
+    projectRoot,
+    onWarning: (warning) => warnings.push(warning),
+  });
+
+  expect(descriptor.variants).toHaveLength(1);
+  expect(warnings).toEqual([]);
 });
 
 test("de-dupes duplicate scales deterministically even without an onWarning callback", async () => {
@@ -139,7 +165,7 @@ test("de-dupes duplicate scales deterministically even without an onWarning call
 
   expect(descriptor.scales).toEqual([1]);
   expect(descriptor.variants).toHaveLength(1);
-  expect(descriptor.filePaths).toEqual([path.join(projectRoot, "assets/icon.png")]);
+  expect(descriptor.filePaths).toEqual([path.join(projectRoot, "assets/icon@1x.png")]);
 });
 
 test("collects font assets and builds dev-server URLs", async () => {

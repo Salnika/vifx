@@ -62,7 +62,7 @@ Metro is the native bundler; web for Expo goes through a separate Metro-web / re
 
 vifx emits release builds as a single scope-hoisted bundle wrapped in an IIFE (`format: "iife"`, `inlineDynamicImports`, `entryFileNames: "index.bundle"`), because Hermes and JSC evaluate the bundle in a non-module context. This keeps Rolldown's cross-module dead-code elimination and inlining. On the benchmark app, the release JS bundle is 3.37 MB against Metro's 3.54 MB (−4.9 %); gzipped, both are 0.88 MB.
 
-The release source map lists 1,629 modules against Metro's 2,007. Part of that difference is tree-shaking: Metro ships all of `@expo/vector-icons`' glyph maps, where vifx keeps the ones the app uses. Part of it is a known gap in vifx: `expo-router` and `@react-navigation/*` modules have no entry in its source map, although their code is in the bundle.
+The release source map lists 1,629 modules against Metro's 2,007. Part of that difference is tree-shaking: Metro ships all of `@expo/vector-icons`' glyph maps, where vifx keeps the ones the app uses. Part of it was a vifx defect, since fixed: `expo-router` and `@react-navigation/*` modules had no entry in its source map, although their code was in the bundle. These figures predate the fix.
 
 Metro's output **is** the `__d`/`__r` module registry even in release — every module stays a separately-wrapped CommonJS factory behind the registry indirection. There is no cross-module scope hoisting; Metro does within-module minification and optional inline-requires only. vifx can serialize to that registry layout too (its `metro` module format); in a June 2026 measurement, that layout produced larger Hermes bytecode than vifx's hoisted output, which is consistent with the registry giving up cross-module hoisting.
 

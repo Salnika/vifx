@@ -45,7 +45,7 @@ Native is the primary target and web is a companion preview built from the same 
 
 ## Status
 
-Vifx is pre-1.0 and experimental. It is validated on one Expo SDK 54 app (about 2,000 modules) on iOS and Android; Expo SDK 55 to 58 are experimental. Keep Metro available for anything Vifx does not cover yet. See [Project Status](/guide/status) for what has been verified and what is still open.
+Vifx is pre-1.0 and experimental. It is validated on one Expo SDK 54 app (about 2,000 modules) and on the Expo SDK 58 default template, on iOS and Android; Expo SDK 55 to 57 are experimental. Keep Metro available for anything Vifx does not cover yet. See [Project Status](/guide/status) for what has been verified and what is still open.
 
 ## Quick start
 

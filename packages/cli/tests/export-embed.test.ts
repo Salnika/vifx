@@ -4,7 +4,10 @@ import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import { afterEach } from "vite-plus/test";
 import { parseExportEmbedArgs } from "../src/commands/export-embed.ts";
-import { rewriteTrailingSourceMapComment } from "../src/commands/export-embed.ts";
+import {
+  rebaseSourceMapSources,
+  rewriteTrailingSourceMapComment,
+} from "../src/commands/export-embed.ts";
 import { executeCli } from "../src/index.ts";
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, "../../../fixtures");
@@ -266,13 +269,38 @@ test("export:embed writes the Android bundle, source map, and prod assets", asyn
     "//# sourceMappingURL=index.android.bundle.map",
   );
 
+  // raw/keep.xml keeps the assets from Android's resource shrinking, as Metro does.
   expect(await listFilesRecursively(assetsDest)).toEqual([
     "assetmap.json",
     "drawable-mdpi/src_assets_icon.svg",
+    "raw/keep.xml",
   ]);
 
-  const sourceMap = JSON.parse(await readFile(sourcemapOutput, "utf8")) as { version: number };
+  const sourceMap = JSON.parse(await readFile(sourcemapOutput, "utf8")) as {
+    sources: string[];
+    version: number;
+  };
   expect(sourceMap.version).toBe(3);
+  // Sources stay relative to the written map, so tools open the real files.
+  expect(
+    sourceMap.sources.map((source) => path.resolve(path.dirname(sourcemapOutput), source)),
+  ).toContain(path.join(projectRoot, "index.js"));
+});
+
+test("rebaseSourceMapSources re-relativizes sources for the map's new location", () => {
+  const map = JSON.stringify({
+    mappings: "",
+    names: [],
+    sourceRoot: "",
+    sources: ["../../../src/app.tsx", "/abs/vendor.js", "webpack://pkg/file.js", ""],
+    version: 3,
+  });
+
+  expect(
+    JSON.parse(rebaseSourceMapSources(map, "/project/.vifx/export-embed/ios", "/project/build/ios"))
+      .sources,
+  ).toEqual(["../../src/app.tsx", "/abs/vendor.js", "webpack://pkg/file.js", ""]);
+  expect(rebaseSourceMapSources(map, "/same", "/same")).toBe(map);
 });
 
 test("export-embed alias writes the iOS asset layout", async () => {

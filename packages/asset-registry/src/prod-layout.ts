@@ -50,6 +50,8 @@ interface AndroidDensity {
 
 export const PROD_ASSET_MAP_FILE_NAME = "assetmap.json";
 
+const ANDROID_KEEP_FILE_PATH = "raw/keep.xml";
+
 const ANDROID_DENSITIES: readonly AndroidDensity[] = [
   { density: "mdpi", scale: 1 },
   { density: "hdpi", scale: 1.5 },
@@ -132,6 +134,31 @@ export function getAssetDestPathIOS(
   return `${basePath}/${asset.name}${suffix}.${asset.type}`;
 }
 
+const IOS_ASSET_SCALES: readonly number[] = [1, 2, 3];
+
+/**
+ * Mirrors Metro's and Expo CLI's filterPlatformAssetScales: an iOS app only
+ * ships the 1x, 2x and 3x images (iPhones have no 4x screen), while Android
+ * keeps every density. When an iOS asset has none of those scales, the
+ * smallest scale above 3x is kept, else the largest one.
+ */
+export function filterPlatformAssetScales(
+  platform: ProdAssetPlatform,
+  scales: readonly number[],
+): number[] {
+  if (platform !== "ios") {
+    return [...scales];
+  }
+
+  const allowed = scales.filter((scale) => IOS_ASSET_SCALES.includes(scale));
+  if (allowed.length > 0 || scales.length === 0) {
+    return allowed;
+  }
+
+  const largerScale = scales.find((scale) => scale > IOS_ASSET_SCALES.at(-1)!);
+  return [largerScale ?? scales.at(-1)!];
+}
+
 export function getProdAssetDestPath(
   platform: ProdAssetPlatform,
   asset: Pick<ProdLayoutAssetInput, "httpServerLocation" | "name" | "type">,
@@ -169,7 +196,14 @@ export async function writeProdAssets(
     assertHasVariants(asset);
 
     const files: ProdAssetFileOutput[] = [];
-    const variants = [...asset.variants].sort((left, right) => left.scale - right.scale);
+    const sortedVariants = [...asset.variants].sort((left, right) => left.scale - right.scale);
+    const keptScales = new Set(
+      filterPlatformAssetScales(
+        options.platform,
+        sortedVariants.map((variant) => variant.scale),
+      ),
+    );
+    const variants = sortedVariants.filter((variant) => keptScales.has(variant.scale));
 
     for (const variant of variants) {
       const destinationPath = getProdAssetDestPath(options.platform, asset, variant.scale);
@@ -197,6 +231,23 @@ export async function writeProdAssets(
       scales: variants.map((variant) => variant.scale),
       type: asset.type,
     });
+  }
+
+  // Like Metro and Expo CLI, list every asset in `raw/keep.xml`: Android's
+  // resource shrinker only sees references from code and XML, so without it a
+  // release build that shrinks resources drops the images only JavaScript uses.
+  if (options.platform === "android" && outputs.length > 0) {
+    const keep = outputs.map(
+      (output) =>
+        `@${ANDROID_DRAWABLE_TYPES.has(output.type.toLowerCase()) ? "drawable" : "raw"}/${getAndroidResourceIdentifier(output)}`,
+    );
+    await mkdir(path.join(assetsDest, "raw"), { recursive: true });
+    await writeFile(
+      path.join(assetsDest, ANDROID_KEEP_FILE_PATH),
+      `<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="${keep.join(",")}" />`,
+      "utf8",
+    );
+    writtenFiles.push(ANDROID_KEEP_FILE_PATH);
   }
 
   const assetMapPath = path.join(assetsDest, PROD_ASSET_MAP_FILE_NAME);

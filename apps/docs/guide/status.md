@@ -1,10 +1,10 @@
 # Project Status
 
-Vifx is pre-1.0 and experimental. It has been validated on one Expo SDK 54 app, HNewsPro (about 2,000 modules), on iOS and Android. Expo SDK 55 to 58 are experimental tiers: no real app on those versions has been bundled with Vifx yet. Keep Metro available for anything Vifx does not cover. This page describes the project as of November 2026.
+Vifx is pre-1.0 and experimental. It has been validated on one production Expo SDK 54 app, HNewsPro (about 2,000 modules), on iOS and Android, and on the default Expo SDK 58 template in Expo Go on iOS and Android. Expo SDK 55 to 57 are experimental: release bundles of their default templates were built and compared with Metro's, but not run on a device. Keep Metro available for anything Vifx does not cover. This page describes the project as of November 2026.
 
 ## What works today
 
-HNewsPro loads in Expo Go from a Vifx-built bundle on iOS and Android, with the manifest, the bundle, the source map, assets, symbolication and reload messages served without Metro. The latest pass checked the server protocol on both platforms with `vifx expo smoke`, against a fresh install of the app with pnpm's default isolated layout, and ran the dev engine in Expo Go on an iOS simulator ([below](#expo-go-validation)).
+HNewsPro loads in Expo Go from a Vifx-built bundle on iOS and Android, with the manifest, the bundle, the source map, assets, symbolication and reload messages served without Metro. The latest pass checked the server protocol on both platforms with `vifx expo smoke`, against a fresh install of the app with pnpm's default isolated layout, and ran the dev engine in Expo Go on an iOS simulator ([below](#expo-go-validation)). On SDK 58, the default template runs in Expo Go on an iOS simulator and an Android emulator, Fast Refresh included ([below](#expo-sdk-55-to-58-validation)).
 
 - **Expo Go dev server.** `vifx expo dev --expo-go` serves `/`, `/manifest` and `/index.exp`, the bundle and source map routes, `/assets/*` (with path-traversal guards), `/status`, `POST /symbolicate`, React Native DevTools, and the `/message`, `/events` and `/hot` WebSockets. Fast Refresh runs on Rolldown's dev engine by default. See [Dev Server and Fast Refresh](/guide/dev-server).
 - **Release builds.** `vifx export:embed` accepts the flags of `expo export:embed` and `react-native bundle` and writes a scope-hoisted, Oxc-minified bundle, its source map and the production asset layout. `@vifx/expo-config-plugin` routes the Xcode and Gradle bundle phases through it. `vifx expo export` writes an Expo artifact directory.
@@ -22,15 +22,15 @@ HNewsPro loads in Expo Go from a Vifx-built bundle on iOS and Android, with the 
 | 55       | 0.83         | experimental |
 | 56       | 0.85         | experimental |
 | 57       | 0.86         | experimental |
-| 58       | 0.88         | experimental |
+| 58       | 0.88         | validated    |
 
-SDK 58 is the current Expo release. "Experimental" means fixtures, `vifx expo audit` and `vifx doctor` detection only: no real SDK 55 to 58 app has been bundled or run through Vifx yet. See the [support matrix](/reference/support-matrix#expo-sdk-support) for what each tier covers.
+SDK 58 is the current Expo release. Its tier rests on the default `create-expo-app` template, not on a production app. "Experimental" means fixtures, `vifx expo audit` and `vifx doctor` detection, and release bundles of the default template compared with Metro's; those SDKs were not run on a device. See the [support matrix](/reference/support-matrix#expo-sdk-support) for what each tier covers.
 
 ## Known gaps vs Expo CLI
 
 Ordered by how much they block using Vifx instead of `expo start`:
 
-1. **No real SDK 55 to 58 app validated.** The validated app is on SDK 54, four majors behind the current release. Bundling a real SDK 58 app is the next step.
+1. **No production app validated on SDK 55 to 58.** SDK 58 was validated with the default template only, SDK 55 to 57 were not run on a device, and no native release build (Xcode or Gradle through `vifx export:embed`) was run on SDK 55 to 58.
 2. **One platform per dev server.** Expo serves iOS and Android from one server (the `expo-platform` header or `?platform=`); Vifx starts one server per platform.
 3. **`/symbolicate` returns frames only**, with no `codeFrame` and no `collapse` flags, so LogBox shows no source snippet and does not dim library frames.
 4. **Manifest asset fields are rewritten in place** (`icon` becomes a URL); Expo keeps the path and adds `iconUrl` / `splash.imageUrl`.
@@ -38,6 +38,7 @@ Ordered by how much they block using Vifx instead of `expo start`:
 6. **The export layout differs from `npx expo export`** (`dist/expo/<platform>/index.bundle` instead of `dist/_expo/static/js/<platform>/entry-<hash>.hbc` with Expo's `metadata.json`), so `eas update --skip-bundler` cannot consume it.
 7. **`exports` conditions ignore the import kind**: `import` is always preferred over `require`, where Metro picks by `import` versus `require()`.
 8. No tunnel (`--tunnel`), no `i` / `a` keys to open a simulator, no typed-routes generation, and no API routes or server rendering.
+9. **A JSON file that a package `require`s becomes one getter per key.** Metro emits one object literal. expo-symbols' Android `symbols.json` (about 4,000 keys) is why the SDK 57 template's Android Hermes bytecode is 14 % larger than Metro's (iOS: 3 %).
 
 Also not done yet: the long tail of library compatibility (Reanimated worklets on native are the test case), and device end-to-end tests in CI.
 
@@ -67,9 +68,37 @@ Running in Expo Go found eight defects that no sandbox test had caught. Each one
 ### Still open
 
 - **Expo Go crashes on some full reloads of this app.** Of seven crash reports in the session, the five examined were four segmentation faults in expo-sqlite's native `closeDatabase` (FTS5 statement finalization on its async queue) and one in React Native's `Scheduler::uiManagerDidFinishTransaction`. HNewsPro opens an FTS5 database through `SQLiteProvider`, which closes it when the tree unmounts. Whether the same reloads crash when Metro serves the app is not known yet.
-- **Android was not exercised** with the dev engine, and the registry format (`--fast-refresh`) was not re-validated, `require()` of an asset included.
+- **The registry format (`--fast-refresh`) was not re-validated**, `require()` of an asset included. The dev engine has since run on Android with the SDK 58 template ([below](#expo-sdk-55-to-58-validation)).
 - **Stack frames inside a hot-patched module** are not yet symbolicated against the patch's own source map.
-- **`expo-router` and `@react-navigation/*` modules have no entry in Vifx's source map**, although their code is in the bundle, so their stack frames cannot be symbolicated.
+
+## Expo SDK 55 to 58 validation
+
+Each SDK's default template (`npx create-expo-app`, Expo Router with its routes in `src/app`) was set up with `vifx setup --expo-go`, then built by Metro and by Vifx.
+
+|                                                 | SDK 55            | SDK 56           | SDK 57           | SDK 58           |
+| ----------------------------------------------- | ----------------- | ---------------- | ---------------- | ---------------- |
+| Expo / React Native                             | 55.0.32 / 0.83.10 | 56.0.24 / 0.85.3 | 57.0.33 / 0.86.3 | 58.0.25 / 0.88.1 |
+| `vifx setup`, `vifx doctor`, `vifx expo export` | pass              | pass             | pass             | pass             |
+| `export:embed` asset tree, iOS and Android      | same as Metro     | same as Metro    | same as Metro    | same as Metro    |
+| `export:embed` cold build, iOS (Metro → Vifx)   | 10.1 → 4.2 s      | 6.6 → 4.1 s      | 6.9 → 4.2 s      | —                |
+| `export:embed` warm build, iOS (Metro → Vifx)   | 5.3 → 1.4 s       | 1.7 → 1.5 s      | 1.7 → 1.4 s      | —                |
+| Expo Go                                         | —                 | —                | —                | iOS and Android  |
+
+The asset trees differ from Metro's only by Vifx's extra `assetmap.json`. Build times are one run each, on an Apple M4 Pro; Android is within 0.2 s of iOS for Vifx. Warm release builds peak at 1.0 to 1.1 GB of memory against 0.4 to 0.7 GB for Metro.
+
+On SDK 58, the template ran in Expo Go 58.0.7 on an iPhone 17 simulator (iOS 26.5) and in Expo Go 58.0.5 on an Android 16 emulator: both tabs render and navigate, and an edit to `src/app/index.tsx` is applied by Fast Refresh (33 to 60 ms on iOS, about 300 ms on the Android emulator). A native release build was not completed: on the validation machine, Xcode stopped in Expo's own `ExpoModulesJSI` build script, before the bundle phase.
+
+### Defects found and fixed
+
+1. **Expo Go for Android started the app without Expo modules** (`Cannot read property 'EventEmitter' of undefined`). The manifest's scope key, `@vifx/<slug>`, made Expo Go treat it as unverified. Vifx now sends an anonymous scope key (`@anonymous/<slug>-<id>`), as Expo CLI does for a logged-out user.
+2. **React Native 0.88 moved its asset registry** to `react-native/asset-registry` and `hermesc` to the `hermes-compiler` package. Vifx finds both.
+3. **The SDK 58 template's layout**: routes in `src/app` and an `@/*` path alias. Setup, the router root and alias resolution handle it.
+4. **The release asset layout now follows Metro's**: platform variants, `/assets/<directory>` server locations, iOS scales 1x to 3x, Android `raw/keep.xml`, and Expo's asset extensions.
+5. **Babel ran without the Hermes engine hint**, so babel-preset-expo picked its Hermes V0 profile on SDK 56 and later (classes lowered, `@babel/runtime` helpers added). The SDK 57 iOS Hermes bytecode went from 8.3 % to 3.3 % larger than Metro's, the Android one from 19.4 % to 14.2 % (see gap 9 above).
+6. **Modules compiled through Vifx's transform id were missing from the bundle source map**: Expo Router, `@react-navigation/*`, and any package listed in `jsxInPackages`, so their frames could not be symbolicated. Rolldown drops the source map of a module whose id starts with a NUL byte, and the id no longer does. The SDK 55 iOS map went from 1,031 to 1,365 sources.
+7. **`export:embed --sourcemap-output` copied the map** without rebasing its relative `sources`, and **`--minify` was parsed but ignored**.
+8. **`vifx expo export` built development bundles** that contained the Expo Go compatibility mocks. It builds production bundles unless `--dev` is passed.
+9. **The React Compiler was not applied.** The SDK 58 template turns it on with `experiments.reactCompiler` in `app.json`, which Expo CLI passes to babel-preset-expo. Vifx now passes it the same way: the template's iOS release bundle has 35 of the compiler's cache markers, against 36 for Metro and 1 before.
 
 ## Benchmark summary
 
