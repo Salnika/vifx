@@ -17,7 +17,13 @@ import { readTextFileIfExists } from "./files.ts";
 export type MetroMigrationSeverity = "info" | "action" | "unsupported";
 
 /** Origin filename used for the relative `metro.config.js` discovery. */
-export type MetroConfigFilename = "metro.config.js" | "metro.config.cjs" | "metro.config.mjs";
+export type MetroConfigFilename =
+  | "metro.config.js"
+  | "metro.config.cjs"
+  | "metro.config.mjs"
+  | "metro.config.ts"
+  | "metro.config.cts"
+  | "metro.config.mts";
 
 /**
  * How the config was read.
@@ -96,10 +102,14 @@ export interface MetroConfigAnalysis {
   fixes: MetroConfigFixes;
 }
 
+// Metro's own search order (`loadConfig` in metro-config): JavaScript, then TypeScript.
 const METRO_CONFIG_FILENAMES: readonly MetroConfigFilename[] = [
   "metro.config.js",
   "metro.config.cjs",
   "metro.config.mjs",
+  "metro.config.ts",
+  "metro.config.cts",
+  "metro.config.mts",
 ];
 
 /**
@@ -148,6 +158,15 @@ const VIFX_DEFAULT_SOURCE_EXTS = new Set<string>(VIFX_DEFAULT_RESOLVER_EXTENSION
 
 /** Sentry's Metro integration (`getSentryExpoConfig`, `withSentryConfig`). */
 const SENTRY_METRO_CONFIG = /@sentry\/react-native\/metro\b/u;
+
+/** react-native-worklets' Metro integration for bundle mode, by import or by its polyfill path. */
+const WORKLETS_BUNDLE_MODE = /react-native-worklets[\\/]bundleMode\b/u;
+
+/** The serializer settings `getBundleModeMetroConfig` sets. */
+const WORKLETS_BUNDLE_MODE_SERIALIZER_KEYS = new Set([
+  "createModuleIdFactory",
+  "polyfillModuleNames",
+]);
 
 /** Babel transformers that ship with Expo and React Native: nothing to port. */
 const DEFAULT_BABEL_TRANSFORMER =
@@ -237,36 +256,56 @@ function extensionAdditions(values: unknown, ...excluded: ReadonlySet<string>[])
   return [...new Set(additions)];
 }
 
+/** The config a loaded module exports: an ES module's (or transpiled one's) default. */
+function exportedConfig(loaded: unknown): unknown {
+  if (typeof loaded === "object" && loaded !== null) {
+    const record = loaded as Record<PropertyKey, unknown>;
+    if (record["__esModule"] === true || record[Symbol.toStringTag] === "Module") {
+      return record["default"];
+    }
+  }
+  return loaded;
+}
+
+/**
+ * A require bound to the config's own path, so its relative and bare requires
+ * resolve correctly. Node loads ES modules and TypeScript through it too.
+ */
+function requireConfig(absolutePath: string): unknown {
+  const requireFromConfig = createRequire(absolutePath);
+  const resolvedId = requireFromConfig.resolve(absolutePath);
+  delete requireFromConfig.cache[resolvedId];
+  return exportedConfig(requireFromConfig(absolutePath));
+}
+
+async function importConfig(absolutePath: string): Promise<unknown> {
+  const imported = (await import(pathToFileURL(absolutePath).href)) as { default?: unknown };
+  return imported.default ?? imported;
+}
+
 /**
  * Attempt to evaluate the Metro config module and return its resolved object.
  *
- * The config's own `require`s (e.g. `expo/metro-config`,
- * `@react-native/metro-config`) resolve against the *target* project's
- * `node_modules`, which sit next to the config file, so evaluation usually
- * succeeds. `getDefaultConfig` and other side effects may still throw, so the
- * caller treats a `null` return as "fall back to static analysis".
+ * Loaded as Metro loads it: `require` first, then `import()` (an ES module
+ * with top-level await cannot be required). TypeScript configs rely on Node's
+ * type stripping, as with Metro. The config's own `require`s (e.g.
+ * `expo/metro-config`, `@react-native/metro-config`) resolve against the
+ * *target* project's `node_modules`, which sit next to the config file, so
+ * evaluation usually succeeds. `getDefaultConfig` and other side effects may
+ * still throw, so the caller treats a `null` return as "fall back to static
+ * analysis".
  */
 async function evaluateMetroConfig(absolutePath: string): Promise<RawMetroConfig | null> {
-  try {
-    const ext = path.extname(absolutePath);
-
-    if (ext === ".mjs") {
-      const imported = (await import(pathToFileURL(absolutePath).href)) as { default?: unknown };
-      const resolved: unknown = await Promise.resolve(imported.default ?? imported);
+  for (const load of [requireConfig, importConfig]) {
+    try {
+      const resolved: unknown = await Promise.resolve(load(absolutePath));
       return isPlainObject(resolved) ? (resolved as RawMetroConfig) : null;
+    } catch {
+      // Not loadable this way: try the next loader, then the static scan.
     }
-
-    // `.js`/`.cjs`: most Metro configs are CommonJS. Use a require bound to the
-    // config's own path so its relative/bare requires resolve correctly.
-    const requireFromConfig = createRequire(absolutePath);
-    const resolvedId = requireFromConfig.resolve(absolutePath);
-    delete requireFromConfig.cache[resolvedId];
-    const required: unknown = requireFromConfig(absolutePath);
-    const resolved: unknown = await Promise.resolve(required);
-    return isPlainObject(resolved) ? (resolved as RawMetroConfig) : null;
-  } catch {
-    return null;
   }
+
+  return null;
 }
 
 /** A copy of the compared fields, which a later config evaluation cannot mutate. */
@@ -404,6 +443,17 @@ function buildSerializerUnsupported(
     code: "VIFX_UNSUPPORTED_METRO_SERIALIZER",
     source: `${filename}:serializer`,
     suggestion: `Custom Metro serializer settings${settings} are not implemented in Vifx yet. Keep Metro for serializer-specific workflows for now.`,
+  };
+}
+
+function buildWorkletsBundleModeUnsupported(
+  filename: MetroConfigFilename,
+): MetroUnsupportedFeature {
+  return {
+    code: "VIFX_UNSUPPORTED_METRO_SERIALIZER",
+    source: `${filename}:serializer`,
+    suggestion:
+      "react-native-worklets bundle mode (getBundleModeMetroConfig) is not implemented in Vifx: bundle mode looks worklets up by their Metro module ids, which Vifx bundles do not have, so worklets are not expected to run. Keep Metro, or turn bundle mode off (getBundleModeMetroConfig and the bundleMode option of the worklets Babel plugin) if the app does not need it.",
   };
 }
 
@@ -583,12 +633,23 @@ function mapEvaluatedConfig(config: RawMetroConfig, context: MappingContext) {
     hints.push(buildResolveRequestHint(filename));
   }
 
+  let sentrySerializerReported = false;
   if (isPlainObject(config.serializer)) {
     const serializer = config.serializer;
     const baselineSerializer = isPlainObject(baseline?.serializer) ? baseline.serializer : null;
-    const changedKeys = Object.keys(serializer).filter(
+    let changedKeys = Object.keys(serializer).filter(
       (key) => baselineSerializer === null || !sameValue(serializer[key], baselineSerializer[key]),
     );
+    // Worklets bundle mode gets a finding of its own: its two settings are not
+    // listed again as generic serializer changes.
+    if (
+      asStringArray(serializer["polyfillModuleNames"]).some((name) =>
+        WORKLETS_BUNDLE_MODE.test(name),
+      )
+    ) {
+      unsupported.push(buildWorkletsBundleModeUnsupported(filename));
+      changedKeys = changedKeys.filter((key) => !WORKLETS_BUNDLE_MODE_SERIALIZER_KEYS.has(key));
+    }
     if (changedKeys.length > 0) {
       const sentry = changedKeys.some((key) => {
         const value = serializer[key];
@@ -597,6 +658,7 @@ function mapEvaluatedConfig(config: RawMetroConfig, context: MappingContext) {
           /sentry|debugid/iu.test(Function.prototype.toString.call(value))
         );
       });
+      sentrySerializerReported = sentry;
       unsupported.push(
         buildSerializerUnsupported(filename, {
           keys: baselineSerializer === null ? [] : changedKeys,
@@ -609,10 +671,7 @@ function mapEvaluatedConfig(config: RawMetroConfig, context: MappingContext) {
   // getSentryExpoConfig hands its Debug ID plugins to Expo's own serializer
   // (unstable_beforeAssetSerializationPlugins), which then compares equal to the
   // default one: the import is what gives it away.
-  if (
-    !unsupported.some((feature) => feature.code === "VIFX_UNSUPPORTED_METRO_SERIALIZER") &&
-    SENTRY_METRO_CONFIG.test(stripComments(context.source))
-  ) {
+  if (!sentrySerializerReported && SENTRY_METRO_CONFIG.test(stripComments(context.source))) {
     unsupported.push(buildSerializerUnsupported(filename, { keys: [], sentry: true }));
   }
 
@@ -702,6 +761,10 @@ function analyzeMetroConfigSource(source: string, filename: MetroConfigFilename)
 
   if (/\bresolveRequest\b/u.test(scrubbed)) {
     hints.push(buildResolveRequestHint(filename));
+  }
+
+  if (WORKLETS_BUNDLE_MODE.test(scrubbed) || /\bgetBundleModeMetroConfig\b/u.test(scrubbed)) {
+    unsupported.push(buildWorkletsBundleModeUnsupported(filename));
   }
 
   if (/\bserializer\b/u.test(scrubbed)) {

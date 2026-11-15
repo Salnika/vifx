@@ -288,7 +288,7 @@ npx vifx doctor ./my-app --fix
 | `--fix`  | Write the settings mapped from `metro.config.js` into `vifx.config.ts`: source extensions, asset extensions and module aliases. The file is edited in place; what cannot be edited safely is listed. |
 | `--json` | Emit pure JSON with no extra logs; with `--fix`, it includes what was written.                                                                                                                       |
 
-The Metro section compares `metro.config.js` with the config `expo/metro-config` or `@react-native/metro-config` builds on its own, so it lists only your project's changes. The report is colored on a color terminal and plain otherwise (pipes, `NO_COLOR`). Use `vifx doctor` to verify a project after migration.
+The Metro section reads the config file Metro would load (`metro.config.js`, `.cjs`, `.mjs`, `.ts`, `.cts` or `.mts`) and compares it with the config `expo/metro-config` or `@react-native/metro-config` builds on its own, so it lists only your project's changes. A TypeScript config loads through Node's type stripping. The report is colored on a color terminal and plain otherwise (pipes, `NO_COLOR`). Use `vifx doctor` to verify a project after migration.
 
 ### `vifx inspect`
 

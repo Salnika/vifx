@@ -296,6 +296,130 @@ test("flags getSentryExpoConfig, which keeps Expo's serializer function", async 
   expect(analysis.unsupported[0]?.suggestion).toContain("Sentry");
 });
 
+// Like react-native-worklets': module ids and a polyfill for bundle mode.
+const WORKLETS_BUNDLE_MODE_STUB = [
+  "exports.getBundleModeMetroConfig = (config) => {",
+  "  config.serializer.createModuleIdFactory = () => () => 0;",
+  "  config.serializer.polyfillModuleNames = [",
+  "    ...(config.serializer.polyfillModuleNames ?? []),",
+  '    __dirname + "/polyfills/prepareBundleMode.js",',
+  "  ];",
+  "  return config;",
+  "};",
+  "",
+].join("\n");
+
+const SENTRY_EXPO_CONFIG_STUB = [
+  'const { getDefaultConfig } = require("expo/metro-config");',
+  "exports.getSentryExpoConfig = (projectRoot) =>",
+  "  getDefaultConfig(projectRoot, { unstable_beforeAssetSerializationPlugins: [] });",
+  "",
+].join("\n");
+
+test("evaluates a TypeScript config, and reports worklets bundle mode and Sentry apart", async () => {
+  // Shaped like bluesky-social/social-app's: ES module syntax, type annotations,
+  // import.meta.dirname, Sentry's Expo config wrapped in worklets bundle mode.
+  const projectRoot = await createProject({
+    "node_modules/expo/metro-config.js": EXPO_METRO_CONFIG_STUB,
+    "node_modules/@sentry/react-native/metro.js": SENTRY_EXPO_CONFIG_STUB,
+    "node_modules/react-native-worklets/bundleMode/index.js": WORKLETS_BUNDLE_MODE_STUB,
+    "metro.config.ts": [
+      "import { getBundleModeMetroConfig } from 'react-native-worklets/bundleMode/index.js';",
+      "import { getSentryExpoConfig } from '@sentry/react-native/metro.js';",
+      "",
+      "type MetroConfig = { resolver: { assetExts: string[] } };",
+      "const config: MetroConfig = getSentryExpoConfig(import.meta.dirname);",
+      "config.resolver.assetExts = [...config.resolver.assetExts, 'lottie'];",
+      "",
+      "export default getBundleModeMetroConfig(config) as MetroConfig;",
+      "",
+    ].join("\n"),
+  });
+
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  expect(analysis.path).toBe("metro.config.ts");
+  expect(analysis.extraction).toBe("evaluated");
+  expect(analysis.baseline).toBe("expo");
+  expect(analysis.fixes.assetExtensions).toEqual(["lottie"]);
+  expect(analysis.hints.map((hint) => hint.source)).toEqual(["metro.config.ts:resolver.assetExts"]);
+  expect(analysis.unsupported.map((feature) => feature.code)).toEqual([
+    "VIFX_UNSUPPORTED_METRO_SERIALIZER",
+    "VIFX_UNSUPPORTED_METRO_SERIALIZER",
+  ]);
+  expect(analysis.unsupported[0]?.suggestion).toContain("react-native-worklets bundle mode");
+  expect(analysis.unsupported[0]?.suggestion).not.toContain("createModuleIdFactory");
+  expect(analysis.unsupported[1]?.suggestion).toContain("Sentry");
+});
+
+test("worklets bundle mode leaves other serializer changes reported", async () => {
+  const projectRoot = await createProject({
+    "node_modules/expo/metro-config.js": EXPO_METRO_CONFIG_STUB,
+    "node_modules/react-native-worklets/bundleMode/index.js": WORKLETS_BUNDLE_MODE_STUB,
+    "metro.config.js": [
+      'const { getDefaultConfig } = require("expo/metro-config");',
+      'const { getBundleModeMetroConfig } = require("react-native-worklets/bundleMode");',
+      "const config = getBundleModeMetroConfig(getDefaultConfig(__dirname));",
+      "config.serializer.getModulesRunBeforeMainModule = () => [];",
+      "module.exports = config;",
+      "",
+    ].join("\n"),
+  });
+
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  expect(analysis.unsupported).toHaveLength(2);
+  expect(analysis.unsupported[0]?.suggestion).toContain("react-native-worklets bundle mode");
+  expect(analysis.unsupported[1]?.suggestion).toContain("(getModulesRunBeforeMainModule)");
+});
+
+test(".cts and .mts configs are discovered", async () => {
+  const ctsProject = await createProject({
+    "metro.config.cts": [
+      "const config: { resolver: { sourceExts: string[] } } = { resolver: { sourceExts: ['mdx'] } };",
+      "module.exports = config;",
+      "",
+    ].join("\n"),
+  });
+  const mtsProject = await createProject({
+    "metro.config.mts": [
+      "const config: { resolver: { sourceExts: string[] } } = { resolver: { sourceExts: ['mdx'] } };",
+      "export default config;",
+      "",
+    ].join("\n"),
+  });
+
+  for (const [projectRoot, filename] of [
+    [ctsProject, "metro.config.cts"],
+    [mtsProject, "metro.config.mts"],
+  ] as const) {
+    const analysis = await analyzeMetroConfig(projectRoot);
+    expect(analysis.path).toBe(filename);
+    expect(analysis.extraction).toBe("evaluated");
+    expect(analysis.fixes.sourceExtensions).toEqual(["mdx"]);
+  }
+});
+
+test("a broken TypeScript config falls back to the static scan, which names bundle mode", async () => {
+  const projectRoot = await createProject({
+    "metro.config.ts": [
+      "import { getBundleModeMetroConfig } from 'react-native-worklets/bundleMode/index.js';",
+      "export default getBundleModeMetroConfig({ resolver: { assetExts: [",
+      "",
+    ].join("\n"),
+  });
+
+  const analysis = await analyzeMetroConfig(projectRoot);
+
+  expect(analysis.path).toBe("metro.config.ts");
+  expect(analysis.extraction).toBe("static");
+  expect(analysis.unsupported).toHaveLength(1);
+  expect(analysis.unsupported[0]?.suggestion).toContain("react-native-worklets bundle mode");
+  expect(
+    analysis.hints.some((entry) => entry.source === "metro.config.ts:resolver.assetExts"),
+  ).toBe(true);
+});
+
 test("does not report the default Expo or React Native Babel transformer", async () => {
   const projectRoot = await createProject({
     "metro.config.js": [
