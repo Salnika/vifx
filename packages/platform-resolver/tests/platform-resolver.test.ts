@@ -437,6 +437,258 @@ test("resolves a subpath directory through its own package.json", async () => {
   );
 });
 
+// What React Native's and Expo's Metro configs resolve on iOS and Android.
+const NATIVE_MAIN_FIELDS = ["react-native", "browser", "main"];
+
+function resolveNative(projectRoot: string, fromFile: string, specifier: string) {
+  return resolveReactNativeModule({
+    fromFile: path.join(projectRoot, fromFile),
+    mainFields: NATIVE_MAIN_FIELDS,
+    platform: "ios",
+    projectRoot,
+    specifier,
+  });
+}
+
+test("a string browser field is the entry when browser is one of the main fields", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "index.js": "export {};",
+    "node_modules/isomorphic/package.json": JSON.stringify({
+      browser: "./browser.js",
+      main: "./node.js",
+      name: "isomorphic",
+    }),
+    "node_modules/isomorphic/browser.js": "module.exports = 'browser';",
+    "node_modules/isomorphic/node.js": "module.exports = 'node';",
+  });
+
+  expect((await resolveNative(projectRoot, "index.js", "isomorphic")).filePath).toBe(
+    path.join(projectRoot, "node_modules/isomorphic/browser.js"),
+  );
+  const withoutBrowser = await resolveReactNativeModule({
+    fromFile: path.join(projectRoot, "index.js"),
+    mainFields: ["react-native", "main"],
+    platform: "ios",
+    projectRoot,
+    specifier: "isomorphic",
+  });
+  expect(withoutBrowser.filePath).toBe(path.join(projectRoot, "node_modules/isomorphic/node.js"));
+});
+
+test("a browser map replaces the main entry, as qrcode's does", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "index.js": "export {};",
+    // qrcode 1.5's own fields: its main entry is the Node.js one.
+    "node_modules/qrcode/package.json": JSON.stringify({
+      browser: { "./lib/index.js": "./lib/browser.js", fs: false },
+      main: "./lib/index.js",
+      name: "qrcode",
+    }),
+    "node_modules/qrcode/lib/browser.js": "exports.toCanvas = () => {};",
+    "node_modules/qrcode/lib/index.js": "module.exports = require('./server');",
+    // The same map matches a main written without `./` or its extension.
+    "node_modules/short-main/package.json": JSON.stringify({
+      browser: { "./lib/index.js": "./lib/browser.js" },
+      main: "lib/index",
+      name: "short-main",
+    }),
+    "node_modules/short-main/lib/browser.js": "module.exports = 'browser';",
+    "node_modules/short-main/lib/index.js": "module.exports = 'node';",
+  });
+
+  const qrcode = await resolveNative(projectRoot, "index.js", "qrcode");
+  expect(qrcode.filePath).toBe(path.join(projectRoot, "node_modules/qrcode/lib/browser.js"));
+  expect(qrcode.trace).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        message: 'Replaced the entry "./lib/index.js" with "./lib/browser.js".',
+      }),
+    ]),
+  );
+  expect((await resolveNative(projectRoot, "index.js", "short-main")).filePath).toBe(
+    path.join(projectRoot, "node_modules/short-main/lib/browser.js"),
+  );
+
+  // Without `browser` among the main fields, its map is not read either.
+  const nodeEntry = await resolveReactNativeModule({
+    fromFile: path.join(projectRoot, "index.js"),
+    mainFields: ["react-native", "main"],
+    platform: "ios",
+    projectRoot,
+    specifier: "qrcode",
+  });
+  expect(nodeEntry.filePath).toBe(path.join(projectRoot, "node_modules/qrcode/lib/index.js"));
+});
+
+test("a browser map replaces files of its package, imported from inside or by subpath", async () => {
+  const projectRoot = await createTempProject();
+  const lib = path.join(projectRoot, "node_modules/hybrid/lib");
+
+  await writeFiles(projectRoot, {
+    "index.js": "export {};",
+    "node_modules/hybrid/package.json": JSON.stringify({
+      browser: { "./lib/node-only.js": "./lib/browser-only.js", "./lib/server": false },
+      main: "./lib/index.js",
+      name: "hybrid",
+    }),
+    "node_modules/hybrid/lib/browser-only.js": "module.exports = 'browser';",
+    "node_modules/hybrid/lib/index.js": "require('./node-only'); require('./server');",
+    "node_modules/hybrid/lib/node-only.js": "module.exports = 'node';",
+    "node_modules/hybrid/lib/server.js": "module.exports = 'server';",
+  });
+
+  // A relative import inside the package; the key carries `.js`, the import does not.
+  expect(
+    (await resolveNative(projectRoot, "node_modules/hybrid/lib/index.js", "./node-only")).filePath,
+  ).toBe(path.join(lib, "browser-only.js"));
+  // The same file reached through a subpath of the package.
+  expect((await resolveNative(projectRoot, "index.js", "hybrid/lib/node-only")).filePath).toBe(
+    path.join(lib, "browser-only.js"),
+  );
+  // An absolute path is matched against the package it is in.
+  expect(
+    (await resolveNative(projectRoot, "index.js", path.join(lib, "node-only.js"))).filePath,
+  ).toBe(path.join(lib, "browser-only.js"));
+
+  // `false`: an empty module.
+  const server = await resolveNative(projectRoot, "node_modules/hybrid/lib/index.js", "./server");
+  expect(server.empty).toBe(true);
+  expect(server.filePath).toBe(path.join(lib, "server"));
+  expect((await resolveNative(projectRoot, "index.js", "hybrid/lib/server")).empty).toBe(true);
+});
+
+test("a browser map replaces a subpath before exports is read, as Metro does", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "index.js": "export {};",
+    // multiformats 13's fields for its sha2 hasher: the Node.js file imports `crypto`.
+    "node_modules/multiformats/package.json": JSON.stringify({
+      browser: {
+        "./dist/src/hashes/sha2.js": "./dist/src/hashes/sha2-browser.js",
+        "./hashes/sha2": "./dist/src/hashes/sha2-browser.js",
+      },
+      exports: {
+        "./hashes/sha2": {
+          browser: "./dist/src/hashes/sha2-browser.js",
+          import: "./dist/src/hashes/sha2.js",
+        },
+      },
+      name: "multiformats",
+      type: "module",
+    }),
+    "node_modules/multiformats/dist/src/hashes/sha2-browser.js": "export const web = true;",
+    "node_modules/multiformats/dist/src/hashes/sha2.js": "import crypto from 'crypto';",
+  });
+
+  expect((await resolveNative(projectRoot, "index.js", "multiformats/hashes/sha2")).filePath).toBe(
+    path.join(projectRoot, "node_modules/multiformats/dist/src/hashes/sha2-browser.js"),
+  );
+
+  // Without `browser` among the main fields, `exports` decides (its `import` condition).
+  const fromExports = await resolveReactNativeModule({
+    fromFile: path.join(projectRoot, "index.js"),
+    mainFields: ["react-native", "main"],
+    platform: "ios",
+    projectRoot,
+    specifier: "multiformats/hashes/sha2",
+  });
+  expect(fromExports.filePath).toBe(
+    path.join(projectRoot, "node_modules/multiformats/dist/src/hashes/sha2.js"),
+  );
+});
+
+test("a browser map replaces the modules its package imports, false being an empty module", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "index.js": "export {};",
+    "node_modules/needs-node/package.json": JSON.stringify({
+      browser: { crypto: "./crypto-shim.js", fs: false, util: "util-polyfill" },
+      main: "./index.js",
+      name: "needs-node",
+    }),
+    "node_modules/needs-node/crypto-shim.js": "module.exports = {};",
+    "node_modules/needs-node/index.js": "require('fs'); require('crypto'); require('util');",
+    "node_modules/util-polyfill/package.json": '{"name":"util-polyfill","main":"./util.js"}',
+    "node_modules/util-polyfill/util.js": "module.exports = {};",
+  });
+
+  const fromPackage = (specifier: string) =>
+    resolveNative(projectRoot, "node_modules/needs-node/index.js", specifier);
+
+  const fs = await fromPackage("fs");
+  expect(fs.empty).toBe(true);
+  expect(fs.filePath).toBe("fs");
+  expect((await fromPackage("crypto")).filePath).toBe(
+    path.join(projectRoot, "node_modules/needs-node/crypto-shim.js"),
+  );
+  expect((await fromPackage("util")).filePath).toBe(
+    path.join(projectRoot, "node_modules/util-polyfill/util.js"),
+  );
+
+  // The map belongs to the importing package: the app's own imports are not replaced.
+  await expect(resolveNative(projectRoot, "index.js", "crypto")).rejects.toMatchObject({
+    code: "VIFX_RESOLVE_NOT_FOUND",
+  });
+});
+
+test("react-native maps win over browser maps, as earlier main fields do with Metro", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "index.js": "export {};",
+    "node_modules/both/package.json": JSON.stringify({
+      browser: { "./impl.js": "./impl.browser.js", "./other.js": "./other.browser.js" },
+      main: "./index.js",
+      name: "both",
+      "react-native": { "./impl.js": "./impl.rn.js" },
+    }),
+    "node_modules/both/impl.browser.js": "module.exports = 'browser';",
+    "node_modules/both/impl.js": "module.exports = 'node';",
+    "node_modules/both/impl.rn.js": "module.exports = 'react-native';",
+    "node_modules/both/index.js": "require('./impl'); require('./other');",
+    "node_modules/both/other.browser.js": "module.exports = 'browser';",
+    "node_modules/both/other.js": "module.exports = 'node';",
+  });
+
+  const fromPackage = (specifier: string) =>
+    resolveNative(projectRoot, "node_modules/both/index.js", specifier);
+
+  expect((await fromPackage("./impl")).filePath).toBe(
+    path.join(projectRoot, "node_modules/both/impl.rn.js"),
+  );
+  // Both maps apply: a key only the browser map has is still replaced.
+  expect((await fromPackage("./other")).filePath).toBe(
+    path.join(projectRoot, "node_modules/both/other.browser.js"),
+  );
+});
+
+test("a Node.js built-in name resolves to the package of that name when one is installed", async () => {
+  const projectRoot = await createTempProject();
+
+  await writeFiles(projectRoot, {
+    "index.js": "export {};",
+    "node_modules/png-thing/index.js": "require('util');",
+    "node_modules/png-thing/package.json": '{"name":"png-thing","main":"./index.js"}',
+    "node_modules/util/package.json": '{"name":"util","main":"./util.js"}',
+    "node_modules/util/util.js": "module.exports = {};",
+  });
+
+  // As with Metro: `util` is looked up like any package (npm's `util` polyfill here).
+  expect(
+    (await resolveNative(projectRoot, "node_modules/png-thing/index.js", "util")).filePath,
+  ).toBe(path.join(projectRoot, "node_modules/util/util.js"));
+  // Not installed: not found (the bundler decides what to do with it).
+  await expect(
+    resolveNative(projectRoot, "node_modules/png-thing/index.js", "zlib"),
+  ).rejects.toMatchObject({ code: "VIFX_RESOLVE_NOT_FOUND" });
+});
+
 test("finds framework internals through their host package on isolated installs", async () => {
   const projectRoot = await createTempProject();
 

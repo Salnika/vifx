@@ -206,7 +206,9 @@ Vifx resolves packages from the **real** location of the importing file, as Node
 
 ## Native ↔ web platform resolution
 
-A single resolver handles platform-extension variants (`.ios`, `.android`, `.native`, `.web`) and package conditions. On native the resolution priorities are `{ android: ["android", "native"], ios: ["ios", "native"], native: ["native"] }`; on web they are `["web", "native"]`. Resolver conditions are `[react-native, <platform>, …extra, import, default]` on native and `[browser, web, …extra, import, default]` on web. Default main fields are `[react-native, main, module]` on native and `[react-native, module, main]` on web.
+A single resolver handles platform-extension variants (`.ios`, `.android`, `.native`, `.web`) and package conditions. On native the resolution priorities are `{ android: ["android", "native"], ios: ["ios", "native"], native: ["native"] }`; on web they are `["web", "native"]`. Resolver conditions are `[react-native, <platform>, …extra, import, default]` on native and `[browser, web, …extra, import, default]` on web. Default main fields are `[react-native, browser, main]` on native, the list React Native's and Expo's Metro configs use, and `[react-native, module, main]` on web.
+
+Main fields whose value is an object (a `browser` field, sometimes `react-native`) are maps, applied as Metro applies them: `"./lib/index.js": "./lib/browser.js"` replaces a file of the package, including its entry; `"crypto": "./shim.js"` or `"util": "util-polyfill"` replaces a module the package imports; `false` stands for an empty module. A package's map also replaces a subpath such as `multiformats/hashes/sha2` before its `exports` is read. A Node.js built-in name (`util`) resolves to the package of that name when one is installed; when none is, vifx bundles an empty module and warns, where Metro fails to resolve it.
 
 The behavior is fixture-verified: an iOS/Android file wins over `.native`, `.native` is the cross-platform fallback, a plain file resolves last, and the `react-native` exports condition beats `default`.
 

@@ -1,5 +1,5 @@
 import { access, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { builtinModules, createRequire } from "node:module";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
@@ -134,7 +134,9 @@ export type {
 } from "./module-registry/index.ts";
 
 const DEFAULT_EXTENSIONS = ["tsx", "ts", "jsx", "js", "json"] as const;
-const DEFAULT_NATIVE_MAIN_FIELDS = ["react-native", "main", "module"] as const;
+// What React Native's and Expo's Metro configs resolve on iOS and Android
+// (`resolver.resolverMainFields`), `browser` maps included.
+const DEFAULT_NATIVE_MAIN_FIELDS = ["react-native", "browser", "main"] as const;
 const DEFAULT_WEB_MAIN_FIELDS = ["react-native", "module", "main"] as const;
 const DEFAULT_ASSET_EXTENSIONS = supportedAssetExtensions.filter(
   (extension) => extension !== "json",
@@ -341,6 +343,8 @@ interface ReactNativePluginState {
    * import site (a Lingui app imports ~50 per-locale catalogs).
    */
   warnedGeneratedModules: Set<string>;
+  /** Node.js built-ins already warned about as bundled empty on iOS and Android. */
+  warnedNodeBuiltins: Set<string>;
 }
 
 interface ExpoRouterContextEntry {
@@ -2410,6 +2414,14 @@ function normalizeBabelInPackages(packages?: string[]) {
   return dedupe((packages ?? []).map((value) => value.trim()).filter(Boolean));
 }
 
+const NODE_BUILTIN_MODULES = new Set(builtinModules);
+
+/** `util`, `node:util`, `fs/promises`: a module Node.js provides and React Native does not. */
+function isNodeBuiltinSpecifier(specifier: string): boolean {
+  const name = specifier.startsWith("node:") ? specifier.slice("node:".length) : specifier;
+  return NODE_BUILTIN_MODULES.has(name);
+}
+
 function normalizeMainFields(resolvePlatform: VifxPlatform, mainFields?: readonly string[]) {
   const normalized = dedupe((mainFields ?? []).map((value) => value.trim()).filter(Boolean));
   const defaults = resolvePlatform === "web" ? DEFAULT_WEB_MAIN_FIELDS : DEFAULT_NATIVE_MAIN_FIELDS;
@@ -2913,6 +2925,10 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
       }
       resolved = fallback;
     }
+    // A `browser`-style map replaced the module with `false`.
+    if (resolved.empty) {
+      return { type: "empty" };
+    }
     const resolvedPath = stripQuery(resolved.filePath);
 
     if (isSupportedAssetFile(resolvedPath, state.assetExtensions)) {
@@ -3344,6 +3360,21 @@ function createReactNativePlugin(state: ReactNativePluginState): Plugin {
         // (`/@fs/...`, `/@id/...`) and root-relative paths resolve against the
         // Vite root, so they keep the fall-through too.
         if (!isPathLikeSpecifier(source) || source.startsWith("/")) {
+          // A Node.js built-in with no package of that name installed: Vite
+          // bundles an empty module in its place, where Metro fails to resolve.
+          if (
+            state.resolvePlatform !== "web" &&
+            isNodeBuiltinSpecifier(source) &&
+            !state.warnedNodeBuiltins.has(source)
+          ) {
+            state.warnedNodeBuiltins.add(source);
+            console.warn(
+              `[vifx] "${source}", imported by "${relativeFrom(state.projectRoot, fromFile)}", is a ` +
+                "Node.js built-in module and no package of that name is installed, so it is bundled as " +
+                "an empty module (Metro does not resolve it on iOS and Android). Install a polyfill " +
+                'package, or check that the importing package maps it in its "browser" field.',
+            );
+          }
           return null;
         }
 
@@ -3573,6 +3604,7 @@ export function reactNative(options: VifxReactNativePluginOptions): Plugin {
     reuseResolverCaches: options.reuseResolverCaches === true,
     fastRefresh: options.fastRefresh === true,
     warnedGeneratedModules: new Set<string>(),
+    warnedNodeBuiltins: new Set<string>(),
   };
 
   return createReactNativePlugin(state);
@@ -3674,6 +3706,7 @@ export async function buildReactNativeBundle(
     reuseResolverCaches: options.reuseResolverCaches === true,
     fastRefresh: options.fastRefresh === true,
     warnedGeneratedModules: new Set<string>(),
+    warnedNodeBuiltins: new Set<string>(),
   };
 
   // Load the user `vite.config.vifx.*` once (null when absent → historic path).

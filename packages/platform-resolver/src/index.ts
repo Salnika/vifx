@@ -38,6 +38,12 @@ export interface ResolutionTraceEntry {
 }
 
 export interface ResolveReactNativeModuleResult {
+  /**
+   * `true` when a `browser`-style map in a package.json replaces the module
+   * with `false`: it resolves to an empty module, as with Metro. `filePath` is
+   * then the path or specifier that was replaced, not a file to load.
+   */
+  empty?: boolean;
   filePath: string;
   packageName?: string;
   packageRoot?: string;
@@ -46,6 +52,7 @@ export interface ResolveReactNativeModuleResult {
 }
 
 interface PackageJsonShape {
+  browser?: unknown;
   exports?: unknown;
   main?: unknown;
   module?: unknown;
@@ -53,6 +60,15 @@ interface PackageJsonShape {
   ["react-native"]?: unknown;
   workspaces?: unknown;
 }
+
+/** A package directory and its package.json. */
+interface PackageScope {
+  packageJson: PackageJsonShape;
+  root: string;
+}
+
+/** What a `browser`-style map puts in place of a path or module: another one, or `false` for nothing. */
+type Replacement = string | false;
 
 interface WorkspaceInfo {
   patterns: string[];
@@ -103,12 +119,8 @@ export async function resolveReactNativeModule(
       ? Promise.resolve(resolvedPath)
       : canonicalizeResolvedPath(resolvedPath, options.projectRoot);
   const mainFields = normalizeMainFields(options.mainFields);
-
-  if (isPathLikeSpecifier(options.specifier)) {
-    const basePath = path.isAbsolute(options.specifier)
-      ? path.resolve(options.specifier)
-      : path.resolve(path.dirname(options.fromFile), options.specifier);
-    const filePath = await resolveCandidateBasePath({
+  const resolveBasePath = (basePath: string) =>
+    resolveCandidateBasePath({
       basePath,
       extensionOrder,
       mainFields,
@@ -116,14 +128,72 @@ export async function resolveReactNativeModule(
       preserveSymlinks,
       trace,
     });
-    return {
-      filePath: await canonicalize(filePath),
-      resolvedVia: path.isAbsolute(options.specifier) ? "absolute" : "relative",
-      trace,
-    };
+  // A path, after the `browser`-style map of the package it is in (Metro's
+  // `resolveModulePath`): the importer's package for a relative path, the
+  // target's for an absolute one.
+  const resolvePath = async (
+    basePath: string,
+    scope: PackageScope | null,
+    resolvedVia: ResolveReactNativeModuleResult["resolvedVia"],
+  ): Promise<ResolveReactNativeModuleResult> => {
+    const redirected = redirectPackagePath(scope, basePath, mainFields, trace);
+    if (redirected === false) {
+      return { empty: true, filePath: basePath, resolvedVia, trace };
+    }
+    return { filePath: await canonicalize(await resolveBasePath(redirected)), resolvedVia, trace };
+  };
+
+  if (isPathLikeSpecifier(options.specifier)) {
+    if (path.isAbsolute(options.specifier)) {
+      const basePath = path.resolve(options.specifier);
+      return resolvePath(basePath, await findClosestPackage(basePath), "absolute");
+    }
+    return resolvePath(
+      path.resolve(path.dirname(options.fromFile), options.specifier),
+      await findClosestPackage(options.fromFile),
+      "relative",
+    );
   }
 
-  const packageImport = parsePackageSpecifier(options.specifier);
+  // A module the importer's own package replaces in its `browser`-style map:
+  // nothing (`"fs": false`), a file of that package, or another module.
+  let specifier = options.specifier;
+  const originScope = await findClosestPackage(options.fromFile);
+  const originReplacement = originScope
+    ? matchReplacement(
+        replacementMapOf(originScope.packageJson, mainFields),
+        expandSubpathVariants(specifier),
+      )
+    : undefined;
+  if (originScope && originReplacement !== undefined) {
+    pushTrace(
+      trace,
+      "package-json",
+      `Replaced "${specifier}" with ${JSON.stringify(originReplacement)} as mapped by "${path.join(originScope.root, "package.json")}".`,
+    );
+    if (originReplacement === false) {
+      return { empty: true, filePath: specifier, resolvedVia: "package", trace };
+    }
+    if (isRelativeReplacement(originReplacement)) {
+      const basePath = path.resolve(originScope.root, originReplacement);
+      return resolvePath(basePath, await findClosestPackage(basePath), "relative");
+    }
+    if (path.isAbsolute(originReplacement)) {
+      throw new VifxError({
+        code: "VIFX_RESOLVE_INVALID_PACKAGE_JSON",
+        details: {
+          packageJsonPath: path.join(originScope.root, "package.json"),
+          specifier,
+          trace: serializeResolutionTrace(trace),
+        },
+        hint: 'A "browser" field may replace a module with a path relative to its package.json, another module, or false.',
+        message: `"${path.join(originScope.root, "package.json")}" replaces "${specifier}" with the absolute path "${originReplacement}".`,
+      });
+    }
+    specifier = originReplacement;
+  }
+
+  const packageImport = parsePackageSpecifier(specifier);
   const packageLocation = await findPackageLocation({
     packageName: packageImport.packageName,
     preserveSymlinks,
@@ -139,7 +209,7 @@ export async function resolveReactNativeModule(
         fromFile: options.fromFile,
         platform: options.platform,
         projectRoot: options.projectRoot,
-        specifier: options.specifier,
+        specifier,
         trace: serializeResolutionTrace(trace),
       },
       hint: `Install or link "${packageImport.packageName}", or ensure a matching workspace package exists.`,
@@ -154,48 +224,53 @@ export async function resolveReactNativeModule(
     exists: true,
   });
 
-  const packageTarget = selectPackageEntryTarget(
-    packageJson,
-    packageImport.subpath,
-    buildResolutionConditions(options.platform, options.conditions),
-    mainFields,
-    trace,
-  );
-  const fallbackBasePath = packageTarget
-    ? path.resolve(packageLocation.root, packageTarget)
-    : packageImport.subpath === "."
-      ? path.join(packageLocation.root, "index")
-      : undefined;
-
-  if (!fallbackBasePath) {
-    throw new VifxError({
-      code: "VIFX_RESOLVE_NOT_FOUND",
-      details: {
-        packageJsonPath,
-        specifier: options.specifier,
-        trace: serializeResolutionTrace(trace),
-      },
-      hint: `Expose "${options.specifier}" via "react-native", "exports", or a resolvable file on disk.`,
-      message: `Package "${packageImport.packageName}" does not expose "${packageImport.subpath}".`,
-    });
-  }
-
-  const filePath = await resolveCandidateBasePath({
-    basePath: fallbackBasePath,
-    extensionOrder,
-    mainFields,
-    platformPriority,
-    preserveSymlinks,
+  const packageResult = async (basePath: string | false) => ({
+    ...(basePath === false
+      ? { empty: true, filePath: specifier }
+      : { filePath: await canonicalize(await resolveBasePath(basePath)) }),
+    packageName: packageImport.packageName,
+    packageRoot: await canonicalize(packageLocation.root),
+    resolvedVia: "package" as const,
     trace,
   });
 
-  return {
-    filePath: await canonicalize(filePath),
-    packageName: packageImport.packageName,
-    packageRoot: await canonicalize(packageLocation.root),
-    resolvedVia: "package",
-    trace,
+  const conditions = buildResolutionConditions(options.platform, options.conditions);
+  const exportsTargetPath = (subpath: string) => {
+    const target = resolveExportsTarget(packageJson.exports, subpath, conditions, trace);
+    return target ? path.resolve(packageLocation.root, target) : undefined;
   };
+
+  if (packageImport.subpath !== ".") {
+    // Like Metro, the package's own `browser`-style map replaces a subpath
+    // before `exports` is read (multiformats maps `./hashes/sha2` this way):
+    // the replacement is then looked up in `exports`, else read as a file.
+    const subpathPath = path.resolve(packageLocation.root, packageImport.subpath);
+    const redirected = redirectPackagePath(
+      { packageJson, root: packageLocation.root },
+      subpathPath,
+      mainFields,
+      trace,
+    );
+    if (redirected === false) {
+      return packageResult(false);
+    }
+    if (redirected !== subpathPath) {
+      const redirectedSubpath = path
+        .relative(packageLocation.root, redirected)
+        .split(path.sep)
+        .join("/");
+      return packageResult(exportsTargetPath(redirectedSubpath) ?? redirected);
+    }
+    return packageResult(exportsTargetPath(packageImport.subpath) ?? subpathPath);
+  }
+
+  // The package itself: its `exports`, else the entry its main fields declare.
+  const exportsTarget = exportsTargetPath(".");
+  if (exportsTarget) {
+    return packageResult(exportsTarget);
+  }
+  const entry = selectMainEntry(packageJson, mainFields, trace);
+  return packageResult(entry === false ? false : path.resolve(packageLocation.root, entry));
 }
 
 const realFileCache = new Map<string, Promise<string>>();
@@ -834,10 +909,13 @@ async function resolveDirectoryPackageEntry(
   }
 
   const packageJson = await readPackageJson(packageJsonPath);
-  const entry = options.mainFields
-    .map((mainField) => packageJson[mainField as keyof PackageJsonShape])
-    .find((value): value is string => typeof value === "string" && value !== "");
-  if (!entry) {
+  const declaresEntry = options.mainFields.some((mainField) => {
+    const value = packageJson[mainField as keyof PackageJsonShape];
+    return typeof value === "string" && value !== "";
+  });
+  const entry = selectMainEntry(packageJson, options.mainFields, options.trace);
+  // Nothing declared or replaced: the caller falls back to `index.*` itself.
+  if (entry === false || (!declaresEntry && entry === "index")) {
     return undefined;
   }
 
@@ -1000,32 +1078,210 @@ function hasExplicitExtension(basePath: string, extensionOrder: readonly string[
   return extension ? extensionOrder.includes(extension) : false;
 }
 
-function selectPackageEntryTarget(
+// ---------------------------------------------------------------------------
+// `browser`-style maps
+//
+// A main field whose value is an object instead of a path (`"browser": { … }`,
+// sometimes `"react-native": { … }`) maps files and modules to replacements, as
+// in https://github.com/defunctzombie/package-browser-field-spec. Metro applies
+// the maps of every listed main field (React Native and Expo list `react-native`,
+// `browser`, `main` for iOS and Android), and so does this resolver:
+//
+// - to the entry its main fields declare (`"./lib/index.js": "./lib/browser.js"`);
+// - to the paths inside the package, whether imported by the package itself or
+//   through a subpath (`pkg/lib/node`);
+// - to the modules the package imports (`"fs": false`, `"crypto": "./shim.js"`,
+//   `"util": "util-polyfill"`).
+//
+// `false` stands for an empty module. Like Metro, the package that applies is
+// the closest package.json above the importing file (or above the path, for
+// an absolute one), and keys are matched with `.js` and `.json` appended too.
+// ---------------------------------------------------------------------------
+
+const replacementMapCache = new WeakMap<
+  PackageJsonShape,
+  Map<string, ReadonlyMap<string, Replacement> | null>
+>();
+
+/**
+ * The object-valued main fields of a package.json merged into one map, earlier
+ * main fields winning a conflict (Metro's `matchSubpathFromMainFields`). `null`
+ * when none of them is an object, the usual case.
+ */
+function replacementMapOf(
   packageJson: PackageJsonShape,
-  subpath: string,
-  conditions: readonly string[],
   mainFields: readonly string[],
-  trace: ResolutionTraceEntry[],
-): string | undefined {
-  const exportsTarget = resolveExportsTarget(packageJson.exports, subpath, conditions, trace);
-
-  if (exportsTarget) {
-    return exportsTarget;
+): ReadonlyMap<string, Replacement> | null {
+  const key = mainFields.join("\0");
+  let byMainFields = replacementMapCache.get(packageJson);
+  if (!byMainFields) {
+    byMainFields = new Map();
+    replacementMapCache.set(packageJson, byMainFields);
+  }
+  if (byMainFields.has(key)) {
+    return byMainFields.get(key) ?? null;
   }
 
-  if (subpath !== ".") {
-    return subpath;
-  }
-
-  for (const mainField of mainFields) {
-    const entry = packageJson[mainField as keyof PackageJsonShape];
-    if (typeof entry === "string") {
-      pushTrace(trace, "package-json", `Matched package main field "${mainField}".`);
-      return entry;
+  let replacements: Map<string, Replacement> | null = null;
+  for (let index = mainFields.length - 1; index >= 0; index -= 1) {
+    const value = packageJson[mainFields[index] as keyof PackageJsonShape];
+    if (!isRecord(value) || Array.isArray(value)) {
+      continue;
+    }
+    replacements ??= new Map();
+    for (const [from, to] of Object.entries(value)) {
+      if (typeof to === "string" || to === false) {
+        replacements.set(from, to);
+      }
     }
   }
 
+  byMainFields.set(key, replacements);
+  return replacements;
+}
+
+function matchReplacement(
+  replacements: ReadonlyMap<string, Replacement> | null,
+  variants: readonly string[],
+): Replacement | undefined {
+  if (!replacements) {
+    return undefined;
+  }
+  for (const variant of variants) {
+    const replacement = replacements.get(variant);
+    if (replacement !== undefined) {
+      return replacement;
+    }
+  }
   return undefined;
+}
+
+/** The keys a path or module is looked up under in a map: as written, then with `.js` and `.json`. */
+function expandSubpathVariants(subpath: string): string[] {
+  return [subpath, `${subpath}.js`, `${subpath}.json`];
+}
+
+/**
+ * The keys a main entry is looked up under: with and without `./`, each as
+ * written, with `.js` or `.json` added, and without its extension (Metro's
+ * `getPackageEntryPoint`).
+ */
+function expandMainVariants(main: string): string[] {
+  const toggled = main.startsWith("./") ? main.slice(2) : `./${main}`;
+  return [main, toggled].flatMap((variant) => [
+    variant,
+    `${variant}.js`,
+    `${variant}.json`,
+    variant.replace(/\.(js|json)$/u, ""),
+  ]);
+}
+
+function isRelativeReplacement(replacement: string): boolean {
+  return /^\.\.?(?:\/|$)/u.test(replacement);
+}
+
+/**
+ * The entry a package.json gives its directory: the first non-empty string
+ * main field, `index` when there is none, unless a `browser`-style map
+ * replaces it (Metro's `getPackageEntryPoint`). `false` when the map replaces
+ * it with an empty module.
+ */
+function selectMainEntry(
+  packageJson: PackageJsonShape,
+  mainFields: readonly string[],
+  trace: ResolutionTraceEntry[],
+): string | false {
+  let main = "index";
+  for (const mainField of mainFields) {
+    const entry = packageJson[mainField as keyof PackageJsonShape];
+    if (typeof entry === "string" && entry !== "") {
+      pushTrace(trace, "package-json", `Matched package main field "${mainField}".`);
+      main = entry;
+      break;
+    }
+  }
+
+  const replacement = matchReplacement(
+    replacementMapOf(packageJson, mainFields),
+    expandMainVariants(main),
+  );
+  if (replacement === undefined) {
+    return main;
+  }
+
+  pushTrace(
+    trace,
+    "package-json",
+    `Replaced the entry "${main}" with ${JSON.stringify(replacement)}.`,
+  );
+  return replacement;
+}
+
+/**
+ * What the `browser`-style map of `scope` puts in place of `targetPath`, a
+ * path in that package with or without extension: another path, `false` for
+ * an empty module, or `targetPath` itself (Metro's `redirectModulePath`).
+ */
+function redirectPackagePath(
+  scope: PackageScope | null,
+  targetPath: string,
+  mainFields: readonly string[],
+  trace: ResolutionTraceEntry[],
+): string | false {
+  const replacements = scope ? replacementMapOf(scope.packageJson, mainFields) : null;
+  if (!scope || !replacements) {
+    return targetPath;
+  }
+
+  const packagePath = `./${path.relative(scope.root, targetPath).split(path.sep).join("/")}`;
+  const replacement = matchReplacement(replacements, expandSubpathVariants(packagePath));
+  if (replacement === undefined) {
+    return targetPath;
+  }
+
+  pushTrace(
+    trace,
+    "package-json",
+    `Replaced "${packagePath}" with ${JSON.stringify(replacement)} as mapped by "${path.join(scope.root, "package.json")}".`,
+  );
+  if (replacement === false) {
+    return false;
+  }
+  // Like Metro, a replacement is read as a path relative to the package.json.
+  return path.isAbsolute(replacement)
+    ? path.normalize(replacement)
+    : path.join(scope.root, replacement);
+}
+
+const closestPackageCache = new Map<string, Promise<PackageScope | null>>();
+
+/**
+ * The package a file belongs to: the closest directory above it with a
+ * package.json (Metro's `getPackageForModule`), `null` when there is none.
+ */
+function findClosestPackage(filePath: string): Promise<PackageScope | null> {
+  return findPackageAbove(path.dirname(path.resolve(filePath)));
+}
+
+function findPackageAbove(directory: string): Promise<PackageScope | null> {
+  let cached = closestPackageCache.get(directory);
+  if (!cached) {
+    cached = (async () => {
+      const packageJsonPath = path.join(directory, "package.json");
+      if (await isFile(packageJsonPath)) {
+        // A manifest that does not parse maps nothing; it fails where it is
+        // resolved as a package instead.
+        const packageJson = await readPackageJson(packageJsonPath).catch(
+          (): PackageJsonShape => ({}),
+        );
+        return { packageJson, root: directory };
+      }
+      const parent = path.dirname(directory);
+      return parent === directory ? null : findPackageAbove(parent);
+    })();
+    closestPackageCache.set(directory, cached);
+  }
+  return cached;
 }
 
 function resolveExportsTarget(
@@ -1134,6 +1390,7 @@ export function clearResolverCaches(): void {
   directoryListingCache.clear();
   symlinkTargetKindCache.clear();
   packageJsonCache.clear();
+  closestPackageCache.clear();
   realDirectoryCache.clear();
   realFileCache.clear();
 }
@@ -1152,6 +1409,11 @@ export function invalidateResolverPath(changedPath: string): void {
   packageJsonCache.delete(absolutePath);
   realDirectoryCache.delete(absolutePath);
   realFileCache.delete(absolutePath);
+  // A package.json that appears, goes or changes moves every file below it to
+  // another package scope or changes its maps.
+  if (path.basename(absolutePath) === "package.json") {
+    closestPackageCache.clear();
+  }
 }
 
 function listDirectory(directory: string): Promise<DirectoryListing | null> {

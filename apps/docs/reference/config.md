@@ -157,7 +157,7 @@ Controls module resolution, shared by native and web. Four sub-keys.
 
 `vifx doctor --fix` fills `extensions` and `assetExtensions` from your `metro.config.js` (see [Migration](../guide/migration#_3-map-your-metro-config-js)).
 
-List entries are trimmed, a leading `.` is stripped, and duplicates are deduped. `mainFields` controls the entry fallback order after `exports` resolution: the default tries `react-native`, then `module`, then `main`.
+List entries are trimmed, a leading `.` is stripped, and duplicates are deduped. `mainFields` controls the entry fallback order after `exports` resolution. On iOS and Android the default is Metro's: `react-native`, then `browser`, then `main`, with the maps those fields may hold (`"browser": { "./lib/node.js": "./lib/browser.js", "fs": false }`) applied as Metro applies them (see [Features](./features)). On web the default tries `react-native`, then `module`, then `main`.
 
 Platform-extension resolution (`.ios`, `.android`, `.native`, `.web`) and the on-platform `exports` conditions are applied by the engine on top of these settings; see [Architecture](../guide/architecture) for the full resolution order.
 

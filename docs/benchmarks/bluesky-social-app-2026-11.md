@@ -9,6 +9,25 @@
 > Harness: [`scripts/bench/expo-vs-vifx.mjs`](../../scripts/bench/expo-vs-vifx.mjs)
 > (`pnpm bench:expo`), iOS.
 
+## Update — `browser` field fixed
+
+The first of the two defects below is fixed on the branch that carries this report: on iOS and Android, vifx now
+resolves packages as React Native's and Expo's Metro configs do (main fields `react-native`, `browser`, `main`, and
+the object form of those fields applied as Metro applies it). Bluesky's iOS release bundle, rebuilt with it:
+
+- `qrcode` resolves to `lib/browser.js`: 27 `qrcode` modules, as in Metro's bundle. Its Node.js entry, its PNG and
+  terminal renderers, all 22 `pngjs` modules, and `buffer` and `ieee754` (which only `pngjs` pulled in) are gone;
+- multiformats' `sha2` hasher is its browser file (`sha2-browser.js`), as with Metro, instead of the Node.js one,
+  which imported `crypto`;
+- `invariant` is its `browser` file, as with Metro;
+- no Node.js built-in is stubbed any more (no `__vite-browser-external` module), and the build prints no warning;
+- 6,871 modules in the source map (6,904 before), a 26.12 MB bundle (26.18 MB) and 35.37 MB of bytecode
+  (35.46 MB); `hermesc -O` compiles it.
+
+On the SDK 58 default template, the only module that changed is `invariant` (its `browser` file, the one Metro
+bundles), on iOS and Android; the template still runs in Expo Go on the iPhone 17 simulator, with Fast Refresh. The
+numbers below were measured before the fix.
+
 Bluesky's app is the open-source target the [main report](./expo-vs-vifx-2026-11.md) could not build (§5 there).
 Its release bundle holds about 7,000 modules, and its Metro config stacks Sentry's Expo config on
 react-native-worklets bundle mode.
@@ -80,13 +99,14 @@ with vifx, 1.32, 0.65 and 0.71 s with Metro.
 
 ## Why vifx's bundle would not run
 
-### `qrcode` resolves to its Node.js entry, and throws at startup
+### `qrcode` resolves to its Node.js entry, and throws at startup (fixed since)
 
 `qrcode` (used by `react-native-qrcode-styled`) has `"main": "./lib/index.js"` and a `browser` field that replaces
 that file with `./lib/browser.js`. Expo's Metro config resolves `react-native`, then `browser`, then `main`, and
-applies the replacement: Metro bundles `lib/browser.js` (27 `qrcode` modules). vifx resolves `react-native`, then
-`module`, then `main`, and its resolver reads only string main fields, so it bundles the Node.js entry: `lib/server.js`
-with its PNG and terminal renderers (35 `qrcode` modules) and `pngjs` (22 modules, none in Metro's bundle).
+applies the replacement: Metro bundles `lib/browser.js` (27 `qrcode` modules). vifx 0.2.0 resolved `react-native`,
+then `main`, then `module` on iOS and Android, and its resolver read only string main fields, so it bundles the
+Node.js entry: `lib/server.js` with its PNG and terminal renderers (35 `qrcode` modules) and `pngjs` (22 modules,
+none in Metro's bundle).
 `pngjs` requires `util`, `stream` and `zlib`, which vifx replaces with an empty module (`__vite-browser-external`,
 `module.exports = {}`), and calls `util.inherits(...)` as it loads: a TypeError.
 
@@ -94,8 +114,7 @@ The app loads it at startup. In vifx's development export, which keeps the modul
 `src/components/dialogs/nuxs/InviteFriendsAnnouncement.tsx` runs at the top level of the bundle, and its imports run
 `inviteFriends` → `InviteFriendsDialog` → `InviteFriendsDialogInner` → `ThemedQrCard` → `react-native-qrcode-styled`
 → `qrcode/lib/index.js` → `lib/server.js` → `lib/renderer/png.js` → `pngjs`. The release bundle holds the same
-modules. Adding `browser` to `resolver.mainFields` would not help: vifx's resolver skips a `browser` field that maps
-files. An alias from `qrcode` to `qrcode/lib/browser.js` would sidestep this one package (not tried).
+modules. See the update at the top for the fix.
 
 ### Worklets bundle mode is not implemented
 
