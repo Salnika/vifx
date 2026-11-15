@@ -3,6 +3,15 @@ import { defineConfig } from "vitepress";
 import { packageManagerTabs } from "./package-manager-tabs";
 
 const repositoryUrl = "https://github.com/Salnika/vifx";
+// Where the docs workflow publishes the site. Link previews, canonical links and
+// the sitemap need absolute URLs, whatever `base` a build uses.
+const siteUrl = "https://salnika.github.io/vifx/";
+const socialImage = {
+  url: `${siteUrl}og-image.png`,
+  width: "1280",
+  height: "640",
+  alt: "Vifx: Vite and Rolldown bundling for React Native and Expo, with build times against Metro",
+};
 // The released version shown in the nav: every @vifx package shares it.
 // The docs workflow redeploys the site when it changes.
 const { version } = JSON.parse(
@@ -20,7 +29,34 @@ export default defineConfig({
     ["link", { rel: "icon", type: "image/png", href: `${base}favicon.png` }],
     ["link", { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` }],
     ["meta", { name: "theme-color", content: "#7c3aed" }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: "Vifx" }],
+    ["meta", { property: "og:image", content: socialImage.url }],
+    ["meta", { property: "og:image:width", content: socialImage.width }],
+    ["meta", { property: "og:image:height", content: socialImage.height }],
+    ["meta", { property: "og:image:alt", content: socialImage.alt }],
+    // X reads the og: tags for everything but the card type.
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
   ],
+  // Each page's own address, title and description, for link previews and search engines.
+  transformHead({ page, title, description }) {
+    // `page` is the source path (`guide/status.md`); the site serves `.html`.
+    if (page === "404.md") return [];
+    const url = new URL(page.replace(/(^|\/)index\.md$/u, "$1").replace(/\.md$/u, ".html"), siteUrl)
+      .href;
+    return [
+      ["link", { rel: "canonical", href: url }],
+      ["meta", { property: "og:url", content: url }],
+      ["meta", { property: "og:title", content: title }],
+      ["meta", { property: "og:description", content: description }],
+    ];
+  },
+  sitemap: {
+    // The trailing slash keeps /vifx/ in every URL of sitemap.xml.
+    hostname: siteUrl,
+    // Markdown under public/ (the agent migration prompt) is served as a raw file.
+    transformItems: (items) => items.filter((item) => !item.url.startsWith("public/")),
+  },
   lastUpdated: true,
   outDir: "./dist",
   // The workspace aliases `vite` to @voidzero-dev/vite-plus-core (rolldown-vite).
@@ -116,6 +152,7 @@ export default defineConfig({
           items: [
             { text: "Features", link: "/reference/features" },
             { text: "vs Metro", link: "/reference/comparisons" },
+            { text: "vs Re.Pack and One", link: "/reference/alternatives" },
             { text: "CLI", link: "/reference/cli" },
             { text: "Config", link: "/reference/config" },
             { text: "Support Matrix", link: "/reference/support-matrix" },

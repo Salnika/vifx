@@ -1,5 +1,11 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Compatibility report
+    url: https://github.com/Salnika/vifx/discussions/new?category=compat-reports
+    about: Tried Vifx on your app? Tell us how it went, whether it worked or not.
+  - name: Question
+    url: https://github.com/Salnika/vifx/discussions/categories/q-a
+    about: Ask how to set up or use Vifx.
   - name: Documentation
     url: https://salnika.github.io/vifx/
     about: Guides, CLI and configuration reference, and the library support matrix.

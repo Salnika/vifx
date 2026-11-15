@@ -33,18 +33,18 @@ Vifx builds your iOS and Android bundles, serves an Expo Go dev server with Fast
 
 ## Benchmarks
 
-One Expo SDK 54 app (about 2,000 modules), iOS, Apple M4 Pro, median of 3 warm runs, November 2026:
+Two Expo apps on iOS, Apple M4 Pro, November 2026: a private Expo SDK 54 app of about 2,000 modules, and the Expo SDK 58 default template, which anyone can recreate. Cold runs start with empty caches; warm figures are the median of 3 runs.
 
-| Measure                                |   Metro |    Vifx |
-| -------------------------------------- | ------: | ------: |
-| Release build, cold                    |  15.2 s |   4.6 s |
-| Release build, warm                    |   8.7 s |   1.6 s |
-| Dev server, cold start to first bundle |   9.0 s |   4.6 s |
-| Edit to Fast Refresh update in the app |  0.14 s |  0.05 s |
-| Release JS bundle                      | 3.54 MB | 3.37 MB |
-| Hermes bytecode                        | 4.96 MB | 5.15 MB |
+| Measure                                | SDK 54 app: Metro → Vifx | SDK 58 template: Metro → Vifx |
+| -------------------------------------- | -----------------------: | ----------------------------: |
+| Release build, cold                    |           15.2 s → 4.6 s |                10.5 s → 3.9 s |
+| Release build, warm                    |            8.7 s → 1.6 s |                 1.7 s → 1.4 s |
+| Dev server, cold start to first bundle |            9.0 s → 4.6 s |                 4.1 s → 3.9 s |
+| Edit to Fast Refresh update in the app |          0.14 s → 0.05 s |               0.13 s → 0.05 s |
+| Release JS bundle                      |        3.54 MB → 3.37 MB |             2.43 MB → 2.19 MB |
+| Hermes bytecode                        |        4.96 MB → 5.15 MB |             3.59 MB → 3.72 MB |
 
-Metro is still ahead on Hermes bytecode size (+3.9 %) and compile time, and on the peak memory of a warm release build (+15 %). These are single-app, single-machine results; the [full report](./docs/benchmarks/expo-vs-vifx-2026-11.md) has every measure and how to reproduce it.
+Metro is still ahead on Hermes bytecode size (+3.9 % on the app, +3.6 % on the template), on Hermes compile time (+13 % on the app), and on the peak memory of a warm release build (+15 % and +68 %). On the small template, warm builds and the first dev bundle are close to Metro's. The full reports have every measure and how to reproduce them: [SDK 54 app](./docs/benchmarks/expo-vs-vifx-2026-11.md), [SDK 58 template](./docs/benchmarks/expo-template-sdk58-2026-11.md).
 
 ## Getting started
 
@@ -58,7 +58,7 @@ The package installs the `vifx` command. For an Expo project:
 
 ```bash
 # Write a Vifx config next to the app (Expo-owned files are left untouched)
-npx vifx setup . --yes
+npx vifx setup . --yes --expo-go
 
 # Start the Expo Go dev server, scan the QR code, edit
 npx vifx expo dev . --expo-go --platform ios
@@ -119,7 +119,7 @@ The documentation site is at **[salnika.github.io/vifx](https://salnika.github.i
 - [Getting started](https://salnika.github.io/vifx/guide/getting-started), [migrating from Metro](https://salnika.github.io/vifx/guide/migration), and [migrating with an AI agent](https://salnika.github.io/vifx/guide/agent-migration)
 - [Dev server and Fast Refresh](https://salnika.github.io/vifx/guide/dev-server)
 - [CLI](https://salnika.github.io/vifx/reference/cli) and [configuration](https://salnika.github.io/vifx/reference/config) reference
-- [Vifx vs Metro](https://salnika.github.io/vifx/reference/comparisons) and the [library support matrix](https://salnika.github.io/vifx/reference/support-matrix)
+- [Vifx vs Metro](https://salnika.github.io/vifx/reference/comparisons), [Vifx, Re.Pack and One](https://salnika.github.io/vifx/reference/alternatives), and the [library support matrix](https://salnika.github.io/vifx/reference/support-matrix)
 
 ## Packages
 
@@ -138,6 +138,8 @@ The other `@vifx/*` packages are building blocks of these and have no stable API
 Vifx replaces the Metro bundling path. Expo Go, the native projects, EAS Build, EAS Update and the Expo Updates runtime stay with Expo. A custom Metro `serializer` has no Vifx equivalent; `vifx doctor` reports it.
 
 ## Contributing
+
+Tried Vifx on your app? A [compatibility report](https://github.com/Salnika/vifx/discussions/new?category=compat-reports) helps, whether it worked or not.
 
 Contributions are welcome. [CONTRIBUTING.md](./CONTRIBUTING.md) explains how to set up the repository, run the checks and propose a change. Please report security issues privately as described in [SECURITY.md](./SECURITY.md).
 

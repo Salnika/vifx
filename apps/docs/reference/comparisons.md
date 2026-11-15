@@ -10,7 +10,7 @@ Metro transforms each file in isolation through a fixed Babel pipeline and seria
 
 vifx is a single Vite/Rolldown engine. Your app is a real Rolldown module graph: every standard Vite/Rollup hook (`resolveId`, `load`, `transform`, `renderChunk`) is available, the release bundle is scope-hoisted, and the config is a plain Vite `defineConfig`. The same engine drives native and web from one resolution layer and one define/env table.
 
-This page covers the structural differences, the [measured results](#measured-results) on one app, and the places where Metro is on par or ahead.
+This page covers the structural differences, the [measured results](#measured-results) on one app, and the places where Metro is on par or ahead. For the other alternatives to Metro, see [Vifx, Re.Pack and One](./alternatives).
 
 ## At a glance
 
@@ -131,7 +131,7 @@ See [Config](./config) for the schema and [Getting Started](../guide/getting-sta
 
 ## Measured results
 
-All figures come from one app: a private Expo SDK 54 app (React Native 0.81, expo-router, about 2,000 modules) installed with pnpm's default isolated layout, built for iOS on one machine (Apple M4 Pro, 14 cores, 24 GB) in November 2026. Metro is the project's own `expo export:embed` and `expo start`; vifx is `vifx export:embed` and `vifx expo dev --expo-go`. Warm figures are the median of 3 runs; cold figures are one run with the caches cleared first. Memory is the peak of the sum over the process tree, sampled every 100 ms, so Metro's worker processes and vifx's worker threads both count.
+Unless marked otherwise, the figures come from one app: a private Expo SDK 54 app (React Native 0.81, expo-router, about 2,000 modules) installed with pnpm's default isolated layout, built for iOS on one machine (Apple M4 Pro, 14 cores, 24 GB) in November 2026. Metro is the project's own `expo export:embed` and `expo start`; vifx is `vifx export:embed` and `vifx expo dev --expo-go`. Warm figures are the median of 3 runs; cold figures are one run with the caches cleared first. Memory is the peak of the sum over the process tree, sampled every 100 ms, so Metro's worker processes and vifx's worker threads both count.
 
 <BenchChart
   caption="Dev server and Fast Refresh"
@@ -195,6 +195,24 @@ Every figure, with the build times above:
 vifx is ahead on build times, dev-server start, Fast Refresh latency, JS bundle size and cold-build memory. Metro is ahead on Hermes bytecode size and compile time, and on the peak memory of a warm release build. A new full bundle after an edit is level.
 
 These are single-app, single-machine results, not a general claim. Not measured, because it needs a device: startup time, time to interactive, and the memory and frame rate of the running app. The [full report](https://github.com/Salnika/vifx/blob/master/docs/benchmarks/expo-vs-vifx-2026-11.md) describes the method and how to reproduce it.
+
+### The default Expo template
+
+The app above is private. For results anyone can rebuild, the same harness ran on a new `npx create-expo-app@latest` project (Expo SDK 58, React Native 0.88, installed with npm, unchanged), on the same machine, in November 2026:
+
+<BenchChart
+  caption="Expo SDK 58 default template, iOS"
+  unit="s"
+  scale="row"
+  :rows="[
+    { label: 'Release build, cold', metro: 10.46, vifx: 3.90, delta: -62.7 },
+    { label: 'Release build, warm', metro: 1.72, vifx: 1.40, delta: -18.6 },
+    { label: 'Dev server, cold start until the first bundle', metro: 4.09, vifx: 3.93, delta: -3.9 },
+    { label: 'Edit to Fast Refresh update in the app', metro: 0.13, vifx: 0.05, delta: -59.8 },
+  ]"
+/>
+
+On this small app, vifx still builds 2.7× faster from empty caches, but warm builds and the first dev bundle are close to Metro's. Hermes bytecode is 3.6 % larger than Metro's, and a warm release build peaks at 947 MB against 564 MB. The [template report](https://github.com/Salnika/vifx/blob/master/docs/benchmarks/expo-template-sdk58-2026-11.md) has every figure and the commands to reproduce them.
 
 ## Where Metro is on par or ahead
 

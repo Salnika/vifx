@@ -827,18 +827,47 @@ test("setup --json returns the expected machine-readable preview shape", async (
   expect(parsed.applied).toBe(false);
   expect(parsed.withViteConfig).toBe(false);
   expect(parsed.changes.map((change) => change.path)).toEqual(["vifx.config.ts"]);
-  expect(parsed.nextCommands).toContain(
-    `npx vifx build ${path.join(FIXTURE_ROOT, "expo-router-basic")}`,
-  );
-  expect(parsed.nextCommands).toContain(
-    `npx vifx expo dev ${path.join(FIXTURE_ROOT, "expo-router-basic")} --platform ios`,
-  );
-  expect(parsed.nextCommands).toContain(
-    `npx vifx expo export ${path.join(FIXTURE_ROOT, "expo-router-basic")} --out-dir dist/expo`,
-  );
-  expect(parsed.nextCommands).not.toContain(
-    `npx vifx native run ${path.join(FIXTURE_ROOT, "expo-router-basic")} --platform ios`,
-  );
+  // The fixture's package.json declares pnpm, so the commands use `pnpm vifx`.
+  const fixturePath = path.join(FIXTURE_ROOT, "expo-router-basic");
+  expect(parsed.nextCommands).toEqual([
+    `pnpm vifx expo dev ${fixturePath} --expo-go --platform ios`,
+    `pnpm vifx doctor ${fixturePath}`,
+    `pnpm vifx expo audit ${fixturePath}`,
+    `pnpm vifx build ${fixturePath}`,
+    `pnpm vifx expo export ${fixturePath} --out-dir dist/expo`,
+  ]);
+});
+
+test("setup suggests next commands for the project's package manager", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-setup-runner-"));
+  const packageJson = JSON.parse(
+    await readFile(path.join(FIXTURE_ROOT, "expo-router-basic", "package.json"), "utf8"),
+  ) as Record<string, unknown>;
+  delete packageJson.packageManager;
+
+  const firstCommand = async (name: string, lockfile?: string) => {
+    const projectPath = path.join(tempRoot, name);
+    await cp(path.join(FIXTURE_ROOT, "expo-router-basic"), projectPath, { recursive: true });
+    await writeFile(path.join(projectPath, "package.json"), JSON.stringify(packageJson));
+    if (lockfile) {
+      await writeFile(path.join(projectPath, lockfile), "");
+    }
+    const result = await executeCli(["setup", projectPath, "--json"]);
+    return {
+      command: (JSON.parse(result.stdout) as { nextCommands: string[] }).nextCommands[0],
+      projectPath,
+    };
+  };
+
+  const bun = await firstCommand("with-bun-lock", "bun.lock");
+  expect(bun.command).toBe(`bun vifx expo dev ${bun.projectPath} --expo-go --platform ios`);
+
+  const yarn = await firstCommand("with-yarn-lock", "yarn.lock");
+  expect(yarn.command).toBe(`yarn vifx expo dev ${yarn.projectPath} --expo-go --platform ios`);
+
+  // No lockfile and no packageManager field: npx, which runs it for npm.
+  const unknown = await firstCommand("without-lockfile");
+  expect(unknown.command).toBe(`npx vifx expo dev ${unknown.projectPath} --expo-go --platform ios`);
 });
 
 test("setup --expo-go generates native Expo targets and next command", async () => {
@@ -865,8 +894,8 @@ test("setup --expo-go generates native Expo targets and next command", async () 
   const vifxConfig = await readFile(path.join(targetPath, "vifx.config.ts"), "utf8");
 
   expect(result.exitCode).toBe(0);
-  expect(result.stdout).toContain("Expo Go server: requested");
-  expect(result.stdout).toContain(`npx vifx expo dev ${targetPath} --platform ios --expo-go`);
+  expect(result.stdout).toContain("Targets: iOS and Android");
+  expect(result.stdout).toContain(`pnpm vifx expo dev ${targetPath} --expo-go --platform ios`);
   expect(vifxConfig).toContain('aliases: {"@":"."}');
   expect(vifxConfig).toContain('entry: "expo-router/entry"');
   expect(vifxConfig).not.toContain("reactNativeCompat");

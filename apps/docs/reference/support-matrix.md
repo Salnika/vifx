@@ -2,6 +2,10 @@
 
 The support matrix is product-facing. It distinguishes what the no-Metro Vite bundling path covers from workflows Vifx intentionally does not replace. See [Project Status](/guide/status) for what has been validated and the known gaps.
 
+::: tip Tried Vifx on your app?
+A [compatibility report](https://github.com/Salnika/vifx/discussions/new?category=compat-reports) helps, whether it worked or not: reports from real apps decide what this matrix covers next.
+:::
+
 ## Versions And Scope
 
 The current Expo work is device-validated against Expo SDK 54 and SDK 58 (the current Expo SDK). SDK 55 through 57 are checked with fixtures and with release bundles of their default templates compared against Metro's. See [Expo SDK Support](#expo-sdk-support) for the per-SDK tiers. `vifx doctor` warns when an Expo dependency falls outside the supported SDK majors, and reports the support tier for SDKs inside it.

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { applyPlannedChanges, planExpoSetup, type PlannedFileChange } from "@vifx/codemods";
+import { detectPackageManager } from "@vifx/compat-runner";
 import { VifxError } from "@vifx/errors";
 import { parseFlags } from "../lib/args.ts";
 import { analyzeMetroConfig, type MetroConfigAnalysis } from "../lib/metro-config.ts";
@@ -85,23 +86,26 @@ function formatMetroMigrationNotes(analysis: MetroConfigAnalysis): string[] {
   return lines;
 }
 
-function createNextCommands(options: {
-  expoGo: boolean;
-  includeExpoDev: boolean;
-  targetPath: string;
-}) {
+// How the docs run the project's own vifx with each package manager. npx
+// covers npm and a project whose package manager cannot be told.
+const VIFX_RUNNERS: Partial<Record<string, string>> = {
+  bun: "bun vifx",
+  pnpm: "pnpm vifx",
+  yarn: "yarn vifx",
+};
+
+function createNextCommands(options: { packageManager: string; targetPath: string }) {
   const targetPath = formatShellArg(options.targetPath);
-  // npx runs the project's installed @vifx/cli whatever its package manager.
-  const nextCommands = [`npx vifx build ${targetPath}`, `npx vifx expo audit ${targetPath}`];
+  const vifx = VIFX_RUNNERS[options.packageManager] ?? "npx vifx";
 
-  if (options.includeExpoDev) {
-    nextCommands.push(
-      `npx vifx expo dev ${targetPath} --platform ios${options.expoGo ? " --expo-go" : ""}`,
-    );
-  }
-
-  nextCommands.push(`npx vifx expo export ${targetPath} --out-dir dist/expo`);
-  return nextCommands;
+  return [
+    // The Expo Go server builds native bundles whichever targets setup wrote.
+    `${vifx} expo dev ${targetPath} --expo-go --platform ios`,
+    `${vifx} doctor ${targetPath}`,
+    `${vifx} expo audit ${targetPath}`,
+    `${vifx} build ${targetPath}`,
+    `${vifx} expo export ${targetPath} --out-dir dist/expo`,
+  ];
 }
 
 function isInteractiveSession(options: SetupCommandOptions) {
@@ -155,6 +159,7 @@ function renderTerminalSetup(options: {
   projectRoot: string;
   targetPath: string;
   wasCancelled: boolean;
+  webPreviewConfigured: boolean;
   withViteConfig: boolean;
   appDirectory: boolean;
 }) {
@@ -178,8 +183,12 @@ function renderTerminalSetup(options: {
     `React Native: ${options.detectedReactNativeVersion ?? "missing"}`,
     `Expo Router: ${options.expoRouter ? "detected" : "missing"}`,
     `Routes directory (src/app or app): ${options.appDirectory ? "detected" : "missing"}`,
-    `iOS host: ${options.iosHostPresent ? "present" : "missing"}`,
-    `Expo Go server: ${options.expoGo ? "requested" : "skipped"}`,
+    `ios/ folder: ${options.iosHostPresent ? "present" : "none (Expo Go does not need one)"}`,
+    `Targets: ${
+      options.expoGo || !options.webPreviewConfigured
+        ? "iOS and Android"
+        : "react-native-web preview (--expo-go writes iOS and Android targets)"
+    }`,
     `Advanced Vite config: ${options.withViteConfig ? "requested" : "skipped"}`,
     `Native embed plugin: ${options.experimentalEmbed ? "requested (experimental)" : "skipped"}`,
     "",
@@ -187,9 +196,7 @@ function renderTerminalSetup(options: {
     ...formatChangeSummary(options.changes),
     "",
     paint("bold", "Boundaries:"),
-    options.expoGo
-      ? "  - This setup configures the Vifx Expo Go server (with Fast Refresh), not full Expo CLI parity."
-      : "  - This setup does not configure the Expo Go server path unless --expo-go is passed.",
+    "  - vifx expo dev --expo-go serves Expo Go with Fast Refresh; it is not full Expo CLI parity.",
     "  - This setup does not install EAS parity.",
     "  - This setup does not install native build or runtime parity.",
     "  - This setup does not install Expo Updates runtime support.",
@@ -258,8 +265,7 @@ export async function runSetupCommand(
   const metroConfigMigration = await analyzeMetroConfig(projectRoot);
   const dryRun = Boolean(parsed.flags["dry-run"] || (parsed.flags.json && !parsed.flags.yes));
   const nextCommands = createNextCommands({
-    expoGo: plan.expoGo,
-    includeExpoDev: plan.webPreviewConfigured || plan.expoGo,
+    packageManager: await detectPackageManager(projectRoot),
     targetPath,
   });
 
@@ -338,6 +344,7 @@ export async function runSetupCommand(
       projectRoot: plan.projectRoot,
       targetPath,
       wasCancelled,
+      webPreviewConfigured: plan.webPreviewConfigured,
       withViteConfig: plan.withViteConfig,
     }),
     stderr: "",

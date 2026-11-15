@@ -1,0 +1,67 @@
+title: "[Compat] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tell us how Vifx did on your app, whether it worked or not. Reports go into the [support matrix](https://salnika.github.io/vifx/reference/support-matrix) and decide what gets fixed first. For a bug you can reproduce, [open an issue](https://github.com/Salnika/vifx/issues/new?template=bug_report.yml) instead.
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Works
+        - Works with workarounds
+        - Does not work
+    validations:
+      required: true
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: What you tried
+      options:
+        - label: "`vifx expo dev --expo-go` in Expo Go"
+        - label: "`vifx dev` with the React Native CLI"
+        - label: "`vifx export:embed` release bundle"
+        - label: "Native release build (Xcode or Gradle) through `@vifx/expo-config-plugin`"
+        - label: Web preview
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platforms
+      multiple: true
+      options:
+        - iOS
+        - Android
+        - Web
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Vifx version
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: textarea
+    id: app
+    attributes:
+      label: The app
+      description: Roughly how big it is and the libraries that matter (navigation, animation, state, native modules, Sentry, monorepo...). No need to name it.
+  - type: textarea
+    id: problems
+    attributes:
+      label: What broke or needed a workaround
+      description: Error messages as text, and what you changed to get past them.
+  - type: textarea
+    id: timings
+    attributes:
+      label: Timings against Metro
+      description: Optional. Build or dev-server times on your machine, if you compared.
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `vifx doctor --json`
+      description: Run it in the project. It lists the Expo SDK, React Native, Node.js and package-manager versions Vifx detected.
+      render: json
+    validations:
+      required: true
