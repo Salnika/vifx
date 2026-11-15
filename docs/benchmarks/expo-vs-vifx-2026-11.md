@@ -255,6 +255,9 @@ Two more findings are **not** fixed:
 
 ## 5. Bluesky (`bluesky-social/social-app`) — not measured
 
+> Measured since, on 1.137.0: see [the Bluesky report](./bluesky-social-app-2026-11.md). vifx builds the app, but
+> its bundle is not expected to run it.
+
 State of the open-source target:
 
 - Cloned at v1.138.0 and installed with `--ignore-scripts` (so nothing from the

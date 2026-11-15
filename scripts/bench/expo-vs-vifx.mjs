@@ -486,17 +486,25 @@ async function fetchBundle(url) {
   return { body, bytes: Buffer.byteLength(body), ms: performance.now() - startedAt };
 }
 
-async function waitForStatus(baseUrl, child, timeoutMs) {
+/**
+ * Waits until the dev server answers `/status` and returns the base URL it
+ * answered on. `expo start --localhost` listens on `localhost`, which resolves
+ * to `::1` alone on some machines, so both loopback addresses are tried.
+ */
+async function waitForStatus(port, child, timeoutMs) {
+  const candidates = [`http://127.0.0.1:${port}`, `http://[::1]:${port}`];
   const deadline = performance.now() + timeoutMs;
   while (performance.now() < deadline) {
     if (child.exitCode !== null) {
       throw new Error(`dev server exited with code ${child.exitCode}`);
     }
-    const ok = await fetch(`${baseUrl}/status`)
-      .then((response) => response.ok)
-      .catch(() => false);
-    if (ok) {
-      return;
+    for (const baseUrl of candidates) {
+      const ok = await fetch(`${baseUrl}/status`)
+        .then((response) => response.ok)
+        .catch(() => false);
+      if (ok) {
+        return baseUrl;
+      }
     }
     await sleep(100);
   }
@@ -509,7 +517,6 @@ async function waitForStatus(baseUrl, child, timeoutMs) {
  */
 async function benchServerFor(tool, platform, { cold }) {
   const port = await findFreePort();
-  const baseUrl = `http://127.0.0.1:${port}`;
   const { args, command } = serverCommand(tool, { cold, platform, port });
   const entry = { edits: [], hmrEdits: [] };
   const editFile = !cold && flags["edit-file"] ? path.resolve(project, flags["edit-file"]) : null;
@@ -530,7 +537,7 @@ async function benchServerFor(tool, platform, { cold }) {
   child.stderr.on("data", (chunk) => (output = (output + chunk).slice(-4000)));
 
   try {
-    await waitForStatus(baseUrl, child, 600_000);
+    const baseUrl = await waitForStatus(port, child, 600_000);
     entry.readyMs = round(performance.now() - startedAt);
     const bundleUrl = await fetchManifestBundleUrl(baseUrl, platform);
     const first = await fetchBundle(bundleUrl);
