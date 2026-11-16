@@ -1,6 +1,6 @@
 {
   "name": "@vifx/metro-inspect",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Reads Metro bundles, source maps and asset manifests for parity checks against Vifx.",
   "keywords": [
     "metro",

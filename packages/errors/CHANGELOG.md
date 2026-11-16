@@ -1,5 +1,11 @@
 # @vifx/errors
 
+## 0.2.1
+
+### Patch Changes
+
+- @vifx/types@0.2.1
+
 ## 0.2.0
 
 ### Patch Changes

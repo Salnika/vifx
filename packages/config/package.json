@@ -1,6 +1,6 @@
 {
   "name": "@vifx/config",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "defineVifxConfig and the vifx.config.ts loader.",
   "keywords": [
     "config",

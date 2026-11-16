@@ -1,5 +1,16 @@
 # @vifx/core
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [87ac418]
+  - @vifx/platform-resolver@0.2.1
+  - @vifx/asset-registry@0.2.1
+  - @vifx/config@0.2.1
+  - @vifx/errors@0.2.1
+  - @vifx/types@0.2.1
+
 ## 0.2.0
 
 ### Patch Changes

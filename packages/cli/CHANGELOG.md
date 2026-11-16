@@ -1,5 +1,30 @@
 # @vifx/cli
 
+## 0.2.1
+
+### Patch Changes
+
+- bfe676c: `vifx doctor` and `vifx setup` read `metro.config.ts`, `metro.config.cts` and `metro.config.mts`, which Metro also loads. Before, a project with a TypeScript Metro config got no Metro config migration notes at all. Like Metro, the config is required first and imported when that fails; TypeScript loads through Node's type stripping.
+  
+  They also report react-native-worklets bundle mode (`getBundleModeMetroConfig`) by name. Vifx does not implement it, so worklets in such a bundle are not expected to run. Sentry's Metro integration is still reported when bundle mode is present.
+- 7d16842: `vifx setup` now suggests its next commands for the project's package manager (`npx vifx`, `pnpm vifx`, `yarn vifx` or `bun vifx`), starting with the Expo Go dev server (`vifx expo dev --expo-go`), which works whichever targets setup wrote. Its summary names the targets it wrote instead of reporting the Expo Go server as skipped.
+- Updated dependencies [87ac418]
+  - @vifx/vite-plugin-react-native@0.2.1
+  - @vifx/compat-runner@0.2.1
+  - @vifx/core@0.2.1
+  - @vifx/vite-plugin-expo@0.2.1
+  - @vifx/codemods@0.2.1
+  - @vifx/asset-registry@0.2.1
+  - @vifx/compat@0.2.1
+  - @vifx/config@0.2.1
+  - @vifx/errors@0.2.1
+  - @vifx/expo-export@0.2.1
+  - @vifx/hermes-tools@0.2.1
+  - @vifx/logger@0.2.1
+  - @vifx/metro-inspect@0.2.1
+  - @vifx/source-map-tools@0.2.1
+  - @vifx/types@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes
