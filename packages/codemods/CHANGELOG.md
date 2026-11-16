@@ -1,5 +1,12 @@
 # @vifx/codemods
 
+## 0.2.1
+
+### Patch Changes
+
+- @vifx/compat-runner@0.2.1
+  - @vifx/errors@0.2.1
+
 ## 0.2.0
 
 ### Patch Changes

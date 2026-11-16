@@ -1,6 +1,6 @@
 {
   "name": "@vifx/hermes-tools",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Finds the project's Hermes compiler and compiles bundles to Hermes bytecode.",
   "keywords": [
     "hermes",

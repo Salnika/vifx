@@ -1,6 +1,6 @@
 {
   "name": "@vifx/compat",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Compatibility cases and fixture catalog for the Vifx compatibility runner.",
   "keywords": [
     "compatibility",

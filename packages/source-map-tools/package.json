@@ -1,6 +1,6 @@
 {
   "name": "@vifx/source-map-tools",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Source map validation, comparison and stack symbolication for Vifx.",
   "keywords": [
     "source-map",
