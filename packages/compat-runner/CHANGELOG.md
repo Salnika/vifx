@@ -1,5 +1,20 @@
 # @vifx/compat-runner
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [b6ba34c]
+  - @vifx/vite-plugin-react-native@0.2.2
+  - @vifx/asset-registry@0.2.2
+  - @vifx/compat@0.2.2
+  - @vifx/config@0.2.2
+  - @vifx/errors@0.2.2
+  - @vifx/hermes-tools@0.2.2
+  - @vifx/metro-inspect@0.2.2
+  - @vifx/platform-resolver@0.2.2
+  - @vifx/types@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@vifx/cli",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "The vifx command line: Expo Go and React Native dev servers, release bundles, doctor and migration tools, without Metro.",
   "keywords": [
     "bundler",

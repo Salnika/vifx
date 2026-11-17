@@ -1,5 +1,29 @@
 # @vifx/cli
 
+## 0.2.2
+
+### Patch Changes
+
+- b6ba34c: `vifx expo dev --expo-go` no longer prints a "Boundary" warning each time it starts. It was a reminder of what Vifx does not replace (Expo's native runtimes, EAS, app binaries), not a problem with the run.
+- b6ba34c: `vifx setup` reads `tsconfig.json` the way TypeScript does, with comments and trailing commas. Before, a trailing comma made the file unreadable and its `paths` were ignored without a word, so no aliases were written. Like Expo CLI, setup skips a `paths` target that is a declaration file (`.d.ts`): it only exists for type checking, and as an alias it would replace a module with its types.
+- Updated dependencies [b6ba34c]
+- Updated dependencies [b6ba34c]
+  - @vifx/vite-plugin-react-native@0.2.2
+  - @vifx/codemods@0.2.2
+  - @vifx/compat-runner@0.2.2
+  - @vifx/vite-plugin-expo@0.2.2
+  - @vifx/asset-registry@0.2.2
+  - @vifx/compat@0.2.2
+  - @vifx/config@0.2.2
+  - @vifx/core@0.2.2
+  - @vifx/errors@0.2.2
+  - @vifx/expo-export@0.2.2
+  - @vifx/hermes-tools@0.2.2
+  - @vifx/logger@0.2.2
+  - @vifx/metro-inspect@0.2.2
+  - @vifx/source-map-tools@0.2.2
+  - @vifx/types@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@vifx/expo-config-plugin",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Expo config plugin that routes native release builds through vifx export:embed instead of Metro.",
   "keywords": [
     "expo",

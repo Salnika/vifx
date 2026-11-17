@@ -1,5 +1,12 @@
 # @vifx/vite-config-bridge
 
+## 0.2.2
+
+### Patch Changes
+
+- @vifx/errors@0.2.2
+  - @vifx/types@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

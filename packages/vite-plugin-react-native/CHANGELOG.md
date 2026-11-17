@@ -1,5 +1,19 @@
 # @vifx/vite-plugin-react-native
 
+## 0.2.2
+
+### Patch Changes
+
+- b6ba34c: Source maps list the JSON modules a bundle contains, with their content, as Metro's do. This covers production builds (`vifx export:embed`, `vifx expo export`, `vifx build --mode production`) and the `--fast-refresh` dev server. Before, a JSON module's data was in the bundle but its file was missing from the map's `sources`.
+- @vifx/asset-registry@0.2.2
+  - @vifx/errors@0.2.2
+  - @vifx/hermes-tools@0.2.2
+  - @vifx/platform-resolver@0.2.2
+  - @vifx/source-map-tools@0.2.2
+  - @vifx/transform-cache@0.2.2
+  - @vifx/types@0.2.2
+  - @vifx/vite-config-bridge@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

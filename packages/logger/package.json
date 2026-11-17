@@ -1,6 +1,6 @@
 {
   "name": "@vifx/logger",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Terminal logging for the Vifx command line and packages.",
   "keywords": [
     "logger",

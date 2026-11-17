@@ -1,6 +1,6 @@
 {
   "name": "@vifx/transform-cache",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Persistent, content-addressed transform cache for Vifx builds.",
   "keywords": [
     "cache",
