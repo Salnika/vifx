@@ -1,5 +1,18 @@
 # @vifx/vite-plugin-expo
 
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [b6ba34c]
+  - @vifx/vite-plugin-react-native@0.2.2
+  - @vifx/asset-registry@0.2.2
+  - @vifx/errors@0.2.2
+  - @vifx/platform-resolver@0.2.2
+  - @vifx/source-map-tools@0.2.2
+  - @vifx/types@0.2.2
+  - @vifx/vite-config-bridge@0.2.2
+
 ## 0.2.1
 
 ### Patch Changes

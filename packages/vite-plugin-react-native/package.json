@@ -1,6 +1,6 @@
 {
   "name": "@vifx/vite-plugin-react-native",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Vite plugin that bundles React Native apps: platform resolution, Babel and Oxc transforms, assets, Hermes and Fast Refresh.",
   "keywords": [
     "fast-refresh",

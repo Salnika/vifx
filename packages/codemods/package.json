@@ -1,6 +1,6 @@
 {
   "name": "@vifx/codemods",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Project setup and migration codemods used by the vifx command line.",
   "keywords": [
     "codemods",
