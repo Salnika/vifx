@@ -61,7 +61,7 @@ npx vifx setup <expo-project-path> --yes        # apply
 | `--with-vite-config`   | Also create `vite.config.vifx.ts`                                                                 |
 | `--experimental-embed` | Register `@vifx/expo-config-plugin` in `app.json` (see [Expo native builds](#expo-native-builds)) |
 
-Setup auto-detects your project shape. When `expo-router` is a dependency and an `app/` directory exists, it sets the target entry to `expo-router/entry` and marks targets `reactNativeCompat: "web"`; otherwise the entry is `./index.js`. It also reads `tsconfig.json` `compilerOptions.paths` and converts them into per-target `aliases`. The generated `vifx.config.ts` looks like:
+Setup auto-detects your project shape. When `expo-router` is a dependency and an `app/` directory exists, it sets the target entry to `expo-router/entry` and marks targets `reactNativeCompat: "web"`; otherwise the entry is `./index.js`. It also reads `tsconfig.json` `compilerOptions.paths` (comments and trailing commas allowed, as TypeScript reads it) and converts them into per-target `aliases`; like Expo CLI, it skips a target that is a declaration file (`.d.ts`). The generated `vifx.config.ts` looks like:
 
 ```ts
 // vifx.config.ts

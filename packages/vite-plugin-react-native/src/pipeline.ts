@@ -1,6 +1,7 @@
 import type { VifxBundleMode } from "@vifx/types";
 import type { Plugin } from "@voidzero-dev/vite-plus-core";
 import { createIndirectEvalPlugin } from "./indirect-eval.ts";
+import { createJsonSourcesPlugin } from "./json-sources.ts";
 
 export interface BuildVifxPluginPipelineOptions {
   /**
@@ -47,6 +48,7 @@ export function buildVifxPluginPipeline(options: BuildVifxPluginPipelineOptions)
     ...(options.includeIndirectEval && options.mode === "production"
       ? [createIndirectEvalPlugin()]
       : []),
+    ...(options.mode === "production" ? [createJsonSourcesPlugin()] : []),
     ...(options.userPlugins ?? []),
   ];
 }

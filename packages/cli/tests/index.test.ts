@@ -901,6 +901,38 @@ test("setup --expo-go generates native Expo targets and next command", async () 
   expect(vifxConfig).not.toContain("reactNativeCompat");
 });
 
+test("setup reads tsconfig paths with comments and trailing commas, and skips declaration files", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "vifx-cli-setup-jsonc-"));
+  const targetPath = path.join(tempRoot, "expo-router-basic");
+
+  await cp(path.join(FIXTURE_ROOT, "expo-router-basic"), targetPath, { recursive: true });
+  // Shaped like Bluesky's: TypeScript accepts it, JSON.parse does not.
+  await writeFile(
+    path.join(targetPath, "tsconfig.json"),
+    [
+      "{",
+      '  "extends": "expo/tsconfig.base",',
+      '  "compilerOptions": {',
+      '    "types": ["node", "jest",],',
+      '    "paths": {',
+      '      "#/*": ["./src/*"], // app code',
+      '      "crypto": ["./src/platform/crypto.ts"],',
+      "      /* Type checking only. */",
+      '      "react-native-view-shot": ["./node_modules/react-native-view-shot/lib/index.d.ts"],',
+      "    },",
+      "  },",
+      "}",
+      "",
+    ].join("\n"),
+  );
+
+  const result = await executeCli(["setup", targetPath, "--yes", "--expo-go"]);
+  const vifxConfig = await readFile(path.join(targetPath, "vifx.config.ts"), "utf8");
+
+  expect(result.exitCode).toBe(0);
+  expect(vifxConfig).toContain('aliases: {"#":"./src","crypto":"./src/platform/crypto.ts"}');
+});
+
 test("setup without a TTY requires --yes for non-interactive apply mode", async () => {
   const result = await executeCli(["setup", path.join(FIXTURE_ROOT, "expo-basic")], {
     interactive: false,

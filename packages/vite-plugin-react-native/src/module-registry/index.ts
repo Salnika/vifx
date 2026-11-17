@@ -1,4 +1,4 @@
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { build, type InlineConfig, type Plugin } from "@voidzero-dev/vite-plus-core";
@@ -109,13 +109,32 @@ export interface ModuleRegistryBundleResult {
 
 interface RawOutputItem {
   code?: unknown;
+  facadeModuleId?: unknown;
   fileName?: unknown;
   isEntry?: unknown;
   map?: unknown;
   type?: unknown;
 }
 
-function collectStagedChunks(buildResult: unknown): StagedChunk[] {
+/**
+ * The staging build emits a JSON module without a source map, so the composed
+ * map would leave it out. Metro's lists it with its content: the serializer
+ * does too, from the file the chunk was emitted from.
+ */
+async function readJsonModuleSources(chunks: StagedChunk[], facadeModuleIds: (string | null)[]) {
+  return Promise.all(
+    chunks.map(async (chunk, index) => {
+      const facadeModuleId = facadeModuleIds[index];
+      if (!facadeModuleId?.endsWith(".json")) {
+        return chunk;
+      }
+      const content = await readFile(facadeModuleId, "utf8").catch(() => null);
+      return { ...chunk, originalSource: { content, path: facadeModuleId } };
+    }),
+  );
+}
+
+async function collectStagedChunks(buildResult: unknown): Promise<StagedChunk[]> {
   const outputs = (Array.isArray(buildResult) ? buildResult : [buildResult]).flatMap((result) =>
     result !== null &&
     typeof result === "object" &&
@@ -125,6 +144,7 @@ function collectStagedChunks(buildResult: unknown): StagedChunk[] {
   );
 
   const chunks: StagedChunk[] = [];
+  const facadeModuleIds: (string | null)[] = [];
   for (const item of outputs) {
     if (
       item.type !== "chunk" ||
@@ -146,8 +166,9 @@ function collectStagedChunks(buildResult: unknown): StagedChunk[] {
       isEntry: item.isEntry === true,
       map,
     });
+    facadeModuleIds.push(typeof item.facadeModuleId === "string" ? item.facadeModuleId : null);
   }
-  return chunks;
+  return readJsonModuleSources(chunks, facadeModuleIds);
 }
 
 async function pathExists(filePath: string) {
@@ -251,7 +272,7 @@ export async function buildModuleRegistryBundle(
   const buildResult = await build(stagingConfig);
   const buildMs = performance.now() - buildStartedAt;
   options.onPhaseEnd?.("build");
-  const chunks = collectStagedChunks(buildResult);
+  const chunks = await collectStagedChunks(buildResult);
   if (chunks.length === 0) {
     throw new VifxError({
       code: "VIFX_MODULE_REGISTRY_ENTRY_MISSING",

@@ -43,6 +43,13 @@ export interface StagedChunk {
   fileName: string;
   isEntry: boolean;
   map?: StagedChunkSourceMap | null;
+  /**
+   * The file a module came from when its own map maps nothing to it: the
+   * staging build emits JSON modules without a source map. The composed map
+   * lists that file with its content, as Metro's does, and maps each of the
+   * module's lines to the start of it.
+   */
+  originalSource?: { content: string | null; path: string } | null;
 }
 
 export interface SerializeModuleRegistryOptions {
@@ -492,6 +499,7 @@ function internName(builder: MergedMapBuilder, name: string): number {
   return index;
 }
 
+/** Appends a staged chunk's own mappings; returns how many segments it added. */
 function appendChunkMappings(options: {
   builder: MergedMapBuilder;
   bundleLineOffset: number;
@@ -499,12 +507,13 @@ function appendChunkMappings(options: {
   columnShifts: RewrittenModule["columnShifts"];
   finalMapDir: string;
   stagingDir: string;
-}): void {
+}): number {
   const { builder, bundleLineOffset, chunk, columnShifts, finalMapDir, stagingDir } = options;
   const map = chunk.map;
   if (!map || map.mappings.length === 0) {
-    return;
+    return 0;
   }
+  let appended = 0;
 
   const chunkDir = path.dirname(path.join(stagingDir, chunk.fileName));
   const sourceIndexRemap = map.sources.map((source, index) => {
@@ -549,7 +558,36 @@ function appendChunkMappings(options: {
       } else {
         target.push([column, remappedSource, segment[2], segment[3]]);
       }
+      appended += 1;
     }
+  }
+  return appended;
+}
+
+/**
+ * Maps the start of each line of a module to the start of the file it came
+ * from, for a module whose own map maps nothing (see
+ * {@link StagedChunk.originalSource}).
+ */
+function appendOriginalSourceMappings(options: {
+  builder: MergedMapBuilder;
+  bundleLineOffset: number;
+  finalMapDir: string;
+  lineCount: number;
+  source: { content: string | null; path: string };
+}): void {
+  const { builder, bundleLineOffset, finalMapDir, lineCount, source } = options;
+  const sourceIndex = internSource(
+    builder,
+    toPosix(path.relative(finalMapDir, source.path)),
+    source.content,
+  );
+  for (let lineIndex = 0; lineIndex < lineCount; lineIndex += 1) {
+    const bundleLine = bundleLineOffset + lineIndex;
+    while (builder.lines.length <= bundleLine) {
+      builder.lines.push([]);
+    }
+    builder.lines[bundleLine]?.push([0, sourceIndex, 0, 0]);
   }
 }
 
@@ -642,7 +680,7 @@ export function serializeModuleRegistryBundle(
     // exactly, so the bundle and its source map are unchanged.
     const factory = `${MODULE_FACTORY_HEADER}\n${rewrittenModule.code}\n}`;
 
-    appendChunkMappings({
+    const appended = appendChunkMappings({
       builder,
       bundleLineOffset: bundleLineOffset + 1,
       chunk,
@@ -650,6 +688,15 @@ export function serializeModuleRegistryBundle(
       finalMapDir: options.absoluteOutDir,
       stagingDir: options.stagingDir,
     });
+    if (appended === 0 && chunk.originalSource) {
+      appendOriginalSourceMappings({
+        builder,
+        bundleLineOffset: bundleLineOffset + 1,
+        finalMapDir: options.absoluteOutDir,
+        lineCount: countLines(rewrittenModule.code),
+        source: chunk.originalSource,
+      });
+    }
 
     const moduleText = `${factory}, ${moduleId}, ${JSON.stringify(
       rewrittenModule.dependencyIds,

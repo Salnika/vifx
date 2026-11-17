@@ -37,6 +37,13 @@ function translateExec(rest: string, manager: Exclude<PackageManager, "npm">): s
   if (create) {
     return `${manager} create ${create[1]}${create[2]}`;
   }
+  // Yarn 1 prints `yarn run v1…`, the command and `Done in …` on stdout around
+  // a binary's output, which breaks JSON output. `yarn run --silent` leaves
+  // them out; Yarn 2 and later accept it there (not before the binary name)
+  // and print nothing extra anyway.
+  if (manager === "yarn" && /(?:^|\s)--json(?:\s|$)/u.test(splitComment(rest)[0])) {
+    return `yarn run --silent ${rest}`;
+  }
   // pnpm and Yarn run a dependency's binary by name; `bun <bin>` does too, and
   // unlike `bunx` it never downloads a package of that name.
   return `${manager} ${rest}`;

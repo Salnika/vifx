@@ -73,9 +73,6 @@ export function formatExpoGoServerOutput(options: {
       { label: "Refresh", value: server.fastRefresh ? "Fast Refresh" : `${server.hmr} only` },
     ]),
     "",
-    formatVifxWarning(
-      "Boundary: Vifx serves Expo Go manifest and bundle endpoints backed by Vite. It does not replace Expo native runtimes, EAS, or native app binaries.",
-    ),
     ...(server.watching && server.hotSocketUrl
       ? [formatVifxInfo(`Watching for changes — hot: ${server.hotSocketUrl}`)]
       : []),

@@ -550,17 +550,65 @@ function stripJsonComments(contents: string) {
   return output;
 }
 
+/** Drops a comma that only precedes a closing `}` or `]`, outside strings. */
+function stripTrailingCommas(contents: string) {
+  let output = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < contents.length; index += 1) {
+    const current = contents[index]!;
+
+    if (inString) {
+      output += current;
+      if (escaped) {
+        escaped = false;
+      } else if (current === "\\") {
+        escaped = true;
+      } else if (current === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (current === '"') {
+      inString = true;
+    } else if (current === ",") {
+      let next = index + 1;
+      while (next < contents.length && /\s/u.test(contents[next]!)) {
+        next += 1;
+      }
+      if (contents[next] === "}" || contents[next] === "]") {
+        continue;
+      }
+    }
+
+    output += current;
+  }
+
+  return output;
+}
+
 function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+/**
+ * Reads a JSON file the way TypeScript reads a tsconfig: comments and trailing
+ * commas are allowed.
+ */
 async function readJsonRecordIfExists(filePath: string) {
   if (!(await pathExists(filePath))) {
     return null;
   }
 
   const contents = await fs.readFile(filePath, "utf8");
-  return JSON.parse(stripJsonComments(contents)) as Record<string, unknown>;
+  return JSON.parse(stripTrailingCommas(stripJsonComments(contents))) as Record<string, unknown>;
+}
+
+/** `foo.d.ts`, `foo.d.mts`, `foo.d.cts`: files that only carry types. */
+function isDeclarationFile(target: string) {
+  return /\.d\.[cm]?ts$/u.test(target);
 }
 
 function stripAliasWildcard(value: string) {
@@ -597,7 +645,14 @@ async function detectTypeScriptPathAliases(projectRoot: string) {
   const aliasEntries: Array<[string, string]> = [];
 
   for (const [from, targets] of Object.entries(paths)) {
-    if (!Array.isArray(targets) || typeof targets[0] !== "string") {
+    // Like Expo CLI, a declaration-file target is skipped: it exists for type
+    // checking, and as a runtime alias it would replace a module with its types.
+    const target = Array.isArray(targets)
+      ? targets.find(
+          (value): value is string => typeof value === "string" && !isDeclarationFile(value),
+        )
+      : undefined;
+    if (target === undefined) {
       continue;
     }
 
@@ -606,7 +661,7 @@ async function detectTypeScriptPathAliases(projectRoot: string) {
       continue;
     }
 
-    aliasEntries.push([aliasFrom, normalizeAliasTarget(targets[0])]);
+    aliasEntries.push([aliasFrom, normalizeAliasTarget(target)]);
   }
 
   const aliases = Object.fromEntries(

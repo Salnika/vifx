@@ -308,6 +308,32 @@ test(
 );
 
 test(
+  "metro bundle source map lists JSON modules with their content, as Metro's does",
+  async () => {
+    const fixture = await getRichFixture();
+    const map = JSON.parse(fixture.mapText) as SourceMapPayload & {
+      sourcesContent: (string | null)[];
+    };
+
+    const jsonSourceIndex = map.sources.findIndex((source) => source.endsWith("data.json"));
+    expect(jsonSourceIndex).toBeGreaterThanOrEqual(0);
+    expect(map.sources[jsonSourceIndex]).toBe("../../data.json");
+    expect(map.sourcesContent[jsonSourceIndex]).toBe('{ "answer": 42 }\n');
+
+    // The JSON module's code in the bundle maps back to the JSON file.
+    const bundleLines = fixture.bundleCode.split("\n");
+    const generatedLine = bundleLines.findIndex((line) => /\banswer\b.*\b42\b/u.test(line));
+    expect(generatedLine).toBeGreaterThanOrEqual(0);
+    const entry = new SourceMap(map).findEntry(generatedLine, 0);
+    if (!("originalSource" in entry)) {
+      throw new Error("Expected a source map entry for the JSON module.");
+    }
+    expect(entry.originalSource.endsWith("data.json")).toBe(true);
+  },
+  BUILD_TIMEOUT,
+);
+
+test(
   "default hoisted output is unchanged compared to a build without the option",
   async () => {
     const projectRoot = await createSyntheticProject("metro-tiny", TINY_FIXTURE_FILES);
@@ -346,6 +372,33 @@ test(
       "utf8",
     );
     expect(withHoistedMap).toBe(withoutOptionMap);
+  },
+  BUILD_TIMEOUT,
+);
+
+test(
+  "hoisted bundle source map lists JSON modules with their content, as Metro's does",
+  async () => {
+    const projectRoot = await createSyntheticProject("hoisted-json", RICH_FIXTURE_FILES);
+    const result = await buildReactNativeBundle({
+      entry: "./index.js",
+      mode: "production",
+      outDir: ".vifx/hoisted-json",
+      platform: "ios",
+      projectRoot,
+    });
+    const map = JSON.parse(
+      await readFile(path.join(projectRoot, `${result.bundle.path}.map`), "utf8"),
+    ) as SourceMapPayload & { sourcesContent: (string | null)[] };
+
+    // Written relative to the map, like the other sources.
+    const moduleSource = map.sources.find((source) => source.endsWith("cycle/a.js"));
+    expect(moduleSource).toBeDefined();
+    const jsonSourceIndex = map.sources.indexOf(
+      moduleSource?.replace(/cycle\/a\.js$/u, "data.json") ?? "",
+    );
+    expect(jsonSourceIndex).toBeGreaterThanOrEqual(0);
+    expect(map.sourcesContent[jsonSourceIndex]).toBe('{ "answer": 42 }\n');
   },
   BUILD_TIMEOUT,
 );

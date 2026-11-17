@@ -61,7 +61,7 @@ body:
     id: doctor
     attributes:
       label: Output of `vifx doctor --json`
-      description: Run it in the project. It lists the Expo SDK, React Native, Node.js and package-manager versions Vifx detected.
+      description: Run it in the project (with Yarn, `yarn run --silent vifx doctor --json` keeps Yarn's own lines out). It lists the Expo SDK, React Native, Node.js and package-manager versions Vifx detected.
       render: json
     validations:
       required: true
